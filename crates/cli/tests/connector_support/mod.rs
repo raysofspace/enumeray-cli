@@ -18,10 +18,18 @@ use serde_json::Value;
 use tokio::{process::Command, time::timeout};
 use uuid::Uuid;
 
+static CLI_BINARY_FALLBACK: std::sync::OnceLock<fn() -> PathBuf> = std::sync::OnceLock::new();
+
+/// External integration harnesses can supply their own executable discovery.
+pub fn set_cli_binary_fallback(resolve: fn() -> PathBuf) {
+    CLI_BINARY_FALLBACK.get_or_init(|| resolve);
+}
+
 pub fn cli_binary() -> PathBuf {
     std::env::var_os("ENUMERAY_CLI_BIN")
         .map(PathBuf::from)
         .or_else(|| option_env!("CARGO_BIN_EXE_enumeray").map(PathBuf::from))
+        .or_else(|| CLI_BINARY_FALLBACK.get().map(|resolve| resolve()))
         .expect("Set ENUMERAY_CLI_BIN to the matching public CLI executable")
 }
 

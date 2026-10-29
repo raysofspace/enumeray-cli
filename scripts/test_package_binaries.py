@@ -51,7 +51,7 @@ class BundleGuideTests(unittest.TestCase):
 
 
 class UnifiedPackageTests(unittest.TestCase):
-    def package(self, root, tree='enumeray-cli v0.1.0\nenumeray-connector v0.1.0\n'):
+    def package(self, root, tree='enumeray-cli v0.1.0\nenumeray-connector v0.1.0\n', target_directory=None):
         api = root
         (api / 'scripts').mkdir(parents=True)
         (api / 'LICENSE').write_text('Apache License, Version 2.0\n')
@@ -64,11 +64,13 @@ class UnifiedPackageTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Standalone guide\n')
         (api / 'crates/cli/examples').mkdir()
-        binary = api / 'target/test-target/release/enumeray'
+        target_directory = target_directory or api / 'target'
+        binary = target_directory / 'test-target/release/enumeray'
         binary.parent.mkdir(parents=True)
         binary.write_text('#!/bin/sh\nexit 0\n')
         binary.chmod(0o755)
-        metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}]})
+        metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}],
+                               'target_directory': str(target_directory)})
         with mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
              mock.patch.object(packaging.subprocess, 'check_output', side_effect=[metadata, tree]), \
              mock.patch('sys.argv', ['package-binaries.py', '--target', 'test-target', '--output', str(root / 'dist')]), \
@@ -102,6 +104,14 @@ class UnifiedPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'server libraries: sqlx-core'):
                 self.package(root, 'enumeray-cli v0.1.0\nsqlx-core v0.9.0\n')
             self.assertEqual(list((root / 'dist').glob('*.tar.gz')), [])
+
+    def test_custom_cargo_target_directory_is_used_without_a_workspace_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'checkout'
+            target = Path(temporary) / 'cargo-cache'
+            self.package(root, target_directory=target)
+            self.assertFalse((root / 'target').exists())
+            self.assertEqual(len(list((root / 'dist').glob('*.tar.gz'))), 1)
 
     def test_qualification_rejects_a_second_archive(self):
         with tempfile.TemporaryDirectory() as temporary:

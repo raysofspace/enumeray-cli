@@ -73,7 +73,7 @@ def main():
     ) or name.startswith(("sqlx", "aws-sdk-", "aws-smithy-", "axum")))
     if forbidden:
         raise SystemExit(f"{package} depends on server libraries: {', '.join(forbidden)}")
-    executable = root / "target" / args.target / "release" / binary
+    executable = Path(metadata["target_directory"]) / args.target / "release" / binary
     if not executable.is_file():
         raise SystemExit(f"Build the independent target binary first: {executable}")
     archive_name = f"{binary}-{version}-{args.target}"
