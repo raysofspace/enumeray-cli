@@ -322,6 +322,17 @@ class GitHubTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_dispatch_queue_serializes_a_version_without_cancelling_other_versions(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/release.yml').read_text()
+        concurrency = workflow.split('\nconcurrency:\n', 1)[1].split('\njobs:', 1)[0]
+        self.assertIn('group: binary-release-delivery-${{ fromJSON(github.event.client_payload.receipt).version }}', concurrency)
+        self.assertIn('cancel-in-progress: false', concurrency)
+        # A purpose/action key would permit prepare and publish to race each other;
+        # the default dispatch ref would collapse every release into one queue.
+        self.assertNotIn('github.event.action', concurrency)
+        self.assertNotIn('github.ref', concurrency)
+        self.assertIn('authorize --purpose "$PURPOSE"', workflow)
+
     def test_linux_runner_and_docker_architecture_must_both_match_without_emulation(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/release.yml').read_text()
         guard = workflow.split('          # Check the runner and Docker host', 1)[1].split('          # Provision a reviewed', 1)[0]

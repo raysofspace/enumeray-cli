@@ -10,7 +10,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: binary-release-delivery
+  # This unverified value only partitions the queue; authorization remains signed.
+  # GitHub retains one pending run per group even with cancellation disabled.
+  group: binary-release-delivery-${{ fromJSON(github.event.client_payload.receipt).version }}
   cancel-in-progress: false
 
 jobs:
