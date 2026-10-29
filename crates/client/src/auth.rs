@@ -135,13 +135,20 @@ pub fn refresh_until(
     refresh_token: &str,
     deadline: Instant,
 ) -> Result<OAuthTokens, Error> {
-    let request = oauth_client()?
-        .post(validate_url(&config.token_endpoint)?)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token),
-            ("client_id", config.client_id.as_str()),
-        ]);
+    refresh_with_client_until(&oauth_client()?, config, refresh_token, deadline)
+}
+
+fn refresh_with_client_until(
+    client: &Client,
+    config: &AuthConfig,
+    refresh_token: &str,
+    deadline: Instant,
+) -> Result<OAuthTokens, Error> {
+    let request = client.post(validate_url(&config.token_endpoint)?).form(&[
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh_token),
+        ("client_id", config.client_id.as_str()),
+    ]);
     let timeout = deadline
         .saturating_duration_since(Instant::now())
         .min(Duration::from_secs(30));
@@ -492,44 +499,47 @@ mod tests {
         worker.join().unwrap();
     }
 
-    fn token_reply(
-        status: u16,
-        body: String,
-        delay: Duration,
-    ) -> (AuthConfig, std::thread::JoinHandle<()>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    fn token_config(listener: &TcpListener) -> AuthConfig {
         let origin = format!("http://{}", listener.local_addr().unwrap());
-        let config = AuthConfig {
+        AuthConfig {
             issuer: origin.clone(),
             client_id: "native".into(),
             audience: "api".into(),
             authorization_endpoint: format!("{origin}/authorize"),
             token_endpoint: format!("{origin}/token"),
             scopes: vec![],
-        };
+        }
+    }
+
+    fn read_token_request(stream: &mut TcpStream) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        while !bytes.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            stream.read_exact(&mut byte).unwrap();
+            bytes.push(byte[0]);
+        }
+        let header = String::from_utf8(bytes).unwrap();
+        let length = header
+            .lines()
+            .find_map(|line| {
+                line.to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .map(|v| v.trim().parse::<usize>().unwrap())
+            })
+            .unwrap();
+        let mut request = vec![0; length];
+        stream.read_exact(&mut request).unwrap();
+    }
+
+    fn token_reply(status: u16, body: String) -> (AuthConfig, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let config = token_config(&listener);
         let worker = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            let mut bytes = Vec::new();
-            while !bytes.ends_with(b"\r\n\r\n") {
-                let mut byte = [0];
-                stream.read_exact(&mut byte).unwrap();
-                bytes.push(byte[0]);
-            }
-            let header = String::from_utf8(bytes).unwrap();
-            let length = header
-                .lines()
-                .find_map(|line| {
-                    line.to_ascii_lowercase()
-                        .strip_prefix("content-length:")
-                        .map(|v| v.trim().parse::<usize>().unwrap())
-                })
-                .unwrap();
-            let mut request = vec![0; length];
-            stream.read_exact(&mut request).unwrap();
-            std::thread::sleep(delay);
+            read_token_request(&mut stream);
             let _ = write!(
                 stream,
                 "HTTP/1.1 {status} Response\r\nConnection: close\r\nContent-Type: application/json\r\nRetry-After: 3\r\nContent-Length: {}\r\n\r\n{body}",
@@ -589,7 +599,7 @@ mod tests {
                 OAuthFailureKind::InvalidResponse,
             ),
         ] {
-            let (config, worker) = token_reply(status, body, Duration::ZERO);
+            let (config, worker) = token_reply(status, body);
             let error = refresh(&config, "private-refresh")
                 .err()
                 .expect("exchange must fail");
@@ -604,17 +614,67 @@ mod tests {
 
     #[test]
     fn refresh_until_uses_the_remaining_deadline_and_does_not_retry() {
-        let (config, worker) = token_reply(200, r#"{"access_token":"access","token_type":"Bearer","refresh_token":"rotated","expires_in":300}"#.into(), Duration::from_millis(150));
+        // Platform trust-store/client initialization can exceed a short request
+        // budget on a cold runner. Start the exchange clock after preparation.
+        let client = oauth_client().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let config = token_config(&listener);
+        listener.set_nonblocking(true).unwrap();
+        let (stop, stopped) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let watchdog = Instant::now() + Duration::from_secs(10);
+            let mut requests = Vec::new();
+            while matches!(
+                stopped.try_recv(),
+                Err(std::sync::mpsc::TryRecvError::Empty)
+            ) {
+                assert!(Instant::now() < watchdog, "refresh ignored its deadline");
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        read_token_request(&mut stream);
+                        // Keep every request unanswered until refresh returns.
+                        // A fixed server delay can race the client's deadline.
+                        requests.push(stream);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("cannot accept token request: {error}"),
+                }
+            }
+            requests.len()
+        });
         let started = Instant::now();
-        let error = refresh_until(&config, "original", started + Duration::from_millis(40))
-            .err()
-            .expect("deadline must expire");
-        assert!(matches!(error, Error::Transport(ref failure) if failure.is_timeout()));
-        assert!(started.elapsed() < Duration::from_millis(140));
-        worker.join().unwrap();
+        let result = refresh_with_client_until(
+            &client,
+            &config,
+            "original",
+            started + Duration::from_secs(1),
+        );
+        let elapsed = started.elapsed();
+        let _ = stop.send(());
+        let requests = worker.join().unwrap();
+        let error = result.err().expect("deadline must expire");
+        assert!(
+            matches!(error, Error::Transport(ref failure) if failure.is_timeout()),
+            "{error:?}"
+        );
+        assert_eq!(requests, 1, "a refresh exchange must never be retried");
+        assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    }
+
+    #[test]
+    fn expired_refresh_deadline_does_not_send_a_token_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let config = token_config(&listener);
+        listener.set_nonblocking(true).unwrap();
         assert!(matches!(
             refresh_until(&config, "original", Instant::now()),
-            Err(Error::Invalid(_))
+            Err(Error::Invalid(message)) if message.contains("deadline elapsed")
         ));
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
     }
 }

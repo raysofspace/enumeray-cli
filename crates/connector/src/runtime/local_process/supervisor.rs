@@ -228,16 +228,7 @@ pub(super) fn execute(workspace: &Path, job: &Job) -> Result<Completion> {
     // child was not reaped: even if the guard exits concurrently, its reserved
     // PID cannot be reassigned before this wait. Trusted wrappers must neither
     // daemonize nor move descendants out of the owned process group.
-    let killed = Command::new("/bin/kill")
-        .args(["-KILL", "--", &format!("-{}", child.id())])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|_| {
-            failure("cannot terminate local wrapper group; execution remains unresolved")
-        })?;
-    if !killed.success() {
+    if !terminate_group(child.id())? {
         return Err(failure(
             "local wrapper group termination was not confirmed; execution remains unresolved",
         ));
@@ -348,6 +339,19 @@ fn spawn_guard(command: &mut Command) -> Result<std::process::Child> {
     })
 }
 
+fn terminate_group(group: u32) -> Result<bool> {
+    let killed = Command::new("/bin/kill")
+        .args(["-KILL", "--", &format!("-{group}")])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|_| {
+            failure("cannot terminate local wrapper group; execution remains unresolved")
+        })?;
+    Ok(killed.success())
+}
+
 fn confirm_group_stopped(group: u32) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
@@ -384,6 +388,15 @@ fn confirm_group_stopped(group: u32) -> Result<()> {
             return Err(failure(
                 "local process group has not confirmed termination; execution remains unresolved",
             ));
+        }
+        if guard_seen && live {
+            // A member can fork concurrently with the first group signal.
+            // Re-signal survivors only while the unreaped guard still reserves
+            // this identity; accepted signals alone never prove termination.
+            // The last live member may stop between ps and kill (macOS can
+            // reject signals to a zombie-only group). Observe again regardless
+            // of the signal status; only a stopped snapshot permits completion.
+            let _ = terminate_group(group)?;
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -651,5 +664,53 @@ mod startup_tests {
             error.startup_stage,
             Some(crate::launch::FailureStage::WorkerSpawn)
         );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::process::CommandExt;
+
+    struct OwnedGroup(std::process::Child);
+
+    impl Drop for OwnedGroup {
+        fn drop(&mut self) {
+            let _ = Command::new("/bin/kill")
+                .args(["-KILL", "--", &format!("-{}", self.0.id())])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn cleanup_terminates_a_surviving_descendant_while_the_guard_is_unreaped() {
+        let mut group = OwnedGroup(
+            Command::new("/bin/sh")
+                .args([
+                    "-c",
+                    "/bin/sleep 60 </dev/null >/dev/null 2>&1 & printf '%s\\n' \"$!\"; wait",
+                ])
+                .process_group(0)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let mut pid = String::new();
+        BufReader::new(group.0.stdout.take().unwrap())
+            .read_line(&mut pid)
+            .unwrap();
+        assert!(pid.trim().parse::<u32>().is_ok());
+        // Reproduce the post-signal state directly: the guard has been killed,
+        // but a member of its reserved group still needs to be terminated.
+        group.0.kill().unwrap();
+        confirm_group_stopped(group.0.id()).unwrap();
+        // The cleanup owner signals/reaps only its still-reserved group on drop.
     }
 }
