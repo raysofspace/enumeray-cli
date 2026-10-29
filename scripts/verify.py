@@ -43,6 +43,7 @@ def validate(catalogue, root=ROOT):
                   if '__pycache__' not in p.parts and 'target' not in p.parts}
     discovered.update(p.relative_to(root).as_posix() for p in (root / 'crates').glob('*/tests/*.rs'))
     discovered.add('scripts/qualify-binary-archives.py')
+    discovered.add('scripts/qualify-homebrew.py')
     if discovered != set(catalogue['suites']):
         raise ValueError('Unclassified or obsolete suites: ' + ', '.join(sorted(discovered ^ set(catalogue['suites']))))
     for source, owner in catalogue['suites'].items():

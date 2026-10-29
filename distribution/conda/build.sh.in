@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Use the ecosystem compiler and sysroot; never install rustup or download an
+# upstream executable. Cargo.lock and the source archive identify the build.
+case "$(rustc --version)" in
+  "rustc @RUST_VERSION@ "*) ;;
+  *) echo "The qualified source requires Rust @RUST_VERSION@" >&2; exit 1 ;;
+esac
+if command -v sha256sum >/dev/null 2>&1; then
+  printf '%s  Cargo.lock\n' '@LOCKFILE_SHA256@' | sha256sum --check -
+else
+  printf '%s  Cargo.lock\n' '@LOCKFILE_SHA256@' | shasum -a 256 --check -
+fi
+cmp "$RECIPE_DIR/upstream-source.json" release-source.json
+jq -e '.schema == 1 and (.dependencies | length > 0) and
+  all(.dependencies[]; (.license | type == "string") and
+    (.license_files | length > 0) and
+    all(.license_files[]; (.text | type == "string") and (.text | length > 0)))' \
+  THIRD_PARTY_NOTICES.json >/dev/null
+
+export CARGO_INCREMENTAL=0
+export CARGO_PROFILE_RELEASE_STRIP=symbols
+export AWS_LC_SYS_CMAKE_BUILDER=1
+cargo fetch --locked
+cargo-bundle-licenses --format yaml --output THIRDPARTY.yml
+cargo tree --locked --edges normal --prefix none -p enumeray-cli > dependency-tree.txt
+cargo auditable install --locked --offline --no-track --root "$PREFIX" --path crates/cli --bin enumeray
+
+mkdir -p "$PREFIX/share/enumeray"
+cp "$RECIPE_DIR/compatibility.json" "$PREFIX/share/enumeray/compatibility.json"
+cp "$RECIPE_DIR/source.json" "$PREFIX/share/enumeray/source.json"
+cp THIRD_PARTY_NOTICES.json THIRDPARTY.yml dependency-tree.txt "$PREFIX/share/enumeray/"
+cp crates/cli/INSTALL.md crates/cli/ANALYSIS_GUIDE.md crates/cli/AUTHOR_GUIDE.md \
+  "$PREFIX/share/enumeray/"

@@ -53,7 +53,7 @@ class BundleGuideTests(unittest.TestCase):
 class UnifiedPackageTests(unittest.TestCase):
     def package(self, root, tree='enumeray-cli v0.1.0\nenumeray-connector v0.1.0\n', target_directory=None):
         api = root
-        (api / 'scripts').mkdir(parents=True)
+        (api / 'scripts').mkdir(parents=True, exist_ok=True)
         (api / 'LICENSE').write_text('Apache License, Version 2.0\n')
         for name in ('INSTALL.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
             path = api / 'crates/cli' / name
@@ -63,16 +63,19 @@ class UnifiedPackageTests(unittest.TestCase):
             path = api / 'crates/connector' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Standalone guide\n')
-        (api / 'crates/cli/examples').mkdir()
+        (api / 'crates/cli/examples').mkdir(exist_ok=True)
         target_directory = target_directory or api / 'target'
         binary = target_directory / 'test-target/release/enumeray'
-        binary.parent.mkdir(parents=True)
+        binary.parent.mkdir(parents=True, exist_ok=True)
         binary.write_text('#!/bin/sh\nexit 0\n')
         binary.chmod(0o755)
         metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}],
                                'target_directory': str(target_directory)})
         with mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
              mock.patch.object(packaging.subprocess, 'check_output', side_effect=[metadata, tree]), \
+             mock.patch.object(packaging.artifacts, 'source_identity', return_value={
+                 'repository': packaging.artifacts.REPOSITORY, 'revision': None, 'tree': None,
+                 'lockfile_sha256': None, 'clean': False}), \
              mock.patch('sys.argv', ['package-binaries.py', '--target', 'test-target', '--output', str(root / 'dist')]), \
              contextlib.redirect_stdout(io.StringIO()):
             packaging.main()
@@ -95,8 +98,21 @@ class UnifiedPackageTests(unittest.TestCase):
                 self.assertEqual(compatibility['capabilities'], ['cli', 'connector', 'compute_runner'])
                 self.assertFalse(compatibility['requires_database'])
                 self.assertTrue(compatibility['requires_openssh_for_ssh'])
-                for guide in ('LICENSE', 'INSTALL.md', 'CONNECTOR_GUIDE.md', 'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+                self.assertEqual(compatibility['source']['repository'], packaging.artifacts.REPOSITORY)
+                for guide in ('LICENSE', 'THIRD_PARTY_NOTICES.json', 'INSTALL.md', 'CONNECTOR_GUIDE.md',
+                              'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
                     self.assertTrue(tar.getmember(prefix + '/' + guide).isfile())
+
+    def test_repeated_packaging_normalizes_mtimes_ownership_and_gzip_header(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.package(root)
+            archive = next((root / 'dist').glob('*.tar.gz'))
+            original = archive.read_bytes()
+            self.package(root)
+            self.assertEqual(archive.read_bytes(), original)
+            with tarfile.open(archive) as tar:
+                self.assertTrue(all(member.mtime == member.uid == member.gid == 0 for member in tar))
 
     def test_server_dependency_is_rejected_before_packaging(self):
         with tempfile.TemporaryDirectory() as temporary:

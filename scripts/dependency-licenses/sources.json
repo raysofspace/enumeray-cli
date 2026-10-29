@@ -1,0 +1,20 @@
+[
+  {
+    "packages": ["jsonschema-macros", "jsonschema-macros-core", "jsonschema-regex", "jsonschema-value"],
+    "version": "0.56.0",
+    "repository": "https://github.com/Stranger6667/jsonschema",
+    "revision": "1e244c994dd81a1feb7801556a813c6bf2d45dad",
+    "license": "MIT",
+    "file": "jsonschema-MIT.txt",
+    "sha256": "9fe34047c058f8819c0ddaf2d6e1aaa1c8102f6d2bbbec2ba27bcdcc3359a5c0"
+  },
+  {
+    "packages": ["uuid-simd", "vsimd"],
+    "version": "0.8.0",
+    "repository": "https://github.com/Nugine/simd",
+    "revision": "d74c030d9dc4f3cae02146d1f497ff62726ef09a",
+    "license": "MIT",
+    "file": "simd-MIT.txt",
+    "sha256": "a489dd1e4aec1dff9178cc31e1c6726472437bbda8d0c1f49d934238471b852c"
+  }
+]

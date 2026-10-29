@@ -250,6 +250,20 @@
         "python3"
       ],
       "explicit": true
+    },
+    "homebrew-native": {
+      "commands": [
+        [
+          "python3",
+          "scripts/qualify-homebrew.py"
+        ]
+      ],
+      "tools": [
+        "python3",
+        "brew"
+      ],
+      "explicit": true,
+      "external_runner": "scripts/build-release-native.sh"
     }
   },
   "profiles": {
@@ -303,7 +317,14 @@
     "crates/cli/starter-kit/test_starter.py": "client-cli",
     "scripts/qualify-binary-archives.py": "archive",
     "scripts/test_verify_public.py": "python",
-    "scripts/test_service_qualification.py": "python"
+    "scripts/test_service_qualification.py": "python",
+    "scripts/test_package_source.py": "python",
+    "scripts/test_release_delivery.py": "python",
+    "scripts/test_release_platform.py": "python",
+    "scripts/test_generate_channels.py": "python",
+    "scripts/test_publish_channels.py": "python",
+    "scripts/test_qualify_homebrew.py": "python",
+    "scripts/qualify-homebrew.py": "homebrew-native"
   },
   "ignored": {
     "crates/connector/src/compute.rs::real_ssh_and_slurm": {

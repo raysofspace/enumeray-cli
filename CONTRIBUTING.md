@@ -93,3 +93,22 @@ help/version behavior, standalone guide links, journal identity and executable
 starter projects outside the checkout. Packaging rejects server libraries in
 normal runtime dependencies. Archive qualification does not establish a complete
 service release; publication also requires the matching service integration gate.
+
+## Channel delivery
+
+See [distribution maintenance](distribution/README.md) for the shared signed
+manifest, Homebrew formula and conda-forge source recipe. Generate updates only
+from a manifest accepted by the release delivery verifier. The generator is pure;
+the publication helper defaults to a local plan and requires `--submit` plus a
+separately scoped channel token before it creates a GitHub branch or pull request.
+
+Use the project's configured tap. Conda submission requires an explicitly
+configured maintainer-owned fork and consenting recipe maintainers; never infer
+those identities from a filesystem username or automatically list someone.
+Conda review remains independent of Homebrew and direct archive publication.
+
+Build-tool Python is not an end-user installation dependency. Keep direct
+installation transparent: signature/checksum verification, archive extraction,
+staging beside the destination, atomic rename and explicit daemon maintenance.
+Changing package delivery must preserve profiles, credentials and connector
+journals and must not introduce startup hooks or a self-updater.

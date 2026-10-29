@@ -6,13 +6,21 @@ This local build check never signs or publishes anything.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
 import tarfile
 import tempfile
+
+_artifacts_spec = importlib.util.spec_from_file_location('release_artifacts', Path(__file__).with_name('release_artifacts.py'))
+artifacts = importlib.util.module_from_spec(_artifacts_spec)
+_artifacts_spec.loader.exec_module(artifacts)
+_platform_spec = importlib.util.spec_from_file_location('release_platform', Path(__file__).with_name('release_platform.py'))
+release_platform = importlib.util.module_from_spec(_platform_spec)
+_platform_spec.loader.exec_module(release_platform)
 
 
 def check_guide_links(root, guides):
@@ -33,18 +41,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archives", required=True, type=Path)
     parser.add_argument("--target", required=True)
+    parser.add_argument("--report", type=Path, help="Write the successful native qualification record")
+    parser.add_argument("--require-minimum-platform", action="store_true",
+                        help="Require execution on macOS 14 or glibc 2.28, not a newer runtime")
     args = parser.parse_args()
     archives = sorted(args.archives.glob(f"*-{args.target}.tar.gz"))
     if len(archives) != 1:
         parser.error("expected one unified Enumeray archive for the target")
     fresh = Path(tempfile.mkdtemp(prefix="enumeray-package-qualification-"))
     environment = {"PATH": "/usr/bin:/bin", "HOME": str(fresh)}
-    result = {"extraction_root": str(fresh)}
+    result = {"schema_version": 1, "target": args.target}
     archive = archives[0]
     expected, filename = archive.with_suffix(archive.suffix + ".sha256").read_text().split()
     if filename != archive.name or hashlib.sha256(archive.read_bytes()).hexdigest() != expected:
         raise SystemExit(f"Archive checksum failed: {archive.name}")
     with tarfile.open(archive, "r:gz") as tar:
+        prefix = archive.name.removesuffix('.tar.gz')
+        seen = set()
+        for member in tar.getmembers():
+            path = PurePosixPath(member.name)
+            if (not (member.isfile() or member.isdir()) or path.is_absolute() or '..' in path.parts
+                    or not path.parts or path.parts[0] != prefix or member.name in seen):
+                raise SystemExit('Archive entries must be unique regular files/directories under the package root')
+            seen.add(member.name)
         tar.extractall(fresh, filter="data")
     contents = fresh / archive.name.removesuffix(".tar.gz")
     compatibility = json.loads((contents / "compatibility.json").read_text())
@@ -59,6 +78,23 @@ def main():
             or archive.name != f"enumeray-{compatibility['version']}-{args.target}.tar.gz"):
         raise SystemExit("Package compatibility contract mismatch")
     binary = contents / name
+    minimum = artifacts.MINIMUM_PLATFORMS.get(args.target)
+    if minimum is None or compatibility.get('minimum_platform') != minimum:
+        raise SystemExit('Package lacks the supported minimum-platform contract')
+    if not (contents / 'LICENSE').is_file() or not (contents / 'THIRD_PARTY_NOTICES.json').is_file():
+        raise SystemExit('Package lacks project or dependency license notices')
+    notices = json.loads((contents / 'THIRD_PARTY_NOTICES.json').read_text())
+    source = compatibility.get('source', {})
+    if notices.get('schema') != 1 or (source.get('clean') and not notices.get('dependencies')):
+        raise SystemExit('Package dependency license notices are incomplete')
+    try:
+        platform_report = release_platform.audit_platform(binary, args.target, minimum)
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        raise SystemExit(str(error)) from error
+    if args.require_minimum_platform and not platform_report['platform_qualified']:
+        raise SystemExit('This host does not provide native execution on the supported minimum platform')
+    result.update(archive=archive.name, sha256=expected, version=compatibility['version'],
+                  source=source, minimum_platform=minimum, **platform_report)
     executables = sorted(p.name for p in contents.iterdir() if p.is_file() and p.stat().st_mode & 0o111)
     if executables != ["enumeray"]:
         raise SystemExit("Expected exactly one installed executable")
@@ -125,7 +161,12 @@ def main():
                 subprocess.run([sys.executable, "-B", "-m", "unittest", "discover",
                                 "-s", ".", "-p", "test_starter.py"], cwd=project,
                                env={**environment, "PYTHONDONTWRITEBYTECODE": "1"}, check=True)
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        artifacts.write_json(args.report, result)
+    # Keep the extracted path in stdout for local service harnesses, not in signed metadata.
     result["binary"] = str(binary)
+    result["extraction_root"] = str(fresh)
     print(json.dumps(result, indent=2))
 
 

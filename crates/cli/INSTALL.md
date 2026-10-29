@@ -2,19 +2,64 @@
 
 One `enumeray` executable provides user commands, connector operation and the
 compute runner. Install the same qualified package on each required host.
-Users need no API checkout, PostgreSQL or database credentials. Linux archives
-require glibc. Select the archive for your operating system and CPU; the package
-matrix targets x86-64 and ARM64 on Linux and macOS. This checkout is unreleased:
-use a qualified published archive when available, or build from source below.
+Users need no API checkout, PostgreSQL, database credentials, Python or installer
+to run the executable. Select a qualified archive for your operating system and
+CPU. The supported matrix is macOS **14 or newer** and Linux **glibc 2.28 or newer**,
+each on x86-64 and ARM64. Alpine/musl, Windows and older systems are outside this
+matrix. Each platform must pass its own oldest-supported-environment checks before
+publication. A build on a newer system alone does not qualify that minimum.
+
+Package availability follows the matching service's release qualification.
+Until a qualified release is published, build from source below. Homebrew tap
+publication and conda-forge acceptance are tracked independently; a pending
+Conda review does not block qualified direct downloads or Homebrew delivery.
+
+## Homebrew on macOS
+
+Once the project tap's qualified formula is published:
+
+```sh
+brew tap raysofspace/tap
+brew install raysofspace/tap/enumeray
+enumeray --version
+```
+
+The single formula selects the Intel or Apple Silicon archive and installs its
+guides and compatibility metadata under `$(brew --prefix enumeray)/share/enumeray`.
+It has no service definition or startup hook. For upgrades, follow the maintenance
+steps below, then run `brew upgrade raysofspace/tap/enumeray`. Use `brew pin enumeray`
+to retain the installed version; `brew unpin enumeray` allows later upgrades.
+Homebrew installs the tap's current formula. Use a versioned direct archive when
+an exact historical version is required. Remove the package with
+`brew uninstall enumeray`; separately managed credentials and journals remain.
 
 ## Verify and install an archive
 
 Check the repository's [releases](https://github.com/raysofspace/enumeray-cli/releases)
 for qualified packages. Draft artifacts do not establish release qualification.
-Each archive has a SHA-256 checksum and Sigstore bundle. Set `REPOSITORY` to
-`raysofspace/enumeray-cli`, `TAG` to the actual release tag, and the remaining variables
-to the downloaded filenames and extracted directory. The qualified-release
-workflow signs from `main`; the archive version is identified by its release tag:
+Each archive contains one executable plus its license, compatibility/source
+metadata, guides and examples. There is no custom installer or self-updater.
+Use an explicit published version and target; do not use a draft or infer service
+compatibility from a version number. This example selects Apple Silicon macOS;
+replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
+`x86_64-unknown-linux-gnu` as appropriate:
+
+```sh
+VERSION=0.1.0
+TARGET=aarch64-apple-darwin
+REPOSITORY=raysofspace/enumeray-cli
+TAG="binaries-v$VERSION"
+ARCHIVE="enumeray-$VERSION-$TARGET.tar.gz"
+CHECKSUM="$ARCHIVE.sha256"
+BASE_URL="https://github.com/$REPOSITORY/releases/download/$TAG"
+curl --fail --location --proto '=https' --tlsv1.2 --output "$ARCHIVE" "$BASE_URL/$ARCHIVE"
+curl --fail --location --proto '=https' --tlsv1.2 --output "$CHECKSUM" "$BASE_URL/$CHECKSUM"
+curl --fail --location --proto '=https' --tlsv1.2 --output "$CHECKSUM.sigstore.json" "$BASE_URL/$CHECKSUM.sigstore.json"
+```
+
+Verify on a trusted connected host with a separately trusted Cosign v3. The
+qualified-release workflow signs from `main`; the requested version is bound by
+the signed checksum filename and the release/source metadata:
 
 ```sh
 cosign verify-blob \
@@ -22,20 +67,128 @@ cosign verify-blob \
   --certificate-identity "https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "$CHECKSUM"
-sha256sum --check "$CHECKSUM"
+# Linux: sha256sum --check "$CHECKSUM"
+# macOS (also works on Linux with Perl):
+shasum -a 256 --check "$CHECKSUM"
 tar -xzf "$ARCHIVE"
-mkdir -p "$HOME/.local/bin"
-install -m 755 "$EXTRACTED/enumeray" "$HOME/.local/bin/enumeray"
+EXTRACTED="$PWD/${ARCHIVE%.tar.gz}"
+```
+
+Stop immediately if either verification command fails. Keep the signed checksum
+and archive together. Read `compatibility.json` and the source identity before
+using the package with a service. Do not skip signature verification because a
+checksum from the same untrusted download happens to match.
+
+Choose any writable prefix, with `$HOME/.local` as the default. The commands below
+stage beside the destination and rename on the same filesystem, so an interrupted
+copy leaves the previous executable in place. Use a prefix you manage directly;
+use Homebrew or Conda to update executables owned by those package managers.
+Coordinate connector/runner maintenance before replacing an existing package.
+
+<!-- manual-install-copy -->
+```sh
+(
+  set -eu
+  PREFIX=${PREFIX:-"$HOME/.local"}
+  mkdir -p "$PREFIX/bin"
+  staged=$(mktemp "$PREFIX/bin/.enumeray.XXXXXX")
+  trap 'rm -f "$staged"' 0 HUP INT TERM
+  install -m 755 "$EXTRACTED/enumeray" "$staged"
+  "$staged" --version
+  mv -f "$staged" "$PREFIX/bin/enumeray"
+)
+```
+
+Add your chosen `PREFIX/bin` to `PATH`, for example:
+
+```sh
 export PATH="$HOME/.local/bin:$PATH"
 enumeray --version
 ```
 
-On macOS use `shasum -a 256 -c "$CHECKSUM"`. Keep the executable directory in
-your shell's `PATH`. Install the same executable on infrastructure hosts.
-SSH execution needs OpenSSH on the connector host and the matching Enumeray
-executable on the remote execution host. Slurm compute nodes need that same executable.
+Keep the extracted metadata/guides wherever convenient; the executable runs
+independently. Removal is simply `rm "${PREFIX:-$HOME/.local}/bin/enumeray"` after stopping any
+daemon that uses it. Remove only the path you installed. This leaves your user
+configuration, credentials, connector journal and scientific work untouched.
 
-## Build from source
+## Offline and SSH/HPC hosts
+
+Verify the signature and archive checksum on a trusted connected host first.
+Transfer the verified archive, signed checksum and compatibility/source metadata
+through your approved authenticated SSH transfer. Recheck the archive's SHA-256
+at the destination using that verified checksum, then extract and install as
+above. Cosign is needed on the verification host; the offline execution host
+needs no Python, installer or network access for installation. Retain the
+verification evidence with the downloads for later reuse.
+
+SSH execution needs OpenSSH on the connector host and the matching Enumeray
+executable on each remote execution host. Slurm compute nodes need the same
+qualified executable. Install it at the path approved by the site operator.
+
+## Conda and Mamba
+
+After the recipe has been accepted and its four platform packages qualified,
+select an explicit version in a new or existing environment:
+
+```sh
+conda create --name enumeray-work -c conda-forge enumeray=0.1.0
+conda activate enumeray-work
+enumeray --version
+```
+
+The equivalent `mamba create` command is supported by the package format. Conda
+builds this package from the same versioned public source and `Cargo.lock` as the
+release, using the pinned Rust toolchain. It does not repackage an upstream
+executable. No Python runtime dependency or service startup hook is introduced.
+Compatibility/source metadata and dependency license evidence are installed in
+`$CONDA_PREFIX/share/enumeray`.
+
+After coordinating maintenance, request a qualified upgrade with
+`conda install -c conda-forge enumeray=VERSION`. Remove only this package with
+`conda remove enumeray` in the selected environment; keep private credentials and
+journals outside the environment. Channel acceptance or solver success alone
+does not authorize mixing connector, runner and API release identities.
+
+## Build from a release source archive
+
+Each qualified release also provides `enumeray-VERSION-source.tar.gz`, its
+`.sha256` checksum and `.sha256.sigstore.json` signature bundle. Select the same
+explicit release version as the service and download these three files from the
+public release:
+
+```sh
+VERSION=0.1.0
+TAG="binaries-v$VERSION"
+ARCHIVE="enumeray-$VERSION-source.tar.gz"
+CHECKSUM="$ARCHIVE.sha256"
+BASE_URL="https://github.com/raysofspace/enumeray-cli/releases/download/$TAG"
+for file in "$ARCHIVE" "$CHECKSUM" "$CHECKSUM.sigstore.json"; do
+  curl --fail --location --proto '=https' --tlsv1.2 --output "$file" "$BASE_URL/$file"
+done
+```
+
+Apply the signature and SHA-256 verification steps above to these filenames
+before extracting the archive. The expected signing identity is the same public
+release workflow. The archive includes `LICENSE`, `Cargo.lock`, the pinned
+`rust-toolchain.toml`, dependency notices and all public CLI, client, connector
+and contract sources. It builds independently of the private API source. Read
+`release-source.json` to identify the exact source revision and tree.
+
+With the pinned Rust toolchain installed, build from the extracted source root:
+
+```sh
+cd "enumeray-$VERSION-source"
+cargo build --locked --release --target-dir target -p enumeray-cli --bin enumeray
+EXTRACTED="$PWD/target/release"
+```
+
+Use the atomic copy steps above to install `EXTRACTED/enumeray` under your chosen
+prefix. Cargo obtains dependencies matching `Cargo.lock`; an offline source
+build needs the toolchain and those dependencies already available locally.
+Locally rebuilding a release does not replace its published archive qualification
+or establish compatibility with another service release.
+
+## Build from the checkout
 
 Use the repository's pinned Rust toolchain. From the repository root:
 

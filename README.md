@@ -18,6 +18,19 @@ no service checkout, database credentials or running API.
 | Develop and verify the public workspace | [Contributor guide](CONTRIBUTING.md) |
 | Follow role-based service guidance | [Web documentation](https://doc.enumeray.com/) |
 
+## Install a qualified package
+
+One native executable supplies the CLI, connector and compute runner. Qualified
+releases support macOS 14+ and Linux with glibc 2.28+, each on Intel/x86-64 and
+ARM64. Installation starts no service and needs no Python runtime.
+
+The [installation guide](crates/cli/INSTALL.md) covers the project Homebrew tap,
+explicit-version signed binary archives for direct/offline/SSH installation,
+and conda-forge source-built packages after their external review. Direct
+installation uses ordinary verification, extraction and file-copy commands;
+there is no custom installer or self-updater. Channel availability remains
+subject to release qualification and each channel's publication status.
+
 ## Build from source
 
 Use the pinned Rust toolchain, including Cargo, rustfmt and Clippy. From this
@@ -34,8 +47,8 @@ enumeray --version
 The current source is unreleased. Version 1 alone does not establish compatibility
 between revisions. Use a qualified published release when available; coordinate
 connector and compute-runner upgrades with service maintenance and retained job
-evidence. The planned native archive matrix is Linux and macOS on x86-64 and
-ARM64. Linux archives require glibc; individual platforms need qualification.
+evidence. Each target and distribution channel needs its own qualification;
+passing local source tests does not establish package availability.
 
 ## Source ownership
 
@@ -46,7 +59,7 @@ ARM64. Linux archives require glibc; individual platforms need qualification.
 | `crates/connector` | Durable job ownership, transfers, recovery and process/Slurm execution over direct access or SSH |
 | `crates/contracts` | Shared request/response types, schemas and validation |
 | `examples`, `release/fixtures` | Credential-free model examples and retained edge compatibility fixtures |
-| `scripts` | Verification, binary packaging and archive checks |
+| `scripts`, `distribution` | Verification, binary packaging, archive checks and channel delivery |
 
 These sources are canonical. The managed service consumes a pinned revision;
 changes are made here and then integrated into the service. The service operator
