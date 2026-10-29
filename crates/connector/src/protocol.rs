@@ -22,6 +22,7 @@ pub(crate) struct Request {
     deny_unknown_fields
 )]
 pub(crate) enum Operation {
+    Identity(Option<()>),
     Validate(crate::compute::ValidationRequest),
     Prepare(crate::compute::ComputeJob),
     Start(Option<()>),

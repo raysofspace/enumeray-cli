@@ -762,6 +762,10 @@ pub fn execute_at(
                         );
                     }
                 };
+                crate::execution_policy::require_consent(
+                    installation.execution_mode,
+                    client.allow_development_execution,
+                )?;
                 if client.service {
                     if journal.data.prepared_assignments[index].transfers.is_none() {
                         crate::transfers::prepare_staging(
@@ -805,6 +809,10 @@ pub fn execute_at(
                 }
                 // The intent and unknown outcome must reach stable storage BEFORE
                 // crossing the backend boundary, including for this local fixture.
+                crate::compute::require_launch_policy(
+                    &installation,
+                    client.allow_development_execution,
+                )?;
                 let intent = journal.begin_submission(id, intent)?.launch_intent_id();
                 let completion = wait_for_completion(
                     client,
@@ -814,13 +822,19 @@ pub fn execute_at(
                     intent,
                     &assignment,
                     if client.service {
-                        crate::compute::start_prepared(&journal.directory, intent, &assignment)?
+                        crate::compute::start_prepared(
+                            &journal.directory,
+                            intent,
+                            &assignment,
+                            client.allow_development_execution,
+                        )?
                     } else {
                         crate::compute::launch(
                             &journal.directory,
                             intent,
                             &assignment,
                             installation,
+                            client.allow_development_execution,
                         )?
                     },
                 )?;
@@ -848,8 +862,13 @@ pub fn execute_at(
                     return Err(failure("recovering runner input staging")
                         .with_kind(super::ErrorKind::Waiting));
                 }
-                let completion =
-                    crate::compute::recover(&journal.directory, intent, &assignment, cancel)?;
+                let completion = crate::compute::recover(
+                    &journal.directory,
+                    intent,
+                    &assignment,
+                    cancel,
+                    client.allow_development_execution,
+                )?;
                 local_job(
                     intent,
                     &assignment,
@@ -1296,7 +1315,13 @@ fn wait_for_completion(
                 .ok_or_else(|| failure("invalid assignment identity"))?,
         )?;
         let cancel = cancellation_scope(&control);
-        completion = crate::compute::recover(&journal.directory, intent, assignment, cancel)?;
+        completion = crate::compute::recover(
+            &journal.directory,
+            intent,
+            assignment,
+            cancel,
+            client.allow_development_execution,
+        )?;
     }
 }
 

@@ -12,13 +12,163 @@ Choose driver and access independently: `process` or `slurm`, combined with
 `direct` or `ssh`. See [configuration and extension guide](EXTENDING.md) for the
 four context templates, deployment choices and module contracts.
 
+## Single-user development
+
+Use development execution only for trusted models on a personal macOS or Linux
+machine. The CLI, connector and model run as your existing non-root OS user.
+Model code can access that user's connector credentials and files. Private file
+permissions still protect against other users; they cannot isolate processes
+running as the same user. Managed execution with separate identities remains the
+default, including when a connector permits development contexts.
+
+This recipe needs outbound HTTPS to a compatible deployed test service, an
+ordinary CLI login, and Python 3 for the example model. A DSM-hosted test service
+works the same way: use its actual HTTPS origin and normal trusted certificates.
+The connector initiates outbound requests; no inbound laptop connection, local
+API/database, new host account or sudo configuration is required. Development
+execution does not enable insecure HTTP or bypass authentication, ownership,
+compute grants or model access policy.
+
+Install a matching `enumeray` executable under `$HOME/.local/bin` using the
+[installation guide](../cli/INSTALL.md), or follow the public repository's
+source-build instructions while a qualified package is unavailable. Use that
+executable throughout the recipe:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+umask 077
+mkdir -p "$HOME/enumeray-development/models" "$HOME/enumeray-development/work" \
+  "$HOME/enumeray-development/connector"
+chmod 700 "$HOME/enumeray-development" "$HOME/enumeray-development/work" \
+  "$HOME/enumeray-development/connector"
+cd "$HOME/enumeray-development"
+enumeray auth configure https://enumeray.example.org
+enumeray auth login
+enumeray auth whoami
+enumeray infra create development --label 'Personal trusted experiments'
+enumeray connector create development development-connector \
+  --label 'Personal development connector' --max-outstanding-assignments 1 \
+  --output enrollment.json
+enumeray connector enroll --directory connector/credentials \
+  --api-base-url https://enumeray.example.org --enrollment-file enrollment.json
+```
+
+Choose unique resource IDs if those names already exist. Retry an interrupted
+enrollment with the same directory and document, as described below. User login
+and connector credentials retain their separate files and purposes.
+
+Copy [development-process-context.json](../cli/examples/development-process-context.json)
+to `context.json`. Replace every `/home/researcher` prefix with your **actual
+absolute home directory** (`/Users/your-name` on a typical Mac). JSON paths do not
+expand `$HOME` or `~`. The reviewed definition must contain
+`"execution_mode": "development"`, process scratch limits, a direct launcher
+containing the absolute path to your `enumeray` executable, and the model/work
+roots created above. Keep the example's reduced-isolation disclosure visible.
+
+```sh
+enumeray infra context-create development --file context.json
+enumeray infra contexts development
+enumeray infra grant development --context development-process --user AUTHOR_UUID \
+  --max-queued-runs 10 --max-outstanding-assignments 1
+```
+
+Replace `AUTHOR_UUID` with your own `user_id` from `auth whoami`. Even when the
+same person owns everything, the explicit compute grant is required. In another
+terminal under that same OS user, run the connector in the foreground:
+
+```sh
+enumeray connector run --journal "$HOME/enumeray-development/connector/journal" \
+  --api-base-url https://enumeray.example.org --connector-id development-connector \
+  --token-file "$HOME/enumeray-development/connector/credentials/token" \
+  --max-workers 1 --recovery-mode exclusive-local --allow-development-execution
+```
+
+Use `exclusive-local` only on one unshared, uncloned local state volume; otherwise
+use manual recovery and explicitly confirm the old process stopped. Startup emits
+the reduced-isolation warning. A registered context is configuration, not a
+readiness check: installation validation follows publication registration.
+
+Back in the first terminal, create and locally test the sample, then install one
+immutable release under the approved root:
+
+```sh
+cd "$HOME/enumeray-development"
+enumeray model init development-double --directory source
+(cd source && python3 -m unittest)
+cp -R source models/development-double-r1
+```
+
+Edit `models/development-double-r1/publication.json`: set
+`execution.context_id` to `development-process`, and `execution.release_path` to
+the absolute path of `models/development-double-r1`. The generated process
+publication's entrypoint and scientific settings stay with the installed release.
+Do not change that release after registration; create a new release directory for
+an update. Register and wait for the connector's validation:
+
+```sh
+enumeray model validate --file models/development-double-r1/publication.json
+enumeray model create development-double --file models/development-double-r1/publication.json
+enumeray model release init development-double \
+  --file models/development-double-r1/publication.json --directory release-r1
+enumeray model release resume release-r1
+enumeray model release status release-r1
+```
+
+Use the full Candidate ID displayed by release status as `PUBLICATION_ID` below.
+If readiness is pending, repeat `release resume release-r1`. Inspect any validation
+failure before continuing. Both the context mode and host option are required;
+a managed context still rejects a same-user direct runner.
+
+```sh
+cat > inputs.json <<'JSON'
+{"value":21}
+JSON
+enumeray analysis init development-double --candidate "$PUBLICATION_ID" \
+  --inputs inputs.json --directory candidate-trial
+# Review the saved destination and reduced-isolation disclosure.
+enumeray analysis submit candidate-trial
+enumeray analysis wait candidate-trial --check-outcome
+enumeray analysis collect candidate-trial
+enumeray model release review release-r1
+enumeray model release activate release-r1
+enumeray analysis init development-double --inputs inputs.json --directory ordinary-analysis
+# Review this new execution before submitting it.
+enumeray analysis submit ordinary-analysis
+enumeray analysis wait ordinary-analysis --check-outcome
+enumeray analysis collect ordinary-analysis
+```
+
+The example returns `doubled: 42`. Candidate success does not activate the model;
+review and activation above are explicit. A new intended execution uses a new
+analysis directory. Repeating submit for the same directory recovers its receipt.
+To exercise cancellation, create and submit another analysis, then use
+`enumeray analysis cancel DIRECTORY` followed by `analysis wait DIRECTORY`.
+A fast model may already have finished; use your own trusted longer-running model
+when verifying running cancellation.
+
+Stop the foreground connector with SIGINT, then restart the same command with the
+same journal, API, connector ID and token file. Keep the journal and installed
+releases. Only one process may own the journal. `connector inspect --journal PATH`
+shows context modes, the warning and `last_allow_development_execution`; that last
+value describes a previous invocation and never authorizes a later launch.
+
+If restarted without `--allow-development-execution`, existing submissions can
+still be observed, cancelled and delivered. Fresh and prepared development work
+remains blocked with its original launch identity. Restart with the option to
+resume eligible work; do not delete state or submit a replacement execution.
+The controlled `claim-once` and `execute-once` commands require the same option
+when used with development contexts. The option has no effect on managed
+contexts' separate-identity requirement. Development does not support SSH or Slurm.
+
 ## Enrollment and service operation
 
 The infrastructure owner uses the authenticated `enumeray` CLI. The connector
 service account uses `enumeray connector run`; the execution account runs the
 credential-free runner. Install the same matching binary on each execution host
 and, for Slurm, on compute nodes. The connector needs outbound API access, private
-durable local storage and a separate execution identity. File jobs also require
+durable local storage and a separate execution identity in managed mode.
+The explicit [development exception](#single-user-development) permits trusted
+same-user process/direct execution. File jobs also require
 the service's verified versioned storage.
 
 Choose IDs once, then create the infrastructure and one-time enrollment on the

@@ -1293,6 +1293,7 @@ mod tests {
         let descriptor: enumeray_contracts::execution::InstallationDescriptor =
             serde_json::from_value(entry.assignment["descriptor"].clone()).unwrap();
         crate::compute::ComputeInstallation {
+            execution_mode: Default::default(),
             provider_binding_id: descriptor.provider_binding_id.clone(),
             context_id: "test-context".into(),
             installation: crate::local_process::Installation {

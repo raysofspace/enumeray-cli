@@ -39,6 +39,9 @@ pub struct JournalData {
     pub exclusive_local: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub allow_insecure_http: bool,
+    /// Historical inspection only; never authorizes a later invocation.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub last_allow_development_execution: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -434,6 +437,7 @@ impl Journal {
                 prepared_assignments: Vec::new(),
                 exclusive_local: service.is_some_and(|(exclusive, _)| exclusive),
                 allow_insecure_http: service.is_some_and(|(_, http)| http),
+                last_allow_development_execution: false,
             },
         };
         journal.save()?;
@@ -795,8 +799,15 @@ impl Journal {
         self.save_bytes(&bytes)
     }
 
+    pub fn record_execution_policy(&mut self, allowed: bool) -> Result<()> {
+        self.data.last_allow_development_execution = allowed;
+        self.save()
+    }
+
     pub fn summary(&self) -> Value {
         json!({
+            "last_allow_development_execution": self.data.last_allow_development_execution,
+            "execution_policy_note": "Historical policy from the last launch-capable invocation; explicit startup opt-in is always required.",
             "journal_id": self.data.journal_id, "connector_id": self.data.connector_id,
             "api_base_url": self.data.api_base_url, "active_session_id": self.data.active_session_id,
             "pending_claim_key": self.data.pending_claim_key,

@@ -39,6 +39,7 @@ pub struct Client {
     pub log_readers: super::logs::Readers,
     pub log_policy: enumeray_contracts::logs::LogPolicy,
     pub service: bool,
+    pub allow_development_execution: bool,
     pub unpublished_retention_seconds: Option<u64>,
     pub shutdown: std::sync::Arc<std::sync::Mutex<Option<std::time::Instant>>>,
 }
@@ -91,6 +92,7 @@ impl Client {
             log_readers: Default::default(),
             log_policy: Default::default(),
             service: false,
+            allow_development_execution: false,
             unpublished_retention_seconds: None,
             shutdown: Default::default(),
         })

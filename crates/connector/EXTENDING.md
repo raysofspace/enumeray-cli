@@ -219,6 +219,7 @@ unresolved and never authorizes another start.
 | Runner action | Purpose and boundary |
 | --- | --- |
 | `validate` | Check installed descriptor/files, execution identity and driver readiness before accepting configuration |
+| `identity` | Read the runner UID without reading credentials or touching job state; rechecked before direct submission |
 | `protect-installations` | Persist known canonical installation overlap pins on the original compute host before readiness |
 | `prepare` | Create the pinned private job directory before launch |
 | `write-collection` | Install a bounded page of pinned collection metadata before launch; freeze and verify its full digest before staging completes |
@@ -263,7 +264,7 @@ boundaries described below.
   bounded payload retirement and durable cleanup checkpoints.
 - `src/runtime/local_process.rs`: durable model supervisor and wrapper protocol.
 
-The runner supports `validate`, `protect-installations`, `prepare`, `write-collection`, `read-collection`, `write-input`, `transfer-probe`, `start`, `status`,
+The runner supports `identity`, `validate`, `protect-installations`, `prepare`, `write-collection`, `read-collection`, `write-input`, `transfer-probe`, `start`, `status`,
 `allocation-status`, `request-cancel`, `read-output`, `read-logs`, `build-log-archive`,
 `read-log-archive`, `cleanup-log-archive` and `cleanup-run`. Protocol version 1 uses
 `{"version":1,"action":"status","payload":null}` and replies with

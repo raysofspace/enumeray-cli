@@ -100,11 +100,49 @@ impl InstallationIdentity {
     }
 }
 
-/// Infrastructure-owned execution configuration. Credential references name secrets on
-/// the connector host; secret values must never be sent through the API.
+/// Isolation policy approved by the context owner; development also needs local host consent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionMode {
+    #[default]
+    Managed,
+    Development,
+}
+
+impl ExecutionMode {
+    pub fn is_managed(&self) -> bool {
+        *self == Self::Managed
+    }
+
+    pub fn validate(
+        &self,
+        driver: &DriverConfig,
+        connection: &ConnectionConfig,
+    ) -> Result<(), &'static str> {
+        if *self == Self::Development
+            && !matches!(
+                (driver, connection),
+                (
+                    DriverConfig::Process { .. },
+                    ConnectionConfig::Direct { .. }
+                )
+            )
+        {
+            return Err(
+                "development execution requires the process driver and a direct connection",
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Immutable execution settings approved by the infrastructure owner. Credential
+/// references name host secrets; secret values must never be sent through the API.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionContextDefinition {
+    #[serde(default, skip_serializing_if = "ExecutionMode::is_managed")]
+    pub execution_mode: ExecutionMode,
     pub driver: DriverConfig,
     pub connection: ConnectionConfig,
     pub installation_roots: Vec<String>,
@@ -258,6 +296,8 @@ pub enum ConnectionConfig {
 impl ExecutionContextDefinition {
     /// Structural checks shared by registration and installation validation.
     pub fn validate_execution(&self) -> Result<(), &'static str> {
+        self.execution_mode
+            .validate(&self.driver, &self.connection)?;
         fn absolute(s: &str) -> bool {
             std::path::Path::new(s).is_absolute()
                 && s.len() <= 4096
@@ -820,6 +860,52 @@ mod installation_spec_tests {
 mod context_tests {
     use super::*;
     use serde_json::{Value, json};
+
+    #[test]
+    fn development_requires_process_direct_and_managed_defaults_preserve_wire_identity() {
+        let manifest: Value = serde_json::from_str(include_str!(
+            "../../cli/examples/process-direct-context.json"
+        ))
+        .unwrap();
+        let legacy = &manifest["spec"]["definition"];
+        let mut context: ExecutionContextDefinition =
+            serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(context.execution_mode, ExecutionMode::Managed);
+        assert_eq!(serde_json::to_value(&context).unwrap(), *legacy);
+        let mut explicit = legacy.clone();
+        explicit["execution_mode"] = json!("managed");
+        assert_eq!(
+            serde_json::from_value::<ExecutionContextDefinition>(explicit).unwrap(),
+            context
+        );
+        context.execution_mode = ExecutionMode::Development;
+        context.validate_execution().unwrap();
+        assert_eq!(
+            serde_json::from_value::<ExecutionContextDefinition>(
+                serde_json::to_value(&context).unwrap()
+            )
+            .unwrap(),
+            context
+        );
+        context.driver = DriverConfig::Slurm(SlurmConfig {
+            worker_path: "/bin/enumeray".into(),
+        });
+        assert!(context.validate_execution().is_err());
+        context.driver = DriverConfig::Process { scratch: None };
+        context.connection = ConnectionConfig::Ssh(SshTarget {
+            host: "example.org".into(),
+            user: "model".into(),
+            port: 22,
+            credential_reference: "key".into(),
+            runner_path: "/bin/enumeray".into(),
+        });
+        assert!(context.validate_execution().is_err());
+        for mode in [json!(null), json!(true), json!("automatic")] {
+            let mut invalid = legacy.clone();
+            invalid["execution_mode"] = mode;
+            assert!(serde_json::from_value::<ExecutionContextDefinition>(invalid).is_err());
+        }
+    }
 
     #[test]
     fn process_scratch_policy_is_explicit_bounded_and_legacy_compatible() {

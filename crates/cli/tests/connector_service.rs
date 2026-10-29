@@ -42,6 +42,7 @@ struct Peer {
     configuration_unavailable: bool,
     hold_configuration_ack: bool,
     configuration_acks: usize,
+    validations: Vec<Value>,
     cleanup_enabled: bool,
     completed_retention: Option<u64>,
     remaining: usize,
@@ -786,7 +787,12 @@ async fn handle(State(state): State<Arc<Mutex<Peer>>>, request: Request) -> Resp
             serde_json::from_slice(&to_bytes(request.into_body(), 256 * 1024).await.unwrap())
                 .unwrap();
         assert!(body["validations"].is_array());
-        state.lock().unwrap().configuration_acks += 1;
+        {
+            let mut peer = state.lock().unwrap();
+            peer.configuration_acks += 1;
+            peer.validations
+                .extend(body["validations"].as_array().unwrap().iter().cloned());
+        }
         while state.lock().unwrap().hold_configuration_ack {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
@@ -1164,6 +1170,10 @@ async fn handle(State(state): State<Arc<Mutex<Peer>>>, request: Request) -> Resp
     Json(receipt).into_response()
 }
 fn start(scratch: &Scratch, api: &Api, grace: u64) -> Child {
+    start_with_policy(scratch, api, grace, false)
+}
+
+fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development: bool) -> Child {
     scratch.token(TOKEN);
     if !scratch.0.join("installation-fixture.json").exists() {
         support::install_scalar(scratch);
@@ -1237,6 +1247,9 @@ fn start(scratch: &Scratch, api: &Api, grace: u64) -> Child {
                 .arg("--max-pending-assignments")
                 .arg(cap.to_string());
         }
+    }
+    if allow_development {
+        command.arg("--allow-development-execution");
     }
     command.spawn().unwrap()
 }
@@ -2708,4 +2721,225 @@ async fn stalled_bulk_work_is_diagnosed_and_retried_without_blocking_cancellatio
     archived(&scratch, 1).await;
     assert_eq!(stop(child).await["drained"], true);
     assert!(!scratch.0.join("launches").exists());
+}
+
+fn use_real_identity(scratch: &Scratch, development: bool) {
+    let path = scratch.0.join("installation-fixture.json");
+    let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    config["installations"][0]["execution_mode"] = json!(if development {
+        "development"
+    } else {
+        "managed"
+    });
+    config["installations"][0]["real_identity"] = json!(true);
+    fs::write(path, serde_json::to_vec(&config).unwrap()).unwrap();
+}
+
+#[tokio::test]
+async fn same_user_requires_both_optins_and_managed_never_falls_back() {
+    for (development, allowed) in [(false, false), (false, true), (true, false)] {
+        let scratch = Scratch::new();
+        install(&scratch, 0.0);
+        use_real_identity(&scratch, development);
+        let api = Api::start(0, true).await;
+        let child = start_with_policy(&scratch, &api, 1, allowed);
+        api.until(|peer| {
+            peer.validations
+                .iter()
+                .any(|validation| validation["ready"] == false)
+        })
+        .await;
+        let message = api.state.lock().unwrap().validations.last().unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(
+            message.contains(if development {
+                "--allow-development-execution"
+            } else {
+                "separate execution identity"
+            }),
+            "{message}"
+        );
+        assert!(!scratch.0.join("launches").exists());
+        assert_eq!(stop(child).await["drained"], true);
+    }
+}
+
+fn regular_user() -> bool {
+    let regular = std::process::Command::new("/usr/bin/id")
+        .arg("-u")
+        .output()
+        .unwrap()
+        .stdout
+        != b"0\n";
+    if !regular {
+        eprintln!(
+            "same-user success requires a non-root test user; root rejection is covered by execution_policy"
+        );
+    }
+    regular
+}
+
+#[tokio::test]
+async fn development_restart_without_consent_observes_delivers_and_cancels_one_launch() {
+    if !regular_user() {
+        return;
+    }
+    for cancel in [false, true] {
+        let scratch = Scratch::new();
+        let gate = install_gated(&scratch);
+        use_real_identity(&scratch, true);
+        let api = Api::start(1, true).await;
+        let mut child = start_with_policy(&scratch, &api, 1, true);
+        api.until(|peer| {
+            peer.events
+                .values()
+                .any(|event| event["phase"] == "executing")
+        })
+        .await;
+        let intent = scratch.read()["prepared_assignments"][0]["launch_intent_id"].clone();
+        let remote = scratch.0.join("compute").join(intent.as_str().unwrap());
+        let snapshot = fs::read(remote.join("remote.json")).unwrap();
+        assert!(
+            fs::read_to_string(scratch.0.join("service.log"))
+                .unwrap()
+                .contains("connector credentials and files")
+        );
+        child.kill().await.unwrap();
+        child.wait().await.unwrap();
+        let child = start_with_policy(&scratch, &api, 3, false);
+        service_status(&scratch, "starting").await;
+        if cancel {
+            api.state.lock().unwrap().cancel_requested = true;
+        } else {
+            fs::remove_file(gate).unwrap();
+        }
+        archived(&scratch, 1).await;
+        assert_eq!(stop(child).await["drained"], true);
+        assert_eq!(fs::read(remote.join("remote.json")).unwrap(), snapshot);
+        assert!(
+            !scratch.read()["last_allow_development_execution"]
+                .as_bool()
+                .unwrap_or(false)
+        );
+        assert_eq!(
+            fs::read_to_string(scratch.0.join("launches"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+        let peer = api.state.lock().unwrap();
+        assert_eq!(
+            peer.jobs.values().next().unwrap().result.as_ref().unwrap()["receipt"]["outcome"],
+            if cancel { "cancelled" } else { "succeeded" }
+        );
+    }
+}
+
+#[tokio::test]
+async fn prepared_development_work_waits_for_fresh_consent_and_preserves_its_intent() {
+    if !regular_user() {
+        return;
+    }
+    let scratch = Scratch::new();
+    install(&scratch, 0.0);
+    let gate = gate_runner(&scratch, "prepare");
+    use_real_identity(&scratch, true);
+    let api = Api::start(1, true).await;
+    let child = start_with_policy(&scratch, &api, 1, true);
+    transfer_started(&scratch).await;
+    let intent = scratch.read()["prepared_assignments"][0]["launch_intent_id"].clone();
+    assert_eq!(stop(child).await["drained"], false);
+    fs::remove_file(gate).unwrap();
+    let child = start_with_policy(&scratch, &api, 1, false);
+    service_status(&scratch, "blocked").await;
+    let pending = scratch.read()["prepared_assignments"][0].clone();
+    assert_eq!(pending["launch_intent_id"], intent);
+    assert!(pending["terminal_result"].is_null());
+    assert!(!scratch.0.join("launches").exists());
+    assert!(
+        !scratch
+            .journal()
+            .join("compute-jobs")
+            .join(intent.as_str().unwrap())
+            .join("start-requested.json")
+            .exists()
+    );
+    let inspection = support::successful_json(
+        &support::run(
+            support::command()
+                .arg("inspect")
+                .arg("--journal")
+                .arg(scratch.journal()),
+        )
+        .await,
+    );
+    assert_eq!(inspection["last_allow_development_execution"], false);
+    assert_eq!(
+        inspection["configuration_retention"]["execution_contexts"][0]["execution_mode"],
+        "development"
+    );
+    assert_eq!(stop(child).await["drained"], false);
+    let child = start_with_policy(&scratch, &api, 3, true);
+    archived(&scratch, 1).await;
+    assert_eq!(stop(child).await["drained"], true);
+    assert_eq!(
+        fs::read_to_string(scratch.0.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+    let archive: Value = serde_json::from_slice(
+        &fs::read(
+            fs::read_dir(scratch.journal().join("archive"))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(archive["entry"]["launch_intent_id"], intent);
+}
+
+#[tokio::test]
+async fn development_lost_start_reply_recovers_without_consent_or_duplicate_launch() {
+    if !regular_user() {
+        return;
+    }
+    let scratch = Scratch::new();
+    let model_gate = install_gated(&scratch);
+    let reply_gate = gate_runner_at(&scratch, "start", true);
+    use_real_identity(&scratch, true);
+    let api = Api::start(1, true).await;
+    let mut child = start_with_policy(&scratch, &api, 1, true);
+    transfer_started(&scratch).await;
+    let intent = scratch.read()["prepared_assignments"][0]["launch_intent_id"].clone();
+    assert!(
+        scratch
+            .journal()
+            .join("compute-jobs")
+            .join(intent.as_str().unwrap())
+            .join("start-requested.json")
+            .exists()
+    );
+    child.kill().await.unwrap();
+    child.wait().await.unwrap();
+    fs::remove_file(reply_gate).unwrap();
+    let child = start_with_policy(&scratch, &api, 3, false);
+    fs::remove_file(model_gate).unwrap();
+    archived(&scratch, 1).await;
+    assert_eq!(stop(child).await["drained"], true);
+    assert_eq!(
+        fs::read_to_string(scratch.0.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
 }

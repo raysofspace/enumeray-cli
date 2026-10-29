@@ -168,6 +168,7 @@ pub(crate) struct PreparedConfiguration {
     eligible: std::collections::BTreeSet<(String, String)>,
     dispositions: Vec<Value>,
     desired_bytes: usize,
+    execution_contexts: Vec<Value>,
     archived_pins: std::collections::HashSet<(String, String)>,
     pin_revision: Option<String>,
     namespace_reserved: bool,
@@ -359,7 +360,12 @@ pub(crate) fn prepare_configuration(
                 .ok_or_else(|| failure("execution context is absent"))
                 .and_then(|context| {
                     check_requirements(context, &binding.requirements)?;
-                    compile(context, &binding.descriptor, &secrets)
+                    compile(
+                        context,
+                        &binding.descriptor,
+                        &secrets,
+                        client.allow_development_execution,
+                    )
                 });
             let ready = result.is_ok();
             let message = result.as_ref().err().map(ToString::to_string);
@@ -402,6 +408,7 @@ pub(crate) fn prepare_configuration(
         let stable_pins = archived_pins.is_ok() && before.is_some() && before == after;
         return Ok(PreparedConfiguration {
             generation: desired.generation,
+            execution_contexts: desired.contexts.iter().map(|context| json!({"context_id":context.id,"execution_mode":context.definition.execution_mode,"warning":(context.definition.execution_mode == ExecutionMode::Development).then_some(crate::execution_policy::WARNING)})).collect(),
             validations,
             installations,
             eligible,
@@ -573,7 +580,7 @@ pub(crate) fn apply_configuration(
         &prepared.work_roots,
         &prepared.release_references,
     );
-    let diagnostics = json!({"generation":prepared.generation,"desired_bytes":prepared.desired_bytes,"desired_limit_bytes":2*1024*1024,
+    let diagnostics = json!({"execution_contexts":prepared.execution_contexts,"generation":prepared.generation,"desired_bytes":prepared.desired_bytes,"desired_limit_bytes":2*1024*1024,
         "cache_bytes":encoded.len(),"cache_limit_bytes":local_process::MAX_RECORD_BYTES,"cached_bindings":merged["installations"].as_array().expect("cache").len(),
         "pruned_bindings":pruned,"dispositions":prepared.dispositions,"local_pins":local_pins,
         "release_protection_ready":release_protection.is_ok(),"release_protection_blocker":prepared.protection_blocker.or_else(||release_protection.err().map(|error| error.message)),
@@ -728,12 +735,15 @@ fn compile(
     desired_context: &DesiredContext,
     descriptor: &InstallationDescriptor,
     credentials: &HostCredentials,
+    allow_development_execution: bool,
 ) -> Result<Value> {
     let context = &desired_context.definition;
+    crate::execution_policy::require_consent(context.execution_mode, allow_development_execution)?;
     validate_descriptor(context, descriptor)?;
     context.validate_execution().map_err(failure)?;
     let mut remote = transport_binding(desired_context, descriptor, credentials)?;
-    remote.installation.file_digests = compute::validate_context(&remote, context, descriptor)?;
+    remote.installation.file_digests =
+        compute::validate_context(&remote, context, descriptor, allow_development_execution)?;
     serde_json::to_value(remote).map_err(|_| failure("invalid execution installation"))
 }
 
@@ -755,6 +765,7 @@ fn transport_binding(
         ConnectionConfig::Direct { .. } => None,
     };
     Ok(compute::ComputeInstallation {
+        execution_mode: context.execution_mode,
         descriptor: descriptor.clone(),
         provider_binding_id: descriptor.provider_binding_id.clone(),
         context_id: desired_context.id.clone(),
@@ -999,6 +1010,7 @@ mod tests {
     use super::*;
     fn context() -> ExecutionContextDefinition {
         ExecutionContextDefinition {
+            execution_mode: Default::default(),
             driver: DriverConfig::Process { scratch: None },
             installation_roots: vec!["/opt/models".into()],
             work_root: "/srv/jobs".into(),
@@ -1459,7 +1471,7 @@ elif request['action']=='validate':
     assert request['payload']['installation_roots']==['/opt/models']
     descriptor=request['payload']['descriptor']
     entrypoint=descriptor['release_path'].rstrip('/')+'/'+descriptor['entrypoint'][0]
-    reply={'status':'ready','execution_uid':'separate-fixture-execution-identity','file_digests':{entrypoint:base64.b64encode(b'v'*32).decode('ascii')}}
+    reply={'status':'ready','execution_uid':str(__import__('os').getuid()+1),'file_digests':{entrypoint:base64.b64encode(b'v'*32).decode('ascii')}}
 else:
     raise AssertionError(request['action'])
 print(json.dumps({'version':1,'payload':reply}))
@@ -1473,6 +1485,7 @@ print(json.dumps({'version':1,'payload':reply}))
             .environment
             .insert("RETAINED_EVIDENCE".into(), "unchanged".into());
         let installation = compute::ComputeInstallation {
+            execution_mode: Default::default(),
             provider_binding_id: provider.into(),
             context_id: context.into(),
             installation: local_process::Installation {

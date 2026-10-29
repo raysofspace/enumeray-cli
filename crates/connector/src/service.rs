@@ -71,6 +71,9 @@ pub struct Options {
     /// Permit bearer credentials over HTTP on a trusted container/private network.
     #[arg(long)]
     allow_insecure_http: bool,
+    /// Permit trusted process/direct development contexts under this regular OS user.
+    #[arg(long)]
+    allow_development_execution: bool,
 }
 
 fn log(status: &str, journal: &Journal, message: Option<&str>) {
@@ -130,6 +133,9 @@ pub fn run(options: Options) -> Result<Value> {
         Some(&options.token_file),
         options.allow_insecure_http,
     )?;
+    client.allow_development_execution = options.allow_development_execution;
+    journal.record_execution_policy(options.allow_development_execution)?;
+    crate::execution_policy::warn(options.allow_development_execution);
     client.log_policy = crate::capture::load_policy(options.log_policy_file.as_deref())?;
     client.service = true;
     client.unpublished_retention_seconds = options.unpublished_retention_seconds;

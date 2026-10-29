@@ -18,6 +18,12 @@ before submitting. The [analysis guide](../ANALYSIS_GUIDE.md) explains editable 
 frozen inputs, retries, logs/cancellation, copied-folder recovery and the complete
 [noninteractive JSON recipe](../ANALYSIS_GUIDE.md#script-with-structured-output).
 
+For trusted local experiments, [development-process-context.json](development-process-context.json)
+provides the explicit process/direct development policy. Replace its absolute
+example paths and follow the [single-user connector recipe](../../connector/README.md#single-user-development).
+The connector must also receive `--allow-development-execution` on every
+launch-capable invocation.
+
 ## Scalar publication
 
 The supplied [process declaration](scalar-publication.json) and

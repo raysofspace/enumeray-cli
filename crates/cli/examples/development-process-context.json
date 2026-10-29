@@ -1,0 +1,37 @@
+{
+  "manifest_version": 1,
+  "kind": "execution-context",
+  "spec": {
+    "id": "development-process",
+    "connector_id": "development-connector",
+    "definition": {
+      "driver": {
+        "kind": "process",
+        "scratch": {
+          "max_bytes": 1073741824,
+          "max_entries": 10000,
+          "max_depth": 32,
+          "scan_interval_ms": 1000,
+          "cache": "per_run",
+          "symlinks": "forbid"
+        }
+      },
+      "installation_roots": [
+        "/home/researcher/enumeray-development/models"
+      ],
+      "work_root": "/home/researcher/enumeray-development/work",
+      "max_outstanding_assignments": 1,
+      "connection": {
+        "kind": "direct",
+        "launcher": [
+          "/home/researcher/.local/bin/enumeray"
+        ]
+      },
+      "execution_mode": "development"
+    },
+    "metadata": {
+      "location": "Personal development machine",
+      "disclosure": "Trusted models run as my regular OS user and can access my connector credentials and files."
+    }
+  }
+}

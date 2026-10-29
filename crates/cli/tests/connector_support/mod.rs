@@ -179,7 +179,7 @@ pub fn desired_configuration(root: &Path) -> Value {
     if !launcher.exists() {
         fs::write(&launcher, r#"import json,os,subprocess,sys
 command=json.loads(sys.argv[1])+sys.argv[2:]
-if sys.argv[3]=='validate':
+if sys.argv[3] in ('validate','identity'):
  result=subprocess.run(command,input=sys.stdin.buffer.read(),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
  sys.stderr.buffer.write(result.stderr)
  if result.returncode:sys.exit(result.returncode)
@@ -217,12 +217,16 @@ else:os.execv(command[0],command)
         let mut entrypoint = vec![json!(executable.file_name().unwrap().to_str().unwrap())];
         entrypoint.extend(arguments);
         let mut connection = installation["connection"].clone();
-        connection["launcher"] = json!([
-            "/usr/bin/python3",
-            launcher,
-            serde_json::to_string(&installation["connection"]["launcher"]).unwrap()
-        ]);
+        let development = installation["execution_mode"] == "development";
+        if !development && installation["real_identity"] != true {
+            connection["launcher"] = json!([
+                "/usr/bin/python3",
+                launcher,
+                serde_json::to_string(&installation["connection"]["launcher"]).unwrap()
+            ]);
+        }
         contexts.push(json!({"id":"test-context","definition":{
+            "execution_mode": if development {"development"} else {"managed"},
             "installation_roots":[root.parent().unwrap()],"work_root":installation["work_root"],
             "driver":installation["driver"],"connection":connection,
             "shared_workspace":installation["shared_workspace"],"max_outstanding_assignments":64

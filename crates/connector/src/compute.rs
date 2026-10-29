@@ -8,7 +8,7 @@ use crate::connections::resolve as connection;
 use crate::drivers::{CancellationOutcome, CancellationScope};
 use crate::protocol::{CancellationRequest, CancellationResponse};
 use crate::{Result, failure, local_process};
-use enumeray_contracts::execution::{ConnectionConfig, DriverConfig};
+use enumeray_contracts::execution::{ConnectionConfig, DriverConfig, ExecutionMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -21,6 +21,8 @@ use uuid::Uuid;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeInstallation {
+    #[serde(default, skip_serializing_if = "ExecutionMode::is_managed")]
+    pub execution_mode: ExecutionMode,
     pub descriptor: enumeray_contracts::execution::InstallationDescriptor,
     pub provider_binding_id: String,
     pub context_id: String,
@@ -47,6 +49,7 @@ impl ComputeInstallation {
 
     fn execution_snapshot(&self) -> ExecutionSnapshot {
         ExecutionSnapshot {
+            execution_mode: self.execution_mode,
             installation: self.installation.clone(),
             work_root: self.work_root.clone(),
             driver: self.driver.clone(),
@@ -57,6 +60,8 @@ impl ComputeInstallation {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ExecutionSnapshot {
+    #[serde(default, skip_serializing_if = "ExecutionMode::is_managed")]
+    pub execution_mode: ExecutionMode,
     pub installation: local_process::Installation,
     pub work_root: String,
     pub driver: DriverConfig,
@@ -217,6 +222,10 @@ fn safe_absolute(value: &str) -> bool {
 }
 
 fn validate_remote(binding: &ComputeInstallation) -> Result<()> {
+    binding
+        .execution_mode
+        .validate(&binding.driver, &binding.connection)
+        .map_err(failure)?;
     if let DriverConfig::Process {
         scratch: Some(policy),
     } = &binding.driver
@@ -252,7 +261,9 @@ pub fn launch(
     intent: Uuid,
     assignment: &Value,
     binding: ComputeInstallation,
+    allow_development_execution: bool,
 ) -> Result<Option<local_process::Completion>> {
+    require_launch_policy(&binding, allow_development_execution)?;
     let directory = evidence_directory(journal, intent);
     if directory.exists() {
         return Err(failure(
@@ -280,7 +291,7 @@ pub fn launch(
     local_process::write_record(&directory, "job.json", &job)?;
     local_process::write_record(&directory, "connection.json", &binding)?;
     prepare_inputs(journal, &job)?;
-    start_prepared(journal, intent, assignment)
+    start_prepared(journal, intent, assignment, allow_development_execution)
 }
 
 pub(crate) fn prepare_inputs(journal: &Path, job: &ComputeJob) -> Result<()> {
@@ -385,6 +396,7 @@ pub(crate) fn start_prepared(
     journal: &Path,
     intent: Uuid,
     assignment: &Value,
+    allow_development_execution: bool,
 ) -> Result<Option<local_process::Completion>> {
     let directory = evidence_directory(journal, intent);
     let job: ComputeJob = local_process::read_record(&directory.join("job.json"))?;
@@ -392,20 +404,34 @@ pub(crate) fn start_prepared(
         return Err(failure("start conflicts with prepared assignment"));
     }
     if directory.join("preparation-failure.json").exists() {
-        return recover(journal, intent, assignment, None);
+        return recover(
+            journal,
+            intent,
+            assignment,
+            None,
+            allow_development_execution,
+        );
     }
     if !directory.join("inputs-ready.json").exists()
         || directory.join("start-requested.json").exists()
     {
         return Err(failure("start requires fresh prepared input evidence"));
     }
+    let binding = retained_installation(journal, intent)?;
+    require_launch_policy(&binding, allow_development_execution)?;
     local_process::write_record(
         &directory,
         "start-requested.json",
         &json!({"intent":intent}),
     )?;
     invoke(journal, &job, "start", None)?;
-    recover(journal, intent, assignment, None)
+    recover(
+        journal,
+        intent,
+        assignment,
+        None,
+        allow_development_execution,
+    )
 }
 
 pub(crate) fn allocation_released(
@@ -456,6 +482,7 @@ pub fn recover(
     intent: Uuid,
     assignment: &Value,
     cancel: Option<CancellationScope>,
+    allow_development_execution: bool,
 ) -> Result<Option<local_process::Completion>> {
     let path = evidence_directory(journal, intent).join("job.json");
     if !path.exists() {
@@ -525,6 +552,10 @@ pub fn recover(
             };
             return Ok(Some(completion));
         }
+        crate::execution_policy::require_consent(
+            retained_installation(journal, intent)?.execution_mode,
+            allow_development_execution,
+        )?;
         if !evidence_directory(journal, intent)
             .join("inputs-ready.json")
             .exists()
@@ -532,7 +563,7 @@ pub fn recover(
             prepare_inputs(journal, &job)?;
         }
         if !preparation.exists() {
-            return start_prepared(journal, intent, assignment);
+            return start_prepared(journal, intent, assignment, allow_development_execution);
         }
         if preparation.exists() {
             let completion: local_process::Completion = local_process::read_record(&preparation)?;
@@ -617,11 +648,29 @@ pub(crate) fn execution_uid() -> Result<String> {
     Ok(String::from_utf8_lossy(&result.stdout).trim().to_owned())
 }
 
+/// Recheck the live direct launcher immediately before every fresh submission.
+/// Observation/cancellation of an existing start never requires fresh consent.
+pub(crate) fn require_launch_policy(binding: &ComputeInstallation, allowed: bool) -> Result<()> {
+    validate_remote(binding)?;
+    crate::execution_policy::require_consent(binding.execution_mode, allowed)?;
+    if matches!(binding.connection, ConnectionConfig::Direct { .. }) {
+        let reply = connection(binding).invoke(binding, "identity", &binding.work_root, None)?;
+        crate::execution_policy::check_identity(
+            binding.execution_mode,
+            &execution_uid()?,
+            reply["execution_uid"].as_str().unwrap_or(""),
+        )?;
+    }
+    Ok(())
+}
+
 pub fn validate_context(
     binding: &ComputeInstallation,
     context: &enumeray_contracts::execution::ExecutionContextDefinition,
     descriptor: &enumeray_contracts::execution::InstallationDescriptor,
+    allow_development_execution: bool,
 ) -> Result<std::collections::BTreeMap<String, String>> {
+    crate::execution_policy::require_consent(binding.execution_mode, allow_development_execution)?;
     context
         .driver
         .validate_environment(&descriptor.environment)
@@ -643,14 +692,12 @@ pub fn validate_context(
     if value["status"] != "ready" {
         return Err(failure("compute installation not ready"));
     }
-    if matches!(binding.connection, ConnectionConfig::Direct { .. })
-        && value["execution_uid"]
-            .as_str()
-            .is_none_or(|uid| uid.is_empty() || Some(uid) == execution_uid().ok().as_deref())
-    {
-        return Err(failure(
-            "direct launcher must use a separate execution identity",
-        ));
+    if matches!(binding.connection, ConnectionConfig::Direct { .. }) {
+        crate::execution_policy::check_identity(
+            binding.execution_mode,
+            &execution_uid()?,
+            value["execution_uid"].as_str().unwrap_or(""),
+        )?;
     }
     serde_json::from_value(value["file_digests"].clone())
         .map_err(|_| failure("validation lacks installed file digests"))
@@ -913,6 +960,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
         ))
         .unwrap();
         let installation = ComputeInstallation {
+            execution_mode: Default::default(),
             descriptor: serde_json::from_value(descriptor.clone()).unwrap(),
             provider_binding_id: "test".into(),
             context_id: "test-context".into(),
@@ -1058,9 +1106,13 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     validate_assignment_installation(&unsafe_installation, &pinned).unwrap_err();
                 assert!(error.message.contains(key));
                 assert!(!error.message.contains("untrusted-value"));
-                let error =
-                    validate_context(&unsafe_installation, &context, &installation.descriptor)
-                        .unwrap_err();
+                let error = validate_context(
+                    &unsafe_installation,
+                    &context,
+                    &installation.descriptor,
+                    false,
+                )
+                .unwrap_err();
                 assert!(error.message.contains(key));
                 let journal =
                     std::env::temp_dir().join(format!("enumeray-environment-{}", Uuid::new_v4()));
@@ -1073,7 +1125,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             descriptor
                 .environment
                 .insert(key.into(), "untrusted-value".into());
-            let error = validate_context(&installation, &context, &descriptor).unwrap_err();
+            let error = validate_context(&installation, &context, &descriptor, false).unwrap_err();
             assert!(error.message.contains(key));
         }
 
@@ -1146,6 +1198,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
         assignment["context_id"] = json!("test-context");
         assignment["descriptor"]["provider_binding_id"] = json!("real-test");
         let mut remote = ComputeInstallation {
+            execution_mode: Default::default(),
             descriptor: serde_json::from_value(assignment["descriptor"].clone()).unwrap(),
             provider_binding_id: "real-test".into(),
             context_id: "test-context".into(),
@@ -1186,6 +1239,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     intent,
                     assignment,
                     cancel.then_some(CancellationScope::Pending),
+                    false,
                 ) {
                     Ok(Some(done)) => return done,
                     Ok(None) => (),
@@ -1239,7 +1293,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             let context = serde_json::from_value(json!({"driver":remote.driver,"connection":remote.connection,"installation_roots":["/opt/enumeray"],"work_root":remote.work_root,"max_outstanding_assignments":1})).unwrap();
             let mut descriptor: enumeray_contracts::execution::InstallationDescriptor = serde_json::from_value(json!({"provider_binding_id":"real-test","installation":remote.installation.installation,"release_path":"/opt/enumeray/scalar-model-v1","entrypoint":["wrapper.py","execute"],"slurm_script":(driver == "slurm").then_some("model.sbatch"),"environment":{}})).unwrap();
             remote.installation.file_digests =
-                validate_context(&remote, &context, &descriptor).unwrap();
+                validate_context(&remote, &context, &descriptor, false).unwrap();
             remote.descriptor = descriptor.clone();
             assignment["descriptor"] = serde_json::to_value(&descriptor).unwrap();
             validate_assignment_installation(&remote, &assignment).unwrap();
@@ -1286,6 +1340,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     unsafe_intent,
                     &unsafe_assignment,
                     unsafe_binding.clone(),
+                    false,
                 )
                 .unwrap()
                 .unwrap();
@@ -1310,7 +1365,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                         &directory,
                         unsafe_intent,
                         &unsafe_assignment,
-                        unsafe_binding
+                        unsafe_binding,
+                        false
                     )
                     .is_err()
                 );
@@ -1346,10 +1402,10 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                 unsafe_binding.connection = ConnectionConfig::Direct {
                     launcher: vec!["/usr/local/bin/enumeray".into()],
                 };
-                assert!(validate_context(&unsafe_binding, &context, &descriptor).is_err());
+                assert!(validate_context(&unsafe_binding, &context, &descriptor, false).is_err());
             }
             let intent = Uuid::new_v4();
-            let outcome = launch(&directory, intent, &assignment, remote.clone());
+            let outcome = launch(&directory, intent, &assignment, remote.clone(), false);
             assert!(
                 outcome.is_ok()
                     || outcome
@@ -1361,7 +1417,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             );
             let done = finish(&directory, intent, &assignment, false);
             assert_eq!(done.report["outputs"]["doubled"], 4);
-            assert!(launch(&directory, intent, &assignment, remote.clone()).is_err());
+            assert!(launch(&directory, intent, &assignment, remote.clone(), false).is_err());
             let replay = finish(&directory, intent, &assignment, false);
             assert_eq!(done.report["outputs"], replay.report["outputs"]);
             // TASK-040: execute actual CLI-generated projects in this existing
@@ -1399,7 +1455,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     slurm_script: (driver == "slurm").then(|| "model.sbatch".into()),
                 };
                 generated_binding.installation.file_digests =
-                    validate_context(&generated_binding, &context, &generated_descriptor).unwrap();
+                    validate_context(&generated_binding, &context, &generated_descriptor, false)
+                        .unwrap();
                 generated_binding.descriptor = generated_descriptor.clone();
                 let mut generated_assignment = assignment.clone();
                 generated_assignment["model_id"] = scientific["model"]["id"].clone();
@@ -1442,6 +1499,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     generated_intent,
                     &generated_assignment,
                     generated_binding,
+                    false,
                 );
                 assert!(launch_result.is_ok() || launch_result.as_ref().is_err_and(|e|e.kind==ErrorKind::Waiting || e.message=="remote submission unresolved; retained launch will never be resubmitted"),"{driver}/{access}/{io}: {}",launch_result.err().map(|e|e.message).unwrap_or_default());
                 let completed = finish(&directory, generated_intent, &generated_assignment, false);
@@ -1480,6 +1538,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                 changed_intent,
                 &assignment,
                 changed_binding.clone(),
+                false,
             )
             .unwrap()
             .unwrap();
@@ -1491,7 +1550,16 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                 finish(&directory, changed_intent, &assignment, false).observed_at,
                 changed.observed_at
             );
-            assert!(launch(&directory, changed_intent, &assignment, changed_binding).is_err());
+            assert!(
+                launch(
+                    &directory,
+                    changed_intent,
+                    &assignment,
+                    changed_binding,
+                    false
+                )
+                .is_err()
+            );
             if driver == "slurm" {
                 for (script, code) in [
                     ("rejected.sbatch", "launch_rejected"),
@@ -1506,7 +1574,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     let mut failed_descriptor = descriptor.clone();
                     failed_descriptor.slurm_script = Some(script.into());
                     failed_binding.installation.file_digests =
-                        validate_context(&failed_binding, &context, &failed_descriptor).unwrap();
+                        validate_context(&failed_binding, &context, &failed_descriptor, false)
+                            .unwrap();
                     failed_binding.descriptor = failed_descriptor.clone();
                     let mut failed_assignment = assignment.clone();
                     failed_assignment["descriptor"] =
@@ -1517,6 +1586,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                         failed_intent,
                         &failed_assignment,
                         failed_binding.clone(),
+                        false,
                     );
                     let failed = finish(&directory, failed_intent, &failed_assignment, false);
                     assert_eq!(failed.report["failure"]["code"], code, "{access}/{script}");
@@ -1535,7 +1605,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                             &directory,
                             failed_intent,
                             &failed_assignment,
-                            failed_binding
+                            failed_binding,
+                            false
                         )
                         .is_err()
                     );
@@ -1548,7 +1619,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                 let mut failed_descriptor = descriptor.clone();
                 failed_descriptor.slurm_script = Some("failure-before-worker.sbatch".into());
                 failed_binding.installation.file_digests =
-                    validate_context(&failed_binding, &context, &failed_descriptor).unwrap();
+                    validate_context(&failed_binding, &context, &failed_descriptor, false).unwrap();
                 failed_binding.descriptor = failed_descriptor.clone();
                 let mut failed_assignment = assignment.clone();
                 failed_assignment["descriptor"] = serde_json::to_value(&failed_descriptor).unwrap();
@@ -1558,6 +1629,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     failed_intent,
                     &failed_assignment,
                     failed_binding.clone(),
+                    false,
                 );
                 let failed = finish(&directory, failed_intent, &failed_assignment, false);
                 assert_eq!(failed.report["failure"]["code"], "slurm_failed", "{access}");
@@ -1571,7 +1643,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                         &directory,
                         failed_intent,
                         &failed_assignment,
-                        failed_binding
+                        failed_binding,
+                        false
                     )
                     .is_err()
                 );
@@ -1641,7 +1714,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             )
             .unwrap();
             file_binding.installation.file_digests =
-                validate_context(&file_binding, &context, &descriptor).unwrap();
+                validate_context(&file_binding, &context, &descriptor, false).unwrap();
             // Simulate a crash during input transfer, before any start request.
             let evidence = evidence_directory(&directory, file_intent);
             local_process::create_private_directory(&evidence).unwrap();
@@ -1673,7 +1746,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             })).unwrap())).unwrap();
             // Resume staging, then revoke after the wrapper starts. Both drivers
             // must drain this existing run through direct and SSH connections.
-            let _ = recover(&directory, file_intent, &file_assignment, None);
+            let _ = recover(&directory, file_intent, &file_assignment, None, false);
             let deadline = std::time::Instant::now() + Duration::from_secs(30);
             loop {
                 let value = invoke(&directory, &job, "status", None).unwrap();
@@ -1882,6 +1955,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                 cancel_intent,
                 &cancel_assignment,
                 cancel_binding.clone(),
+                false,
             );
             let cancel_job: ComputeJob = local_process::read_record(
                 &evidence_directory(&directory, cancel_intent).join("job.json"),
@@ -1906,6 +1980,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     cancel_intent,
                     &cancel_assignment,
                     Some(CancellationScope::Running),
+                    false,
                 ) {
                     break done;
                 }
@@ -1929,7 +2004,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     &directory,
                     cancel_intent,
                     &cancel_assignment,
-                    remote.clone()
+                    remote.clone(),
+                    false
                 )
                 .is_err()
             );
@@ -1945,6 +2021,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     external_intent,
                     &cancel_assignment,
                     cancel_binding.clone(),
+                    false,
                 );
                 let external_job: ComputeJob = local_process::read_record(
                     &evidence_directory(&directory, external_intent).join("job.json"),
@@ -1993,7 +2070,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                         &directory,
                         external_intent,
                         &cancel_assignment,
-                        cancel_binding
+                        cancel_binding,
+                        false
                     )
                     .is_err()
                 );
@@ -2026,10 +2104,11 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             revoked_intent,
             &assignment,
             Some(CancellationScope::Pending),
+            false,
         )
         .unwrap()
         .unwrap();
-        let replay = recover(&directory, revoked_intent, &assignment, None)
+        let replay = recover(&directory, revoked_intent, &assignment, None, false)
             .unwrap()
             .unwrap();
         assert_eq!(revoked.report["failure"]["code"], "access_revoked");
@@ -2063,7 +2142,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             std::thread::sleep(Duration::from_millis(500));
         }
         let intent = Uuid::new_v4();
-        let _ = launch(&directory, intent, &assignment, remote.clone());
+        let _ = launch(&directory, intent, &assignment, remote.clone(), false);
         // Lose the sbatch receipt after a real submission; unique job-name lookup
         // must recover the existing pending scheduler job without resubmission.
         let mut lose_receipt = ssh_command(&remote).unwrap();
@@ -2163,6 +2242,7 @@ print(json.dumps({'version': 1, 'payload': {'status': 'running', 'started': True
         ))
         .unwrap();
         let installation = ComputeInstallation {
+            execution_mode: Default::default(),
             descriptor: serde_json::from_value(binding.clone()).unwrap(),
             provider_binding_id: "test".into(),
             context_id: "test-context".into(),
@@ -2204,9 +2284,15 @@ print(json.dumps({'version': 1, 'payload': {'status': 'running', 'started': True
             .unwrap();
         for _ in 0..2 {
             assert!(
-                recover(&root, intent, &assignment, Some(CancellationScope::Pending))
-                    .unwrap()
-                    .is_none()
+                recover(
+                    &root,
+                    intent,
+                    &assignment,
+                    Some(CancellationScope::Pending),
+                    false
+                )
+                .unwrap()
+                .is_none()
             );
         }
         assert_eq!(

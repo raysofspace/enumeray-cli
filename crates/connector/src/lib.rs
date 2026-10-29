@@ -12,6 +12,7 @@ mod control;
 mod drivers;
 #[path = "runtime/execution.rs"]
 mod execution;
+mod execution_policy;
 #[path = "runtime/journal.rs"]
 mod journal;
 mod launch;
@@ -65,6 +66,9 @@ pub enum HostCommand {
         /// Private credential-reference map used while compiling API configuration.
         #[arg(long)]
         credentials_file: Option<PathBuf>,
+        /// Permit trusted process/direct development contexts under this regular OS user.
+        #[arg(long)]
+        allow_development_execution: bool,
     },
     /// Retrieve existing work and reconcile ownership without claiming or launching work.
     Reconcile {
@@ -92,6 +96,9 @@ pub enum HostCommand {
         /// Private credential-reference map used while compiling API configuration.
         #[arg(long)]
         credentials_file: Option<PathBuf>,
+        /// Permit trusted process/direct development contexts under this regular OS user.
+        #[arg(long)]
+        allow_development_execution: bool,
     },
     /// Publish retained terminal log archives without executing scientific work.
     PublishLogArchives {
@@ -134,7 +141,7 @@ pub enum RuntimeCommand {
     },
     /// Credential-free runner on an SSH host or Slurm submission host.
     ComputeRunner {
-        #[arg(value_parser = ["prepare", "start", "status", "request-cancel", "validate", "protect-installations", "write-input", "write-collection", "read-collection", "transfer-probe", "read-output", "allocation-status", "read-logs", "build-log-archive", "read-log-archive", "cleanup-log-archive", "cleanup-run"])]
+        #[arg(value_parser = ["identity", "prepare", "start", "status", "request-cancel", "validate", "protect-installations", "write-input", "write-collection", "read-collection", "transfer-probe", "read-output", "allocation-status", "read-logs", "build-log-archive", "read-log-archive", "cleanup-log-archive", "cleanup-run"])]
         action: String,
         #[arg(long)]
         directory: PathBuf,
@@ -272,13 +279,17 @@ fn run_host(command: HostCommand) -> Result<serde_json::Value> {
             journal,
             token_file,
             credentials_file,
+            allow_development_execution,
         } => {
             let mut journal = journal::Journal::open(&journal)?;
-            let client = client::Client::configured(
+            let mut client = client::Client::configured(
                 &journal.data.api_base_url,
                 token_file.as_deref(),
                 journal.data.allow_insecure_http,
             )?;
+            client.allow_development_execution = allow_development_execution;
+            journal.record_execution_policy(allow_development_execution)?;
+            execution_policy::warn(allow_development_execution);
             client.claim_once(&mut journal, credentials_file.as_deref())
         }
         HostCommand::Inspect { journal: directory } => {
@@ -308,6 +319,7 @@ fn run_host(command: HostCommand) -> Result<serde_json::Value> {
             confirm_prior_process_stopped,
             simulate_lost_submission_ack,
             credentials_file,
+            allow_development_execution,
         } => {
             let mut journal = journal::Journal::open(&journal)?;
             let mut client = client::Client::configured(
@@ -315,6 +327,9 @@ fn run_host(command: HostCommand) -> Result<serde_json::Value> {
                 token_file.as_deref(),
                 journal.data.allow_insecure_http,
             )?;
+            client.allow_development_execution = allow_development_execution;
+            journal.record_execution_policy(allow_development_execution)?;
+            execution_policy::warn(allow_development_execution);
             client.log_policy = capture::load_policy(log_policy_file.as_deref())?;
             client.execute_once(
                 &mut journal,

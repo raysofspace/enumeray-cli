@@ -18,7 +18,8 @@ use std::{
 pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
     let _payload = if !matches!(
         &operation,
-        Operation::Validate(_)
+        Operation::Identity(_)
+            | Operation::Validate(_)
             | Operation::Prepare(_)
             | Operation::CleanupRun(_)
             | Operation::ProtectInstallations(_)
@@ -28,6 +29,7 @@ pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
         None
     };
     match operation {
+        Operation::Identity(_) => Ok(json!({"status":"ready", "execution_uid":execution_uid()?})),
         Operation::ProtectInstallations(request) => {
             if request.references.len() > 128 {
                 return Err(failure(
