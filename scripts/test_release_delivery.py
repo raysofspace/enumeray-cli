@@ -19,7 +19,7 @@ def identity(purpose='prepare'):
               'public_repository': delivery.PUBLIC_REPOSITORY, 'public_revision': 'a' * 40,
               'service_repository': 'raysofspace/enumeray', 'service_revision': 'b' * 40,
               'baseline': {'id': 'persistent-v1', 'sha256': 'c' * 64},
-              'qualification_run': '123', 'tag': 'binaries-v0.1.0', 'revision': 'a' * 40}
+              'qualification_run': '123', 'tag': 'v0.1.0', 'revision': 'a' * 40}
     receipt = json.dumps(record)
     import hashlib
     record['receipt_sha256'] = hashlib.sha256(receipt.encode()).hexdigest()
@@ -64,7 +64,7 @@ def artifacts(root):
 class MemoryGitHub:
     def __init__(self, root, draft=True):
         self.files = {path.name: path.read_bytes() for path in root.iterdir() if path.is_file()}
-        self.record = {'id': 1, 'draft': draft, 'tag_name': 'binaries-v0.1.0'}
+        self.record = {'id': 1, 'draft': draft, 'tag_name': 'v0.1.0'}
         self.calls = []
 
     def release(self, tag):
@@ -95,6 +95,17 @@ class MemoryGitHub:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_public_release_tag_is_distinct_from_private_or_legacy_trigger(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            record, manifest = artifacts(root)
+            self.assertEqual(manifest['tag'], 'v0.1.0')
+            delivery.validate_manifest(manifest, root, record)
+            for tag in ('cli-v0.1.0', 'binaries-v0.1.0', 'v0.2.0'):
+                modified = {**manifest, 'tag': tag}
+                with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, 'tag and version'):
+                    delivery.validate_manifest(modified, root)
+
     def test_default_branch_workflow_is_distinct_from_selected_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -288,7 +299,7 @@ class GitHubTests(unittest.TestCase):
         client = delivery.GitHub()
         client.api = mock.Mock(side_effect=[{'object': {'type': 'tag', 'sha': 'c' * 40}},
                                           {'object': {'type': 'commit', 'sha': 'a' * 40}}])
-        self.assertEqual(client.revision('binaries-v0.1.0'), 'a' * 40)
+        self.assertEqual(client.revision('v0.1.0'), 'a' * 40)
 
     def test_upload_reuses_identical_and_rejects_conflicting_completed_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -298,7 +309,7 @@ class GitHubTests(unittest.TestCase):
             client = delivery.GitHub(run=mock.Mock())
             client.assets = mock.Mock(return_value={path.name: {'id': 1, 'name': path.name, 'state': 'uploaded', 'size': 8}})
             client.download = lambda asset, output: output.write_bytes(b'original')
-            release = {'draft': True, 'tag_name': 'binaries-v0.1.0'}
+            release = {'draft': True, 'tag_name': 'v0.1.0'}
             client.upload(release, path)
             client.run.assert_not_called()
             path.write_bytes(b'changed')
@@ -313,7 +324,7 @@ class GitHubTests(unittest.TestCase):
             client = delivery.GitHub(run=mock.Mock(return_value=subprocess.CompletedProcess([], 0, '', '')))
             client.api = mock.Mock()
             client.assets = mock.Mock(return_value={path.name: {'id': 1, 'state': 'starter', 'size': 0}})
-            client.upload({'draft': True, 'tag_name': 'binaries-v0.1.0'}, path)
+            client.upload({'draft': True, 'tag_name': 'v0.1.0'}, path)
             client.api.assert_called_once_with('releases/assets/1', 'DELETE')
             self.assertNotIn('--clobber', client.run.call_args.args[0])
             client.assets.return_value = {}
@@ -322,6 +333,11 @@ class GitHubTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_source_version_strips_only_the_public_tag_prefix(self):
+        workflow = (Path(__file__).parents[1] / '.github/workflows/release.yml').read_text()
+        self.assertIn('--version "${RELEASE_TAG#v}"', workflow)
+        self.assertNotIn('${RELEASE_TAG#cli-v}', workflow)
+
     def test_dispatch_queue_serializes_a_version_without_cancelling_other_versions(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/release.yml').read_text()
         concurrency = workflow.split('\nconcurrency:\n', 1)[1].split('\njobs:', 1)[0]

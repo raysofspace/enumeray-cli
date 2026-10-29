@@ -206,7 +206,7 @@ def validate_manifest(manifest, directory=None, identity=None, require_signature
         raise ValueError('Invalid stable release version')
     if not isinstance(manifest.get('rust_toolchain'), str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', manifest['rust_toolchain']):
         raise ValueError('Manifest requires the exact source Rust toolchain')
-    if manifest.get('tag') != 'binaries-v' + version:
+    if manifest.get('tag') != 'v' + version:
         raise ValueError('Manifest tag and version differ')
     baseline = manifest.get('baseline')
     if (not isinstance(baseline, dict) or not isinstance(baseline.get('id'), str) or

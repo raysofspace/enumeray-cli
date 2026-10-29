@@ -56,15 +56,15 @@ def verify_request(request, directory, run=subprocess.run, purpose='prepare'):
     bundle = directory / ('service-' + purpose + '.sigstore.json')
     source.write_text(receipt)
     bundle.write_text(json.dumps(request['bundle'], sort_keys=True) + '\n')
-    tag = 'binaries-v' + record['version']
-    identity = 'https://github.com/' + SERVICE_REPOSITORY + '/.github/workflows/release.yml@refs/tags/' + tag
+    service_tag = 'cli-v' + record['version']
+    identity = 'https://github.com/' + SERVICE_REPOSITORY + '/.github/workflows/release.yml@refs/tags/' + service_tag
     run(['cosign', 'verify-blob', '--bundle', str(bundle), '--certificate-identity', identity,
          '--certificate-oidc-issuer', ISSUER,
          '--certificate-github-workflow-repository', SERVICE_REPOSITORY,
-         '--certificate-github-workflow-ref', 'refs/tags/' + tag,
+         '--certificate-github-workflow-ref', 'refs/tags/' + service_tag,
          '--certificate-github-workflow-sha', record['service_revision'],
          '--certificate-github-workflow-trigger', 'push', str(source)], check=True)
-    return {**record, 'revision': record['public_revision'], 'tag': tag,
+    return {**record, 'revision': record['public_revision'], 'tag': 'v' + record['version'],
             'receipt_sha256': hashlib.sha256(receipt.encode()).hexdigest()}
 
 

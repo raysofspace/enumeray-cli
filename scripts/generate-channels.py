@@ -37,7 +37,7 @@ def validate_manifest(manifest):
     if (manifest.get("schema_version") != 1
             or not isinstance(version, str)
             or not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version)
-            or manifest.get("tag") != "binaries-v" + version
+            or manifest.get("tag") != "v" + version
             or manifest.get("public_repository") != PUBLIC_REPOSITORY):
         raise ValueError("Expected a stable version and the canonical public release identity")
     for name, size in (("public_revision", 40), ("source_tree", 40),

@@ -6,6 +6,11 @@ The signed release manifest binds the public revision, source tree, lockfile,
 compatibility baseline and all archive hashes. Direct downloads retain the
 complete verified archive; no end-user installer or Python runtime is involved.
 
+Public CLI releases use `vVERSION` tags, such as `v0.1.0`. The matching private
+service qualification starts from `cli-vVERSION`, such as `cli-v0.1.0`. Signed
+authorization binds that private workflow run to the exact public source revision
+and version; public download URLs always use the public `vVERSION` tag.
+
 The release delivery gate must verify the manifest's Sigstore signature, matching
 service authorization, all four native platform reports and public release state
 before generating or submitting channel updates. The generator is not an

@@ -25,7 +25,7 @@ def manifest_fixture():
         files.append({"name": name, "sha256": str(index + 1) * 64, "kind": "binary", "target": target})
         targets[target] = {**minimum, "archive": name, "qualification": "qualification-" + target + ".json"}
     files.append({"name": "enumeray-0.1.0-source.tar.gz", "sha256": "5" * 64, "kind": "source"})
-    return {"schema_version": 1, "version": version, "tag": "binaries-v" + version,
+    return {"schema_version": 1, "version": version, "tag": "v" + version,
             "public_repository": channels.PUBLIC_REPOSITORY, "public_revision": "a" * 40,
             "source_tree": "b" * 40, "lockfile_sha256": "c" * 64,
             "rust_toolchain": "1.98.1",
@@ -46,6 +46,7 @@ class GenerateChannelTests(unittest.TestCase):
         formula = artifacts["homebrew/Formula/enumeray.rb"].decode()
         for target in ("aarch64-apple-darwin", "x86_64-apple-darwin"):
             self.assertIn("enumeray-0.1.0-" + target + ".tar.gz", formula)
+        self.assertIn("/releases/download/v0.1.0/", formula)
         self.assertNotIn("unknown-linux", formula)
         self.assertIn("depends_on macos: :sonoma", formula)
         self.assertNotIn("service do", formula)
@@ -60,6 +61,7 @@ class GenerateChannelTests(unittest.TestCase):
         recipe = artifacts["conda/recipe/recipe.yaml"].decode()
         build = artifacts["conda/recipe/build.sh"].decode()
         self.assertIn("enumeray-0.1.0-source.tar.gz", recipe)
+        self.assertIn("/releases/download/v0.1.0/", recipe)
         self.assertNotIn("apple-darwin.tar.gz", recipe)
         self.assertIn("rust ==1.98.1", recipe)
         self.assertIn("cargo-bundle-licenses", recipe)
@@ -85,7 +87,9 @@ class GenerateChannelTests(unittest.TestCase):
 
     def test_wrong_source_target_version_or_unsafe_asset_is_rejected(self):
         for mutate in (
-            lambda item: item.update(tag="binaries-v0.2.0"),
+            lambda item: item.update(tag="v0.2.0"),
+            lambda item: item.update(tag="cli-v0.1.0"),
+            lambda item: item.update(tag="binaries-v0.1.0"),
             lambda item: item.update(public_repository="other/project"),
             lambda item: item["targets"].pop("aarch64-apple-darwin"),
             lambda item: item["targets"]["x86_64-unknown-linux-gnu"].update(minimum_glibc="2.39"),

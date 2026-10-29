@@ -30,13 +30,13 @@ class QualificationTests(unittest.TestCase):
             result = qualification.verify_request(request, Path(temporary), run=verifier)
             self.assertEqual((Path(temporary) / 'service-prepare.json').read_text(), request['receipt'])
         self.assertEqual(result['revision'], 'a' * 40)
-        self.assertEqual(result['tag'], 'binaries-v0.1.0')
+        self.assertEqual(result['tag'], 'v0.1.0')
         argv = verifier.call_args.args[0]
         for option, expected in {
-                '--certificate-identity': 'https://github.com/raysofspace/enumeray/.github/workflows/release.yml@refs/tags/binaries-v0.1.0',
+                '--certificate-identity': 'https://github.com/raysofspace/enumeray/.github/workflows/release.yml@refs/tags/cli-v0.1.0',
                 '--certificate-oidc-issuer': qualification.ISSUER,
                 '--certificate-github-workflow-sha': 'b' * 40,
-                '--certificate-github-workflow-ref': 'refs/tags/binaries-v0.1.0',
+                '--certificate-github-workflow-ref': 'refs/tags/cli-v0.1.0',
                 '--certificate-github-workflow-trigger': 'push'}.items():
             self.assertEqual(argv[argv.index(option) + 1], expected)
         self.assertTrue(verifier.call_args.kwargs['check'])
@@ -46,6 +46,18 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 qualification.verify_request(self.request(), Path(temporary),
                     run=mock.Mock(side_effect=subprocess.CalledProcessError(1, 'cosign')))
+
+    def test_public_legacy_or_wrong_version_service_signature_is_rejected(self):
+        for certificate_ref in ('refs/tags/v0.1.0', 'refs/tags/binaries-v0.1.0',
+                                'refs/tags/cli-v0.2.0'):
+            def verifier(command, **kwargs):
+                expected_ref = command[command.index('--certificate-github-workflow-ref') + 1]
+                if certificate_ref != expected_ref:
+                    raise subprocess.CalledProcessError(1, command)
+
+            with self.subTest(certificate_ref=certificate_ref), tempfile.TemporaryDirectory() as temporary:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    qualification.verify_request(self.request(), Path(temporary), run=verifier)
 
     def test_invalid_authority_source_baseline_and_version_are_rejected(self):
         changes = ({'service_repository': 'other/service'}, {'public_repository': 'other/client'},

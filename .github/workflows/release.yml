@@ -160,7 +160,7 @@ jobs:
         env:
           PUBLIC_REVISION: ${{ needs.authorize.outputs.revision }}
           RELEASE_TAG: ${{ needs.authorize.outputs.tag }}
-        run: python3 tools/scripts/package-source.py --source "$GITHUB_WORKSPACE/source" --revision "$PUBLIC_REVISION" --version "${RELEASE_TAG#binaries-v}" --output "$RUNNER_TEMP/source-out"
+        run: python3 tools/scripts/package-source.py --source "$GITHUB_WORKSPACE/source" --revision "$PUBLIC_REVISION" --version "${RELEASE_TAG#v}" --output "$RUNNER_TEMP/source-out"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: candidate-source

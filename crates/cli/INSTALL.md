@@ -48,7 +48,7 @@ replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
 VERSION=0.1.0
 TARGET=aarch64-apple-darwin
 REPOSITORY=raysofspace/enumeray-cli
-TAG="binaries-v$VERSION"
+TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-$TARGET.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"
 BASE_URL="https://github.com/$REPOSITORY/releases/download/$TAG"
@@ -158,7 +158,7 @@ public release:
 
 ```sh
 VERSION=0.1.0
-TAG="binaries-v$VERSION"
+TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-source.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"
 BASE_URL="https://github.com/raysofspace/enumeray-cli/releases/download/$TAG"
