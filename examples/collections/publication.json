@@ -1,0 +1,85 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "collection-example",
+    "name": "Collection example",
+    "description": "Copies a variable-size verified input set into an immutable output set."
+  },
+  "identities": {
+    "model": "collection-example:1",
+    "wrapper": "collection-copy-wrapper:1",
+    "runtime": "python3-stdlib:1"
+  },
+  "execution": {
+    "context_id": "lab-cpu",
+    "release_path": "/opt/models/collection-example",
+    "entrypoint": [
+      "wrapper.py",
+      "execute"
+    ]
+  },
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "dataset"
+    ],
+    "properties": {
+      "dataset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection_id"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "string"
+          }
+        },
+        "x-enumeray-collection": {
+          "media_types": [
+            "application/octet-stream"
+          ],
+          "max_members": 10000,
+          "max_file_bytes": 107374182400,
+          "max_total_bytes": 1099511627776
+        }
+      }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "snapshots",
+      "member_count"
+    ],
+    "properties": {
+      "snapshots": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection_id"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "string"
+          }
+        },
+        "x-enumeray-collection": {
+          "media_types": [
+            "application/octet-stream"
+          ],
+          "max_members": 10000,
+          "max_file_bytes": 107374182400,
+          "max_total_bytes": 1099511627776
+        }
+      },
+      "member_count": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "examples": []
+}

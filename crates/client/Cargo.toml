@@ -1,0 +1,27 @@
+[package]
+name = "enumeray-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Independent typed Enumeray HTTP client"
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+enumeray-contracts = { workspace = true }
+base64 = { workspace = true }
+getrandom = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json", "rustls", "form", "stream"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+futures-util = { workspace = true }
+tokio = {workspace = true, features=["rt","net","time","fs","io-util","macros"]}
+
+[lints]
+workspace = true

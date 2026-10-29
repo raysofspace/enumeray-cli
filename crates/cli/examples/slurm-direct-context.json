@@ -1,0 +1,34 @@
+{
+  "manifest_version": 1,
+  "kind": "execution-context",
+  "spec": {
+    "id": "slurm-direct",
+    "connector_id": "lab-connector",
+    "definition": {
+      "driver": {
+        "kind": "slurm",
+        "worker_path": "/usr/local/bin/enumeray"
+      },
+      "installation_roots": [
+        "/opt/enumeray/models"
+      ],
+      "work_root": "/shared/enumeray/jobs",
+      "max_outstanding_assignments": 4,
+      "connection": {
+        "kind": "direct",
+        "launcher": [
+          "/usr/bin/sudo",
+          "-n",
+          "-u",
+          "model-runner",
+          "--",
+          "/usr/local/bin/enumeray"
+        ]
+      }
+    },
+    "metadata": {
+      "location": "Research lab",
+      "disclosure": "Research-owned machines."
+    }
+  }
+}

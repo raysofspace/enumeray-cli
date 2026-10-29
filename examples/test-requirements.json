@@ -1,0 +1,8 @@
+{
+  "driver": "process",
+  "capabilities": [
+    "json_inputs",
+    "json_outputs"
+  ],
+  "wrapper_protocol_version": 1
+}

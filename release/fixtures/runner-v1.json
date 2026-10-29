@@ -1,0 +1,137 @@
+{
+  "requests": [
+    {
+      "version": 1,
+      "action": "status",
+      "payload": null
+    },
+    {
+      "version": 1,
+      "action": "start",
+      "payload": null
+    },
+    {
+      "version": 1,
+      "action": "request-cancel",
+      "payload": {
+        "scope": "pending"
+      }
+    },
+    {
+      "version": 1,
+      "action": "write-input",
+      "payload": {
+        "artifact_id": "00000000-0000-4000-8000-000000000004",
+        "offset": 16,
+        "data": "Ynl0ZXM="
+      }
+    },
+    {
+      "version": 1,
+      "action": "read-output",
+      "payload": {
+        "path": "outputs/result.bin",
+        "offset": 16
+      }
+    },
+    {
+      "version": 1,
+      "action": "transfer-probe",
+      "payload": {
+        "target": {
+          "kind": "output",
+          "path": "outputs/result.bin"
+        },
+        "offset": 0,
+        "length": 16
+      }
+    },
+    {
+      "version": 1,
+      "action": "protect-installations",
+      "payload": {
+        "references": []
+      }
+    }
+  ],
+  "responses": [
+    {
+      "version": 1,
+      "payload": {
+        "status": "ready"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "prepared"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "staged"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "pending"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "running"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "completed"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "status": "unresolved"
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "data": "Ynl0ZXM="
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "cancellation": {
+          "outcome": "accepted"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "cancellation": {
+          "outcome": "unresolved",
+          "reason": "lost reply"
+        }
+      }
+    },
+    {
+      "version": 1,
+      "payload": {
+        "transfer": {
+          "size_bytes": 32,
+          "checksum_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "retained_bytes": 16,
+          "offset": 0,
+          "length": 16,
+          "range_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    }
+  ]
+}

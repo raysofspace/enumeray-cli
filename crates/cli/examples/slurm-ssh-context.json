@@ -1,0 +1,31 @@
+{
+  "manifest_version": 1,
+  "kind": "execution-context",
+  "spec": {
+    "id": "slurm-ssh",
+    "connector_id": "lab-connector",
+    "definition": {
+      "driver": {
+        "kind": "slurm",
+        "worker_path": "/usr/local/bin/enumeray"
+      },
+      "installation_roots": [
+        "/opt/enumeray/models"
+      ],
+      "work_root": "/shared/enumeray/jobs",
+      "max_outstanding_assignments": 4,
+      "connection": {
+        "kind": "ssh",
+        "host": "login.cluster.example",
+        "user": "model-runner",
+        "port": 22,
+        "credential_reference": "cluster-key",
+        "runner_path": "/usr/local/bin/enumeray"
+      }
+    },
+    "metadata": {
+      "location": "Research lab",
+      "disclosure": "Research-owned machines."
+    }
+  }
+}

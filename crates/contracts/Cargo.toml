@@ -1,0 +1,28 @@
+[package]
+name = "enumeray-contracts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+openapi = ["dep:utoipa"]
+
+[dependencies]
+base64 = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+jsonschema = { workspace = true }
+percent-encoding = { workspace = true }
+utoipa = { workspace = true, optional = true }
+time = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[lints]
+workspace = true

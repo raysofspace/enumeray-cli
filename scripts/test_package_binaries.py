@@ -1,0 +1,118 @@
+"""Packaged operational help must work without the repository's directory tree."""
+import importlib.util
+import contextlib
+import hashlib
+import io
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tarfile
+import tempfile
+import unittest
+from unittest import mock
+
+spec = importlib.util.spec_from_file_location('package_binaries', Path(__file__).with_name('package-binaries.py'))
+packaging = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(packaging)
+
+
+class BundleGuideTests(unittest.TestCase):
+    def test_bundled_links_stay_local_and_other_repository_links_keep_fragments(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'crates/connector/EXTENDING.md'
+            source.parent.mkdir(parents=True)
+            source.write_text('[operation](README.md#enrollment)\n'
+                              '[test](tests/README.md#fixture)\n'
+                              '[install](https://github.com/raysofspace/enumeray-cli/blob/main/crates/cli/INSTALL.md#login)\n'
+                              '[external](https://example.org/help#topic)\n'
+                              '[same](#local)\n')
+            output = root / 'bundle.md'
+            packaging.bundle_guide(source, output, root, {
+                (source.parent / 'README.md').resolve(): 'CONNECTOR_GUIDE.md',
+                (root / 'crates/cli/INSTALL.md').resolve(): 'INSTALL.md',
+            })
+            rendered = output.read_text()
+            self.assertIn('](CONNECTOR_GUIDE.md#enrollment)', rendered)
+            self.assertIn('](INSTALL.md#login)', rendered)
+            self.assertIn('](https://github.com/raysofspace/enumeray-cli/blob/main/crates/connector/tests/README.md#fixture)', rendered)
+            self.assertIn('](https://example.org/help#topic)', rendered)
+            self.assertIn('](#local)', rendered)
+            self.assertIn('](README.md#enrollment)', source.read_text())
+
+    def test_invalid_source_layout_cannot_emit_checkout_escaping_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'guide.md'
+            source.write_text('[bad](../outside.md)')
+            with self.assertRaisesRegex(SystemExit, 'escapes the source repository'):
+                packaging.bundle_guide(source, root / 'output.md', root, {})
+
+
+class UnifiedPackageTests(unittest.TestCase):
+    def package(self, root, tree='enumeray-cli v0.1.0\nenumeray-connector v0.1.0\n'):
+        api = root
+        (api / 'scripts').mkdir(parents=True)
+        (api / 'LICENSE').write_text('Apache License, Version 2.0\n')
+        for name in ('INSTALL.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+            path = api / 'crates/cli' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('Standalone guide\n')
+        for name in ('README.md', 'EXTENDING.md'):
+            path = api / 'crates/connector' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('Standalone guide\n')
+        (api / 'crates/cli/examples').mkdir()
+        binary = api / 'target/test-target/release/enumeray'
+        binary.parent.mkdir(parents=True)
+        binary.write_text('#!/bin/sh\nexit 0\n')
+        binary.chmod(0o755)
+        metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}]})
+        with mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
+             mock.patch.object(packaging.subprocess, 'check_output', side_effect=[metadata, tree]), \
+             mock.patch('sys.argv', ['package-binaries.py', '--target', 'test-target', '--output', str(root / 'dist')]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            packaging.main()
+
+    def test_one_archive_contains_one_executable_and_all_capabilities(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.package(root)
+            archives = list((root / 'dist').glob('*.tar.gz'))
+            self.assertEqual([p.name for p in archives], ['enumeray-0.1.0-test-target.tar.gz'])
+            archive = archives[0]
+            checksum, name = archive.with_suffix('.gz.sha256').read_text().split()
+            self.assertEqual(name, archive.name)
+            self.assertEqual(checksum, hashlib.sha256(archive.read_bytes()).hexdigest())
+            with tarfile.open(archive) as tar:
+                executables = [m for m in tar.getmembers() if m.isfile() and m.mode & 0o111]
+                self.assertEqual([Path(m.name).name for m in executables], ['enumeray'])
+                prefix = archive.name.removesuffix('.tar.gz')
+                compatibility = json.load(tar.extractfile(prefix + '/compatibility.json'))
+                self.assertEqual(compatibility['capabilities'], ['cli', 'connector', 'compute_runner'])
+                self.assertFalse(compatibility['requires_database'])
+                self.assertTrue(compatibility['requires_openssh_for_ssh'])
+                for guide in ('LICENSE', 'INSTALL.md', 'CONNECTOR_GUIDE.md', 'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+                    self.assertTrue(tar.getmember(prefix + '/' + guide).isfile())
+
+    def test_server_dependency_is_rejected_before_packaging(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaisesRegex(SystemExit, 'server libraries: sqlx-core'):
+                self.package(root, 'enumeray-cli v0.1.0\nsqlx-core v0.9.0\n')
+            self.assertEqual(list((root / 'dist').glob('*.tar.gz')), [])
+
+    def test_qualification_rejects_a_second_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ('enumeray', 'enumeray-connector'):
+                (root / f'{name}-0.1.0-test-target.tar.gz').touch()
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('qualify-binary-archives.py')),
+                                     '--archives', str(root), '--target', 'test-target'], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('expected one unified Enumeray archive', result.stderr)
+
+
+if __name__ == '__main__':
+    unittest.main()

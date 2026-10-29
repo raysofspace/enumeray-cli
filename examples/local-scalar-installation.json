@@ -1,0 +1,15 @@
+{
+  "provider_binding_id": "scalar-double-local-v1",
+  "installation": {
+    "model_identity": "enumeray-local:scalar-double:1",
+    "wrapper_identity": "enumeray-local:scalar-double-wrapper:1",
+    "wrapper_protocol_version": 1,
+    "runtime_identity": "python3-stdlib:scalar-reference:1",
+    "dataset_identities": []
+  },
+  "release_path": "/opt/models/local-scalar",
+  "entrypoint": [
+    "run-model"
+  ],
+  "environment": {}
+}

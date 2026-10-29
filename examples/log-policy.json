@@ -1,0 +1,8 @@
+{
+  "segment_bytes": 65536,
+  "retained_segments": 16,
+  "archive_enabled": false,
+  "archive_source_bytes": 16777216,
+  "archive_compressed_bytes": 52428800,
+  "archive_publication_seconds": 86400
+}

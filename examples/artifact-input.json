@@ -1,0 +1,73 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "artifact-reader",
+    "name": "Stored artifact reader",
+    "description": "Initial v1 file-input contract fixture; a file-capable provider installation is required to execute it."
+  },
+  "identities": {
+    "model": "artifact-reader/1",
+    "wrapper": "artifact-reader-wrapper/1",
+    "runtime": "enumeray-test:scalar-runtime:1"
+  },
+  "execution": {
+    "context_id": "lab-cpu",
+    "release_path": "/opt/models/artifact-reader",
+    "entrypoint": [
+      "run-model"
+    ]
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "dataset": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "x-enumeray-file": {
+          "media_types": [
+            "text/csv"
+          ],
+          "max_bytes": 1048576
+        }
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "dataset"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "doubled": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "doubled"
+    ],
+    "additionalProperties": false
+  },
+  "examples": [
+    {
+      "name": "reference-shape",
+      "inputs": {
+        "dataset": {
+          "artifact_id": "00000000-0000-4000-8000-000000000001"
+        }
+      }
+    }
+  ]
+}

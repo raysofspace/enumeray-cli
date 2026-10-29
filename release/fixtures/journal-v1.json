@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "journal_id": "00000000-0000-4000-8000-000000000001",
+  "connector_id": "test-connector",
+  "api_base_url": "http://127.0.0.1:8080",
+  "active_session_id": null,
+  "pending_claim_key": null,
+  "prepared_assignments": [
+    {
+      "assignment": {
+        "assignment_id": "00000000-0000-4000-8000-000000000002",
+        "run_id": "00000000-0000-4000-8000-000000000003",
+        "attempt_id": "00000000-0000-4000-8000-000000000004",
+        "connector_id": "test-connector",
+        "journal_id": "00000000-0000-4000-8000-000000000001",
+        "model_id": "scalar-double",
+        "contract_version": 1,
+        "definition": {
+          "contract_version": 1,
+          "model_identity": "enumeray-test:scalar-double:1",
+          "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+          "wrapper_protocol_version": 1,
+          "runtime_identity": "enumeray-test:scalar-runtime:1",
+          "dataset_identities": [],
+          "input_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "doubled": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "doubled"
+            ],
+            "additionalProperties": false
+          },
+          "examples": [
+            {
+              "name": "double-two",
+              "inputs": {
+                "value": 2
+              },
+              "outputs": {
+                "doubled": 4
+              }
+            }
+          ]
+        },
+        "inputs": {
+          "value": 7
+        },
+        "created_at": "2026-09-21T12:00:00Z",
+        "publication_id": "test-publication",
+        "context_id": "test-context",
+        "descriptor": {
+          "provider_binding_id": "scalar-double-r1",
+          "installation": {
+            "model_identity": "enumeray-test:scalar-double:1",
+            "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+            "wrapper_protocol_version": 1,
+            "runtime_identity": "enumeray-test:scalar-runtime:1",
+            "dataset_identities": []
+          },
+          "release_path": "/opt/models/scalar-double",
+          "entrypoint": [
+            "run-model"
+          ],
+          "environment": {}
+        },
+        "requirements": {
+          "driver": "process",
+          "capabilities": [
+            "json_inputs",
+            "json_outputs"
+          ],
+          "wrapper_protocol_version": 1
+        }
+      },
+      "launch_intent_id": "00000000-0000-4000-8000-000000000005",
+      "submission_state": "submitted",
+      "execution": {
+        "events": [
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "request": {
+              "attempt_id": "00000000-0000-4000-8000-000000000004",
+              "sequence": 1,
+              "phase": "executing",
+              "backend_handle": {
+                "namespace": "enumeray-process-v1",
+                "job_id": "00000000-0000-4000-8000-000000000005"
+              },
+              "observed_at": "2026-09-21T12:00:00Z",
+              "additional_evidence": {
+                "kept": true
+              }
+            },
+            "receipt": {
+              "assignment_id": "00000000-0000-4000-8000-000000000002",
+              "event_id": "00000000-0000-4000-8000-000000000006",
+              "sequence": 1,
+              "phase": "executing",
+              "disposition": "applied"
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "request": {
+              "attempt_id": "00000000-0000-4000-8000-000000000004",
+              "sequence": 2,
+              "phase": "collecting_results",
+              "backend_handle": {
+                "namespace": "enumeray-process-v1",
+                "job_id": "00000000-0000-4000-8000-000000000005"
+              },
+              "observed_at": "2026-09-21T12:00:00Z",
+              "additional_evidence": {
+                "kept": true
+              }
+            },
+            "receipt": {
+              "assignment_id": "00000000-0000-4000-8000-000000000002",
+              "event_id": "00000000-0000-4000-8000-000000000007",
+              "sequence": 2,
+              "phase": "collecting_results",
+              "disposition": "applied"
+            }
+          }
+        ],
+        "report": {
+          "attempt_id": "00000000-0000-4000-8000-000000000004",
+          "outcome": "succeeded",
+          "execution_terminated": true,
+          "additional_evidence": {
+            "kept": true
+          }
+        },
+        "receipt": {
+          "assignment_id": "00000000-0000-4000-8000-000000000002",
+          "run_id": "00000000-0000-4000-8000-000000000003",
+          "attempt_id": "00000000-0000-4000-8000-000000000004",
+          "outcome": "succeeded",
+          "completed_at": "2026-09-21T12:00:00Z",
+          "additional_evidence": {
+            "kept": true
+          }
+        }
+      },
+      "terminal_result": {
+        "receipt": {
+          "assignment_id": "00000000-0000-4000-8000-000000000002",
+          "run_id": "00000000-0000-4000-8000-000000000003",
+          "attempt_id": "00000000-0000-4000-8000-000000000004",
+          "outcome": "succeeded",
+          "completed_at": "2026-09-21T12:00:00Z",
+          "additional_evidence": {
+            "kept": true
+          }
+        }
+      },
+      "delivery_completion": {
+        "assignment_id": "00000000-0000-4000-8000-000000000002",
+        "run_id": "00000000-0000-4000-8000-000000000003",
+        "attempt_id": "00000000-0000-4000-8000-000000000004",
+        "source": "connector",
+        "completed_at": "2026-10-18T00:00:00Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "scalar-double",
+    "name": "Scalar double",
+    "description": "Contract fixture for a deterministic model that doubles a number."
+  },
+  "identities": {
+    "model": "enumeray-test:scalar-double:1",
+    "wrapper": "enumeray-test:scalar-double-wrapper:1",
+    "runtime": "enumeray-test:scalar-runtime:1"
+  },
+  "execution": {
+    "context_id": "lab-cpu",
+    "release_path": "/opt/models/scalar-double",
+    "entrypoint": [
+      "run-model"
+    ]
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "doubled": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "doubled"
+    ],
+    "additionalProperties": false
+  },
+  "examples": [
+    {
+      "name": "double-two",
+      "inputs": {
+        "value": 2
+      },
+      "outputs": {
+        "doubled": 4
+      }
+    }
+  ]
+}

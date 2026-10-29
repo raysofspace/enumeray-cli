@@ -1,0 +1,91 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "file-output",
+    "name": "File output contract fixture",
+    "description": "Contract and upload conformance only; no bundled file-producing driver."
+  },
+  "identities": {
+    "model": "enumeray-test:scalar-double:1",
+    "wrapper": "enumeray-test:scalar-double-wrapper:1",
+    "runtime": "enumeray-test:scalar-runtime:1"
+  },
+  "execution": {
+    "context_id": "lab-cpu",
+    "release_path": "/opt/models/file-output",
+    "entrypoint": [
+      "run-model"
+    ]
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "x-enumeray-file": {
+          "media_types": [
+            "text/plain"
+          ],
+          "max_bytes": 3
+        }
+      },
+      "preview": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "x-enumeray-file": {
+          "media_types": [
+            "text/plain"
+          ],
+          "max_bytes": 3
+        }
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "additionalProperties": false
+  },
+  "examples": [
+    {
+      "name": "double-two",
+      "inputs": {
+        "value": 2
+      },
+      "outputs": {
+        "result": {
+          "artifact_id": "00000000-0000-4000-8000-000000000001"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,318 @@
+{
+  "version": 1,
+  "checks": {
+    "format": {
+      "commands": [
+        [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ]
+      ],
+      "tools": [
+        "cargo"
+      ]
+    },
+    "static": {
+      "commands": [
+        [
+          "cargo",
+          "build",
+          "--locked",
+          "-p",
+          "enumeray-cli",
+          "--bin",
+          "enumeray"
+        ],
+        [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--workspace",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "--workspace",
+          "--doc",
+          "--all-features"
+        ],
+        [
+          "python3",
+          "scripts/verify.py",
+          "independent"
+        ]
+      ],
+      "tools": [
+        "cargo",
+        "python3"
+      ]
+    },
+    "contracts": {
+      "commands": [
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-contracts",
+          "--lib",
+          "--no-default-features"
+        ],
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-contracts",
+          "--lib",
+          "--features",
+          "openapi"
+        ]
+      ],
+      "tools": [
+        "cargo"
+      ]
+    },
+    "client-cli": {
+      "commands": [
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-client",
+          "--all-targets",
+          "--all-features"
+        ],
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-cli",
+          "--all-features",
+          "--bin",
+          "enumeray",
+          "--test",
+          "commands",
+          "--test",
+          "observation",
+          "--test",
+          "release",
+          "--test",
+          "analysis",
+          "--test",
+          "starters",
+          "--test",
+          "state_safety",
+          "--test",
+          "connector_enrollment",
+          "--test",
+          "unified"
+        ]
+      ],
+      "tools": [
+        "cargo"
+      ]
+    },
+    "connector": {
+      "commands": [
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-connector",
+          "--lib",
+          "--all-features"
+        ],
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-cli",
+          "--all-features",
+          "--test",
+          "connector_host",
+          "--test",
+          "connector_service",
+          "--test",
+          "connector_host_enrollment",
+          "--test",
+          "connector_runner"
+        ]
+      ],
+      "tools": [
+        "cargo"
+      ]
+    },
+    "python": {
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "scripts",
+          "-p",
+          "test_*.py"
+        ],
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "examples/scalar_model",
+          "-p",
+          "test_*.py"
+        ],
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "examples/collections",
+          "-p",
+          "test_*.py"
+        ]
+      ],
+      "tools": [
+        "python3"
+      ]
+    },
+    "backends": {
+      "commands": [
+        [
+          "docker",
+          "compose",
+          "-p",
+          "enumeray-backend-acceptance",
+          "-f",
+          "crates/connector/tests/real-backends/compose.yaml",
+          "up",
+          "--build",
+          "--abort-on-container-exit",
+          "--exit-code-from",
+          "slurm"
+        ]
+      ],
+      "tools": [
+        "docker"
+      ],
+      "explicit": true,
+      "cleanup": [
+        [
+          "docker",
+          "compose",
+          "-p",
+          "enumeray-backend-acceptance",
+          "-f",
+          "crates/connector/tests/real-backends/compose.yaml",
+          "down",
+          "--volumes"
+        ]
+      ]
+    },
+    "mounts": {
+      "commands": [
+        [
+          "bash",
+          "scripts/cleanup-mounts-smoke.sh"
+        ]
+      ],
+      "tools": [
+        "docker",
+        "bash"
+      ],
+      "explicit": true
+    },
+    "archive": {
+      "commands": [
+        [
+          "python3",
+          "scripts/qualify-binary-archives.py"
+        ]
+      ],
+      "tools": [
+        "python3"
+      ],
+      "explicit": true
+    }
+  },
+  "profiles": {
+    "static": [
+      "format",
+      "static"
+    ],
+    "native-clients": [
+      "contracts",
+      "client-cli"
+    ],
+    "connector": [
+      "connector"
+    ],
+    "python": [
+      "python"
+    ],
+    "full": [
+      "format",
+      "static",
+      "contracts",
+      "client-cli",
+      "connector",
+      "python"
+    ],
+    "backends": [
+      "backends"
+    ],
+    "mounts": [
+      "mounts"
+    ]
+  },
+  "suites": {
+    "crates/cli/tests/connector_enrollment.rs": "client-cli",
+    "crates/cli/tests/state_safety.rs": "client-cli",
+    "crates/cli/tests/starters.rs": "client-cli",
+    "crates/cli/tests/analysis.rs": "client-cli",
+    "crates/cli/tests/release.rs": "client-cli",
+    "crates/cli/tests/unified.rs": "client-cli",
+    "crates/cli/tests/observation.rs": "client-cli",
+    "crates/cli/tests/commands.rs": "client-cli",
+    "crates/cli/tests/connector_runner.rs": "connector",
+    "crates/cli/tests/connector_host.rs": "connector",
+    "crates/cli/tests/connector_service.rs": "connector",
+    "crates/cli/tests/connector_host_enrollment.rs": "connector",
+    "crates/client/tests/http.rs": "client-cli",
+    "crates/client/tests/transfer_recovery.rs": "client-cli",
+    "scripts/test_package_binaries.py": "python",
+    "examples/scalar_model/test_scalar_model.py": "python",
+    "examples/collections/test_wrapper.py": "python",
+    "crates/cli/starter-kit/test_starter.py": "client-cli",
+    "scripts/qualify-binary-archives.py": "archive",
+    "scripts/test_verify_public.py": "python",
+    "scripts/test_service_qualification.py": "python"
+  },
+  "ignored": {
+    "crates/connector/src/compute.rs::real_ssh_and_slurm": {
+      "check": "backends",
+      "runner": "crates/connector/tests/real-backends/start.sh"
+    },
+    "crates/connector/src/cleanup.rs::cleanup_rejects_same_filesystem_bind_mount": {
+      "check": "mounts",
+      "runner": "scripts/cleanup-mounts-smoke.sh"
+    }
+  }
+}

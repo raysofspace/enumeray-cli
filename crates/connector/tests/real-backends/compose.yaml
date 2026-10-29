@@ -1,0 +1,13 @@
+services:
+  slurm:
+    hostname: slurm
+    build:
+      context: ../../../..
+      dockerfile: crates/connector/tests/real-backends/Dockerfile
+    # Process-based Slurm plugins avoid mounting the host cgroup or Docker socket.
+    # This bounded driver fixture tests process recovery, not host power loss.
+    # Keep verbose capture fsyncs off slow NAS container storage.
+    tmpfs:
+      - /srv/enumeray-jobs:rw,nosuid,nodev,size=536870912,uid=10002,gid=10002,mode=0700
+    init: true
+    stop_grace_period: 15s

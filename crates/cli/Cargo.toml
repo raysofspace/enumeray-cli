@@ -1,0 +1,39 @@
+[package]
+name = "enumeray-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Enumeray user CLI, connector and compute runner"
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "enumeray"
+path = "src/main.rs"
+
+[dependencies]
+enumeray-client = { workspace = true }
+enumeray-connector = { workspace = true }
+enumeray-contracts = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json", "rustls", "form"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "signal", "sync", "time"] }
+uuid = { workspace = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+axum = { workspace = true, features = ["http1", "json", "matched-path", "tokio"] }
+tower = { workspace = true }
+url = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "rt-multi-thread", "time"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

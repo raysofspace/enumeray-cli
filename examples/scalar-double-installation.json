@@ -1,0 +1,15 @@
+{
+  "provider_binding_id": "scalar-double-r1",
+  "installation": {
+    "model_identity": "enumeray-test:scalar-double:1",
+    "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+    "wrapper_protocol_version": 1,
+    "runtime_identity": "enumeray-test:scalar-runtime:1",
+    "dataset_identities": []
+  },
+  "release_path": "/opt/models/scalar-double",
+  "entrypoint": [
+    "run-model"
+  ],
+  "environment": {}
+}

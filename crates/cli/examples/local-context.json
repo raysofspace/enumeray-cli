@@ -1,0 +1,41 @@
+{
+  "manifest_version": 1,
+  "kind": "execution-context",
+  "spec": {
+    "id": "lab-cpu",
+    "connector_id": "lab-connector",
+    "definition": {
+      "driver": {
+        "kind": "process",
+        "scratch": {
+          "max_bytes": 1073741824,
+          "max_entries": 10000,
+          "max_depth": 32,
+          "scan_interval_ms": 1000,
+          "cache": "per_run",
+          "symlinks": "forbid"
+        }
+      },
+      "installation_roots": [
+        "/opt/enumeray/models"
+      ],
+      "work_root": "/var/lib/enumeray-model-work",
+      "max_outstanding_assignments": 4,
+      "connection": {
+        "kind": "direct",
+        "launcher": [
+          "/usr/bin/sudo",
+          "-n",
+          "-u",
+          "model-runner",
+          "--",
+          "/usr/local/bin/enumeray"
+        ]
+      }
+    },
+    "metadata": {
+      "location": "Research lab",
+      "disclosure": "Research-owned machines."
+    }
+  }
+}
