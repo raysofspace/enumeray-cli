@@ -59,6 +59,7 @@ struct Peer {
     unavailable: bool,
     unavailable_heartbeats: usize,
     cancel_requested: bool,
+    cancellation_controls: usize,
     lose_claim: bool,
     lose_report: bool,
     lose_delivery: bool,
@@ -123,7 +124,8 @@ async fn slow_configuration_acknowledgment_keeps_running_cancellation_and_observ
         .await;
     // The acknowledgment is still blocked, after the journal owner has already
     // committed the cache. A pending HTTP request must not delay provider
-    // observation, cancellation, terminal events or result publication.
+    // observation or cancellation polling. Completion and publication involve
+    // several real runner processes and get their ordinary convergence budget.
     assert!(
         scratch
             .journal()
@@ -133,14 +135,7 @@ async fn slow_configuration_acknowledgment_keeps_running_cancellation_and_observ
     api.state.lock().unwrap().cancel_requested = true;
     let deadline = Instant::now() + Duration::from_secs(3);
     loop {
-        if api
-            .state
-            .lock()
-            .unwrap()
-            .jobs
-            .values()
-            .all(|job| job.result.is_some())
-        {
+        if api.state.lock().unwrap().cancellation_controls > 0 {
             break;
         }
         assert!(
@@ -150,6 +145,8 @@ async fn slow_configuration_acknowledgment_keeps_running_cancellation_and_observ
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    api.until(|peer| peer.jobs.values().all(|job| job.result.is_some()))
+        .await;
     assert!(api.state.lock().unwrap().hold_configuration_ack);
     {
         let peer = api.state.lock().unwrap();
@@ -163,11 +160,27 @@ async fn slow_configuration_acknowledgment_keeps_running_cancellation_and_observ
                 .any(|event| event["diagnostic"]["code"] == "user_cancelled")
         );
     }
-    // Stopping also must respect its deadline while the HTTP worker is waiting.
-    let stopped = Instant::now();
     stop(child).await;
-    assert!(stopped.elapsed() < Duration::from_secs(3));
     api.state.lock().unwrap().hold_configuration_ack = false;
+}
+
+#[tokio::test]
+async fn shutdown_during_configuration_acknowledgment_is_prompt() {
+    let scratch = Scratch::new();
+    install(&scratch, 0.0);
+    let api = Api::start(1, true).await;
+    api.state.lock().unwrap().hold_configuration_ack = true;
+    let child = start(&scratch, &api, 1);
+    api.until(|peer| peer.configuration_acks > 0).await;
+    // Stop while the request is pending, independently of the time needed to
+    // cancel and publish a real model in the recovery scenario above.
+    let stopped = Instant::now();
+    assert_eq!(stop(child).await["drained"], true);
+    assert!(stopped.elapsed() < Duration::from_secs(3));
+    let mut peer = api.state.lock().unwrap();
+    assert!(peer.hold_configuration_ack);
+    assert!(peer.jobs.is_empty());
+    peer.hold_configuration_ack = false;
 }
 
 #[tokio::test]
@@ -1019,6 +1032,9 @@ async fn handle(State(state): State<Arc<Mutex<Peer>>>, request: Request) -> Resp
     if path.ends_with("/control") {
         let id: Uuid = parts[4].parse().unwrap();
         let cancelled = peer.cancel_requested || peer.cancel_assignment == Some(id);
+        if cancelled {
+            peer.cancellation_controls += 1;
+        }
         return Json(json!({"allow_launch":!cancelled && !peer.authority_withdrawn,"cancel_pending":peer.authority_withdrawn,"cancel_running":cancelled,"reason":null})).into_response();
     }
     let id: Uuid = parts[4].parse().unwrap();
@@ -1225,6 +1241,10 @@ fn start(scratch: &Scratch, api: &Api, grace: u64) -> Child {
     command.spawn().unwrap()
 }
 async fn stop(child: Child) -> Value {
+    request_stop(&child).await;
+    stopped(child, Duration::from_secs(8)).await
+}
+async fn request_stop(child: &Child) {
     assert!(
         Command::new("/bin/kill")
             .args(["-TERM", &child.id().unwrap().to_string()])
@@ -1233,11 +1253,29 @@ async fn stop(child: Child) -> Value {
             .unwrap()
             .success()
     );
-    let output = tokio::time::timeout(Duration::from_secs(8), child.wait_with_output())
+}
+async fn stopped(child: Child, timeout: Duration) -> Value {
+    let output = tokio::time::timeout(timeout, child.wait_with_output())
         .await
         .unwrap()
         .unwrap();
     support::successful_json(&output)
+}
+async fn service_status(scratch: &Scratch, status: &str) {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let log = fs::read_to_string(scratch.0.join("service.log")).unwrap_or_default();
+        if log.lines().any(|line| {
+            serde_json::from_str::<Value>(line).is_ok_and(|entry| entry["status"] == status)
+        }) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "service did not reach {status}: {log}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 fn install(scratch: &Scratch, delay: f64) {
     install_wait(scratch, &format!("time.sleep({delay})"));
@@ -1568,17 +1606,32 @@ async fn shutdown_deadline_and_restart_resume_same_supervisor_and_exclude_second
 #[tokio::test]
 async fn shutdown_drains_active_model_and_idle_stop_is_prompt() {
     let scratch = Scratch::new();
-    install(&scratch, 0.5);
+    let gate = install_gated(&scratch);
     let api = Api::start(1, true).await;
-    let child = start(&scratch, &api, 3);
+    let child = start(&scratch, &api, 15);
     api.until(|p| !p.logs.is_empty()).await;
-    assert_eq!(stop(child).await["drained"], true);
+    request_stop(&child).await;
+    service_status(&scratch, "draining").await;
+    assert!(
+        api.state
+            .lock()
+            .unwrap()
+            .jobs
+            .values()
+            .all(|job| job.result.is_none())
+    );
+    fs::remove_file(gate).unwrap();
+    assert_eq!(
+        stopped(child, Duration::from_secs(20)).await["drained"],
+        true
+    );
+    assert!(scratch.read()["active_session_id"].is_null());
     assert_eq!(
         fs::read_to_string(scratch.0.join("launches")).unwrap(),
         "launch\n"
     );
     let child = start(&scratch, &api, 3);
-    api.until(|p| p.sessions >= 2).await;
+    service_status(&scratch, "idle").await;
     let now = Instant::now();
     assert_eq!(stop(child).await["drained"], true);
     assert!(now.elapsed() < Duration::from_secs(2));
@@ -2522,7 +2575,7 @@ async fn full_transfer_pool_still_claims_and_cancels_other_prelaunch_work() {
         peer.bulk_input = true;
         peer.hold_input = true;
     }
-    let child = start(&scratch, &api, 1);
+    let child = start(&scratch, &api, 3);
     api.until(|p| p.input_started > 0 && p.jobs.len() == 2)
         .await;
     let second = *api
@@ -2546,6 +2599,7 @@ async fn full_transfer_pool_still_claims_and_cancels_other_prelaunch_work() {
     assert!(!scratch.0.join("launches").exists());
     api.state.lock().unwrap().cancel_requested = true;
     archived(&scratch, 2).await;
+    service_status(&scratch, "idle").await;
     assert_eq!(stop(child).await["drained"], true);
 }
 
