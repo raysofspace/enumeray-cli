@@ -191,7 +191,6 @@ fn connector_lifecycle_commands_preview_and_preserve_the_other_control() {
                     &server.origin,
                     "connector",
                     command,
-                    "lab",
                     "worker",
                     "--generation",
                     "7",
@@ -222,7 +221,7 @@ fn connector_lifecycle_commands_preview_and_preserve_the_other_control() {
                     assert_eq!(actual, receipt);
                     assert_eq!(requests.len(), 2);
                     assert!(requests[1].starts_with(&format!(
-                        "PUT /api/v1/infrastructures/lab/connectors/worker/{endpoint} HTTP/1.1\r\n"
+                        "PUT /api/v1/connectors/worker/{endpoint} HTTP/1.1\r\n"
                     )));
                     let key = if endpoint == "state" {
                         "draining"
@@ -239,9 +238,10 @@ fn connector_lifecycle_commands_preview_and_preserve_the_other_control() {
                         body
                     );
                 }
-                assert!(requests[0].starts_with(
-                    "GET /api/v1/infrastructures/lab/connectors/worker/diagnostics HTTP/1.1\r\n"
-                ));
+                assert!(
+                    requests[0]
+                        .starts_with("GET /api/v1/connectors/worker/diagnostics HTTP/1.1\r\n")
+                );
             }
         }
     }
@@ -249,7 +249,7 @@ fn connector_lifecycle_commands_preview_and_preserve_the_other_control() {
 
 fn connector_status(draining: bool, authority_withdrawn: bool) -> Value {
     json!({
-        "connector_id":"worker","generation":7,"observed_generation":6,"configuration_pending":true,
+        "connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"generation":7,"observed_generation":6,"configuration_pending":true,
         "draining":draining,"authority_withdrawn":authority_withdrawn,
         "work":{"retained_queued_runs":12,"unfinished_assignments":0,"pending_delivery_assignments":0,
             "pending_uploads":0,"pending_log_archives":0,"unconfirmed_assignments":0,
@@ -263,7 +263,7 @@ fn context_lifecycle_status(state: &str) -> Value {
     work["retained_queued_runs"] = json!(0);
     let mut sibling_work = work.clone();
     sibling_work["retained_queued_runs"] = json!(12);
-    json!({"id":"source","infrastructure_id":"lab","connector_id":"worker","generation":7,
+    json!({"id":"source","connector_id":"worker","generation":7,
         "state":state,"replacement_context_id":null,"accepted_work":null,"work":work,
         "live_current_publications":0,"retained_publications":0,"pending_configuration_retirements":0,
         "configuration_removal_generation":9,"connector_generation":9,"observed_generation":9,
@@ -311,9 +311,10 @@ fn context_lifecycle_previews_and_mutations_keep_original_requests() {
             process.args([
                 "--api",
                 &server.origin,
-                "infra",
-                command,
-                "lab",
+                "connector",
+                "context",
+                command.strip_prefix("context-").unwrap(),
+                "worker",
                 "source",
                 "--generation",
                 "7",
@@ -340,7 +341,7 @@ fn context_lifecycle_previews_and_mutations_keep_original_requests() {
             let requests = server.finish();
             assert!(
                 requests[0]
-                    .starts_with("GET /api/v1/infrastructures/lab/contexts/source HTTP/1.1\r\n")
+                    .starts_with("GET /api/v1/connectors/worker/contexts/source HTTP/1.1\r\n")
             );
             if dry_run {
                 assert_eq!(result["request"], expected_request);
@@ -350,7 +351,7 @@ fn context_lifecycle_previews_and_mutations_keep_original_requests() {
             } else {
                 assert_eq!(result, receipt);
                 assert!(requests[1].starts_with(&format!(
-                    "PUT /api/v1/infrastructures/lab/contexts/source/{endpoint} HTTP/1.1\r\n"
+                    "PUT /api/v1/connectors/worker/contexts/source/{endpoint} HTTP/1.1\r\n"
                 )));
                 assert_eq!(
                     serde_json::from_str::<Value>(requests[1].split_once("\r\n\r\n").unwrap().1)
@@ -384,9 +385,10 @@ fn context_mutation_replays_original_generation_and_never_retries_conflicts() {
             .args([
                 "--api",
                 &server.origin,
-                "infra",
-                "context-cutover",
-                "lab",
+                "connector",
+                "context",
+                "cutover",
+                "worker",
                 "source",
                 "--generation",
                 "7",
@@ -425,9 +427,10 @@ fn context_replacement_plan_encodes_filters_and_preserves_them_in_human_continua
             .args([
                 "--api",
                 &server.origin,
-                "infra",
-                "context-replacement-plan",
-                "lab",
+                "connector",
+                "context",
+                "replacement-plan",
+                "worker",
                 "source",
                 "--replacement",
                 "next/other?",
@@ -467,7 +470,7 @@ fn context_replacement_plan_encodes_filters_and_preserves_them_in_human_continua
         }
         let requests = server.finish();
         assert_eq!(requests.len(), 1);
-        assert!(requests[0].starts_with("GET /api/v1/infrastructures/lab/contexts/source/replacement-plan?section=runs&limit=12&replacement_context_id=next%2Fother%3F&after=a%2Bb%2Fc%3F%3D HTTP/1.1\r\n"));
+        assert!(requests[0].starts_with("GET /api/v1/connectors/worker/contexts/source/replacement-plan?section=runs&limit=12&replacement_context_id=next%2Fother%3F&after=a%2Bb%2Fc%3F%3D HTTP/1.1\r\n"));
     }
 }
 
@@ -501,9 +504,10 @@ fn context_dry_run_rejects_stale_or_inconsistent_inspection_without_mutation() {
             .args([
                 "--api",
                 &server.origin,
-                "infra",
-                "context-retire",
-                "lab",
+                "connector",
+                "context",
+                "retire",
+                "worker",
                 "source",
                 "--generation",
                 "7",
@@ -545,9 +549,10 @@ fn context_retirement_waits_for_each_context_obligation_but_excludes_sibling_wor
             .args([
                 "--api",
                 &server.origin,
-                "infra",
-                "context-wait-retirement",
-                "lab",
+                "connector",
+                "context",
+                "wait-retirement",
+                "worker",
                 "source",
                 "--generation",
                 "7",
@@ -595,9 +600,10 @@ fn context_retirement_wait_stops_on_generation_change_reopening_and_deadline() {
             .args([
                 "--api",
                 &server.origin,
-                "infra",
-                "context-wait-retirement",
-                "lab",
+                "connector",
+                "context",
+                "wait-retirement",
+                "worker",
                 "source",
                 "--generation",
                 "7",
@@ -618,7 +624,7 @@ fn context_retirement_wait_stops_on_generation_change_reopening_and_deadline() {
 fn connector_lifecycle_human_summary_explains_effects_and_affected_work() {
     let directory = tempfile::tempdir().unwrap();
     let observed = connector_status(false, false);
-    let receipt = json!({"connector_id":"worker","generation":8,"draining":true,"authority_withdrawn":false,"changed":true,"work":observed["work"],"maintenance_complete":true});
+    let receipt = json!({"connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"generation":8,"draining":true,"authority_withdrawn":false,"changed":true,"work":observed["work"],"maintenance_complete":true});
     let server = PolicyServer::new(vec![(200, observed), (200, receipt.clone())]);
     let output = human_cli(&directory.path().join("missing.json"))
         .args([
@@ -626,7 +632,6 @@ fn connector_lifecycle_human_summary_explains_effects_and_affected_work() {
             &server.origin,
             "connector",
             "maintenance",
-            "lab",
             "worker",
             "--generation",
             "7",
@@ -682,7 +687,6 @@ fn connector_lifecycle_stale_unreadable_or_unauthorized_inspection_never_mutates
                 &server.origin,
                 "connector",
                 "maintenance",
-                "lab",
                 "worker",
                 "--generation",
                 "7",
@@ -715,7 +719,6 @@ fn connector_lifecycle_conflicts_and_uncertain_receipts_are_not_retried() {
                 &server.origin,
                 "connector",
                 "withdraw-authority",
-                "lab",
                 "worker",
                 "--generation",
                 "7",
@@ -752,7 +755,6 @@ fn maintenance_wait_excludes_retained_queue_and_blocks_for_each_delivery_obligat
                 &server.origin,
                 "connector",
                 "wait-maintenance",
-                "lab",
                 "worker",
                 "--generation",
                 "7",
@@ -794,7 +796,6 @@ fn maintenance_wait_stops_on_resume_or_generation_changes_and_preserves_state_on
                 &server.origin,
                 "connector",
                 "wait-maintenance",
-                "lab",
                 "worker",
                 "--generation",
                 "7",
@@ -816,7 +817,6 @@ fn maintenance_wait_stops_on_resume_or_generation_changes_and_preserves_state_on
             &server.origin,
             "connector",
             "wait-maintenance",
-            "lab",
             "worker",
             "--generation",
             "7",
@@ -852,7 +852,6 @@ fn maintenance_wait_rejects_unconfirmed_work_without_an_unfinished_assignment() 
                 &server.origin,
                 "connector",
                 "wait-maintenance",
-                "lab",
                 "worker",
                 "--generation",
                 "7",
@@ -893,7 +892,6 @@ fn maintenance_wait_does_not_accept_a_completed_response_after_its_deadline() {
             "5",
             "connector",
             "wait-maintenance",
-            "lab",
             "worker",
             "--generation",
             "7",
@@ -1259,7 +1257,6 @@ fn help_exposes_each_self_service_role_without_configuration() {
     for family in [
         "service",
         "auth",
-        "infra",
         "connector",
         "model",
         "access",
@@ -2205,9 +2202,10 @@ fn context_update_sends_only_metadata_and_the_observed_generation() {
         .args([
             "--api",
             &origin,
-            "infra",
-            "context-update",
-            "lab",
+            "connector",
+            "context",
+            "update",
+            "worker",
             "cpu",
             "--location",
             "Research lab",
@@ -2225,7 +2223,7 @@ fn context_update_sends_only_metadata_and_the_observed_generation() {
     );
     let (headers, body) = worker.join().unwrap();
     assert!(
-        headers.starts_with("PUT /api/v1/infrastructures/lab/contexts/cpu/metadata HTTP/1.1\r\n")
+        headers.starts_with("PUT /api/v1/connectors/worker/contexts/cpu/metadata HTTP/1.1\r\n")
     );
     assert_eq!(
         body,
@@ -2241,7 +2239,15 @@ fn grant_commands_send_explicit_limits_and_display_generation() {
     for command in ["grant-get", "grant-update"] {
         let (origin, worker) = server(record.clone());
         let mut invocation = human_cli(&directory.path().join("missing.json"));
-        invocation.args(["--api", &origin, "infra", command, "lab", grant]);
+        invocation.args([
+            "--api",
+            &origin,
+            "connector",
+            "grant",
+            command.strip_prefix("grant-").unwrap(),
+            "worker",
+            grant,
+        ]);
         if command == "grant-update" {
             invocation.args([
                 "--max-queued-runs",
@@ -2270,7 +2276,7 @@ fn grant_commands_send_explicit_limits_and_display_generation() {
         let wire = worker.join().unwrap();
         let method = if command == "grant-get" { "GET" } else { "PUT" };
         assert!(wire.starts_with(&format!(
-            "{method} /api/v1/infrastructures/lab/grants/{grant} HTTP/1.1\r\n"
+            "{method} /api/v1/connectors/worker/grants/{grant} HTTP/1.1\r\n"
         )));
         if command == "grant-update" {
             assert_eq!(
@@ -2281,7 +2287,15 @@ fn grant_commands_send_explicit_limits_and_display_generation() {
     }
     let (origin, worker) = server(record.clone());
     let output = cli(&directory.path().join("missing.json"))
-        .args(["--api", &origin, "infra", "grant-get", "lab", grant])
+        .args([
+            "--api",
+            &origin,
+            "connector",
+            "grant",
+            "get",
+            "worker",
+            grant,
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -2305,9 +2319,10 @@ fn grant_commands_send_explicit_limits_and_display_generation() {
             .args([
                 "--api",
                 "http://127.0.0.1:1",
-                "infra",
-                "grant-update",
-                "lab",
+                "connector",
+                "grant",
+                "update",
+                "worker",
                 grant,
             ])
             .args(flags)
@@ -2329,9 +2344,10 @@ fn grant_update_conflict_is_not_retried_or_refreshed() {
         .args([
             "--api",
             &server.origin,
-            "infra",
-            "grant-update",
-            "lab",
+            "connector",
+            "grant",
+            "update",
+            "worker",
             "33333333-3333-4333-8333-333333333333",
             "--max-queued-runs",
             "10",
@@ -2362,27 +2378,26 @@ fn paginated_commands() -> Vec<(Vec<&'static str>, &'static str)> {
             vec!["model", "audit", "example"],
             "/api/v1/audit/model/example",
         ),
-        (vec!["infra", "list"], "/api/v1/infrastructures"),
-        (vec!["infra", "available"], "/api/v1/compute-grants"),
+        (vec!["connector", "list"], "/api/v1/connectors"),
         (
-            vec!["infra", "contexts", "lab"],
-            "/api/v1/infrastructures/lab/contexts",
+            vec!["connector", "grant", "available"],
+            "/api/v1/compute-grants",
         ),
         (
-            vec!["infra", "grants", "lab"],
-            "/api/v1/infrastructures/lab/grants",
+            vec!["connector", "context", "list", "worker"],
+            "/api/v1/connectors/worker/contexts",
         ),
         (
-            vec!["infra", "runs", "lab"],
-            "/api/v1/infrastructures/lab/runs",
+            vec!["connector", "grant", "list", "worker"],
+            "/api/v1/connectors/worker/grants",
         ),
         (
-            vec!["infra", "audit", "lab"],
-            "/api/v1/audit/infrastructure/lab",
+            vec!["connector", "runs", "worker"],
+            "/api/v1/connectors/worker/runs",
         ),
         (
-            vec!["connector", "list", "lab"],
-            "/api/v1/infrastructures/lab/connectors",
+            vec!["connector", "audit", "worker"],
+            "/api/v1/audit/connector/worker",
         ),
         (
             vec!["access", "requests", "example"],
@@ -2730,15 +2745,15 @@ fn collection_page(path: &str, cursor: &str) -> Value {
             event["resource_id"] = json!("example");
         }
         event
-    } else if path == "/api/v1/infrastructures" {
-        json!({"id":"full-identifier","label":"Lab","description":"","owner_id":user,"generation":1,"can_manage":true})
+    } else if path == "/api/v1/connectors" {
+        json!({"connector_id":"full-identifier","label":"Lab","owner_id":user,"ownership_generation":1,"archived_at":null,"generation":1,"observed_generation":1,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4})
     } else if path == "/api/v1/compute-grants" {
-        json!({"id":id,"context_id":"cpu","infrastructure_id":"lab","infrastructure_label":"Lab","user_id":user,"generation":1,"max_queued_runs":100,"max_outstanding_assignments":4,"context":{"id":"cpu","driver":"process","connection":"direct","installation_roots":["/opt/models"],"metadata":metadata}})
+        json!({"id":id,"context_id":"cpu","connector_id":"worker","connector_label":"Lab","user_id":user,"generation":1,"max_queued_runs":100,"max_outstanding_assignments":4,"context":{"id":"cpu","driver":"process","connection":"direct","installation_roots":["/opt/models"],"metadata":metadata}})
     } else if path.ends_with("/contexts") {
         json!({"id":"full-identifier","connector_id":"worker","definition":{},"metadata":metadata,"state":"active","generation":1})
     } else if path.ends_with("/grants") {
         json!({"id":id,"context_id":"cpu","user_id":user,"generation":1,"max_queued_runs":100,"max_outstanding_assignments":4,"revoked_at":null})
-    } else if path == "/api/v1/infrastructures/lab/runs" {
+    } else if path == "/api/v1/connectors/worker/runs" {
         json!({"run_id":id,"model_id":"example","publication_id":"full-identifier","context_id":"cpu","execution_location":"Lab","connector_id":"worker","state":"succeeded","phase":null,"created_at":at,"blocked_reason":null})
     } else if path.ends_with("/connectors") {
         json!({"connector_id":"full-identifier","label":"Worker","generation":1,"observed_generation":1,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4})
@@ -2837,4 +2852,140 @@ fn model_create_rejects_mismatched_source_and_conflicting_metadata_without_reque
         assert!(!output.status.success());
     }
     assert!(service.finish().is_empty());
+}
+
+#[test]
+fn connector_resources_are_nested_and_removed_infrastructure_paths_fail_before_network() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("missing.json");
+    for group in ["context", "grant", "member", "ownership"] {
+        let output = cli(&config)
+            .args(["connector", group, "--help"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    for words in [
+        vec!["infra", "list"],
+        vec!["connector", "context-get", "worker", "cpu"],
+        vec!["connector", "get", "old-scope", "worker"],
+    ] {
+        let output = cli(&config).args(words).output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(!output.stderr.is_empty());
+    }
+    let path = directory.path().join("context.json");
+    std::fs::write(
+        &path,
+        include_bytes!("../examples/process-direct-context.json"),
+    )
+    .unwrap();
+    let output = cli(&config)
+        .args([
+            "--api",
+            "http://127.0.0.1:1",
+            "connector",
+            "context",
+            "create",
+            "different-connector",
+            "--file",
+        ])
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("connector_id differs from the selected connector")
+    );
+}
+
+#[test]
+fn connector_ownership_mutations_send_the_exact_resource_and_ownership_generation() {
+    let directory = tempfile::tempdir().unwrap();
+    let user = "11111111-1111-4111-8111-111111111111";
+    let transfer = "33333333-3333-4333-8333-333333333333";
+    for (words, method, suffix, request, response) in [
+        (
+            vec![
+                "member",
+                "add",
+                "worker",
+                "--user",
+                user,
+                "--generation",
+                "9",
+            ],
+            "POST",
+            "members",
+            json!({"user_id":user,"expected_generation":9}),
+            json!({"user_id":user,"co_admin":true,"generation":10}),
+        ),
+        (
+            vec![
+                "member",
+                "remove",
+                "worker",
+                "--user",
+                user,
+                "--generation",
+                "9",
+            ],
+            "DELETE",
+            "members/11111111-1111-4111-8111-111111111111",
+            json!({"expected_generation":9}),
+            json!({"user_id":user,"co_admin":false,"generation":10}),
+        ),
+        (
+            vec![
+                "ownership",
+                "transfer",
+                "worker",
+                "--to",
+                user,
+                "--generation",
+                "9",
+            ],
+            "POST",
+            "ownership-transfers",
+            json!({"to_user_id":user,"expected_generation":9}),
+            json!({"id":transfer,"to_user_id":user}),
+        ),
+        (
+            vec!["archive", "worker", "--generation", "9"],
+            "POST",
+            "archive",
+            json!({"expected_generation":9}),
+            json!({"id":"worker","archived":true,"generation":10}),
+        ),
+    ] {
+        let (origin, worker) = server(response.clone());
+        let output = cli(&directory.path().join("missing.json"))
+            .args(["--api", &origin, "connector"])
+            .args(words)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            response
+        );
+        let wire = worker.join().unwrap();
+        assert!(wire.starts_with(&format!(
+            "{method} /api/v1/connectors/worker/{suffix} HTTP/1.1\r\n"
+        )));
+        assert_eq!(
+            serde_json::from_str::<Value>(wire.split_once("\r\n\r\n").unwrap().1).unwrap(),
+            request
+        );
+    }
 }

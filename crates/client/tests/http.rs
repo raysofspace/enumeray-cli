@@ -63,7 +63,7 @@ fn context_status() -> Value {
     let work = json!({"retained_queued_runs":0,"unfinished_assignments":0,"pending_delivery_assignments":0,
         "pending_uploads":0,"pending_log_archives":0,"unconfirmed_assignments":0,
         "assignment_phases":{"preparing":0,"waiting_for_backend":0,"executing":0,"collecting_results":0,"uploading_results":0}});
-    json!({"id":"source","infrastructure_id":"lab","connector_id":"worker","generation":7,"state":"draining",
+    json!({"id":"source","connector_id":"worker","generation":7,"state":"draining",
         "replacement_context_id":"next","accepted_work":"drain","work":work,
         "live_current_publications":0,"retained_publications":0,"pending_configuration_retirements":0,
         "configuration_removal_generation":9,"connector_generation":9,"observed_generation":9,"retirement_ready":true,
@@ -86,7 +86,7 @@ fn typed_grant_methods_preserve_identity_and_never_refresh_stale_guards() {
     ]);
     let client =
         EnumerayClient::new(&origin, Some("secret".into()), Duration::from_secs(5)).unwrap();
-    assert_eq!(client.compute_grant("lab", grant).unwrap().generation, 7);
+    assert_eq!(client.compute_grant("worker", grant).unwrap().generation, 7);
     let request = GrantUpdate {
         expected_generation: 6,
         max_queued_runs: 10,
@@ -94,23 +94,23 @@ fn typed_grant_methods_preserve_identity_and_never_refresh_stale_guards() {
     };
     assert_eq!(
         client
-            .update_compute_grant("lab", grant, &request)
+            .update_compute_grant("worker", grant, &request)
             .unwrap()
             .id,
         grant
     );
     assert!(matches!(
-        client.update_compute_grant("lab", grant, &request),
+        client.update_compute_grant("worker", grant, &request),
         Err(Error::Api { status: 409, .. })
     ));
     let requests = worker.join().unwrap();
     assert_eq!(requests.len(), 3);
     assert!(requests[0].starts_with(&format!(
-        "GET /api/v1/infrastructures/lab/grants/{grant} HTTP/1.1\r\n"
+        "GET /api/v1/connectors/worker/grants/{grant} HTTP/1.1\r\n"
     )));
     for wire in &requests[1..] {
         assert!(wire.starts_with(&format!(
-            "PUT /api/v1/infrastructures/lab/grants/{grant} HTTP/1.1\r\n"
+            "PUT /api/v1/connectors/worker/grants/{grant} HTTP/1.1\r\n"
         )));
         let body: Value = serde_json::from_str(wire.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(
@@ -140,12 +140,12 @@ fn typed_context_methods_preserve_explicit_policy_guard_and_opaque_pagination() 
     let client =
         EnumerayClient::new(&origin, Some("secret".into()), Duration::from_secs(5)).unwrap();
     assert_eq!(
-        client.context_status("lab", "source").unwrap().state,
+        client.context_status("worker", "source").unwrap().state,
         ContextLifecycleState::Draining
     );
     let plan = client
         .context_replacement_plan(
-            "lab",
+            "worker",
             "source",
             Some("next/other?"),
             ContextDependencySection::Runs,
@@ -156,7 +156,7 @@ fn typed_context_methods_preserve_explicit_policy_guard_and_opaque_pagination() 
     assert_eq!(plan.dependencies.next_cursor.as_deref(), Some("cursor"));
     let result = client
         .cutover_context(
-            "lab",
+            "worker",
             "source",
             &ContextCutover {
                 expected_generation: 6,
@@ -169,16 +169,14 @@ fn typed_context_methods_preserve_explicit_policy_guard_and_opaque_pagination() 
     let guard = GenerationChange {
         expected_generation: 7,
     };
-    client.reopen_context("lab", "source", &guard).unwrap();
+    client.reopen_context("worker", "source", &guard).unwrap();
     client
-        .release_context_configurations("lab", "source", &guard)
+        .release_context_configurations("worker", "source", &guard)
         .unwrap();
-    client.retire_context("lab", "source", &guard).unwrap();
+    client.retire_context("worker", "source", &guard).unwrap();
     let requests = worker.join().unwrap();
-    assert!(
-        requests[0].starts_with("GET /api/v1/infrastructures/lab/contexts/source HTTP/1.1\r\n")
-    );
-    assert!(requests[1].starts_with("GET /api/v1/infrastructures/lab/contexts/source/replacement-plan?section=runs&limit=12&replacement_context_id=next%2Fother%3F&after=a%2Bb%2Fc%3F%3D HTTP/1.1\r\n"));
+    assert!(requests[0].starts_with("GET /api/v1/connectors/worker/contexts/source HTTP/1.1\r\n"));
+    assert!(requests[1].starts_with("GET /api/v1/connectors/worker/contexts/source/replacement-plan?section=runs&limit=12&replacement_context_id=next%2Fother%3F&after=a%2Bb%2Fc%3F%3D HTTP/1.1\r\n"));
     for (index, endpoint, body) in [
         (
             2,
@@ -194,7 +192,7 @@ fn typed_context_methods_preserve_explicit_policy_guard_and_opaque_pagination() 
         (5, "retirement", json!({"expected_generation":7})),
     ] {
         assert!(requests[index].starts_with(&format!(
-            "PUT /api/v1/infrastructures/lab/contexts/source/{endpoint} HTTP/1.1\r\n"
+            "PUT /api/v1/connectors/worker/contexts/source/{endpoint} HTTP/1.1\r\n"
         )));
         assert_eq!(
             serde_json::from_str::<Value>(requests[index].split_once("\r\n\r\n").unwrap().1)
@@ -210,12 +208,12 @@ fn connector_lifecycle_methods_keep_maintenance_and_authority_requests_separate(
     let work = json!({"retained_queued_runs":4,"unfinished_assignments":0,"pending_delivery_assignments":1,
         "pending_uploads":0,"pending_log_archives":0,"unconfirmed_assignments":0,
         "assignment_phases":{"preparing":0,"waiting_for_backend":0,"executing":0,"collecting_results":0,"uploading_results":0}});
-    let status = json!({"connector_id":"worker","generation":7,"observed_generation":6,"configuration_pending":true,
+    let status = json!({"connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"generation":7,"observed_generation":6,"configuration_pending":true,
         "draining":true,"authority_withdrawn":false,"work":work,"maintenance_complete":false,
         "failed_publications":0,"configuration_capacity":{"desired_bytes":500,"maximum_desired_bytes":2097152,"maximum_retained_publications":1024,"maximum_connector_cache_bytes":4194304,"counts":{"historical_publications":0,"retained_publications":0,"retirement_requested":0,"retired_publications":0}}});
-    let maintenance = json!({"connector_id":"worker","generation":8,"draining":false,"authority_withdrawn":false,
+    let maintenance = json!({"connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"generation":8,"draining":false,"authority_withdrawn":false,
         "changed":true,"work":work,"maintenance_complete":false});
-    let authority = json!({"connector_id":"worker","generation":9,"draining":false,"authority_withdrawn":true,
+    let authority = json!({"connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"generation":9,"draining":false,"authority_withdrawn":true,
         "changed":true,"work":work,"maintenance_complete":false});
     let (origin, worker) = serve(vec![
         response("200 OK", "", &status.to_string()),
@@ -224,12 +222,11 @@ fn connector_lifecycle_methods_keep_maintenance_and_authority_requests_separate(
     ]);
     let client =
         EnumerayClient::new(&origin, Some("secret".into()), Duration::from_secs(5)).unwrap();
-    let observed = client.connector_diagnostics("lab", "worker").unwrap();
+    let observed = client.connector_diagnostics("worker").unwrap();
     assert!(observed.draining);
     assert_eq!(observed.work.pending_delivery_assignments, 1);
     let resumed = client
         .set_connector_maintenance(
-            "lab",
             "worker",
             &ConnectorStateChange {
                 draining: false,
@@ -241,7 +238,6 @@ fn connector_lifecycle_methods_keep_maintenance_and_authority_requests_separate(
     assert!(!resumed.authority_withdrawn);
     let withdrawn = client
         .set_connector_authority(
-            "lab",
             "worker",
             &ConnectorAuthorityChange {
                 withdrawn: true,
@@ -252,11 +248,7 @@ fn connector_lifecycle_methods_keep_maintenance_and_authority_requests_separate(
     assert!(withdrawn.authority_withdrawn);
     assert!(!withdrawn.draining);
     let requests = worker.join().unwrap();
-    assert!(
-        requests[0].starts_with(
-            "GET /api/v1/infrastructures/lab/connectors/worker/diagnostics HTTP/1.1\r\n"
-        )
-    );
+    assert!(requests[0].starts_with("GET /api/v1/connectors/worker/diagnostics HTTP/1.1\r\n"));
     for (request, endpoint, body) in [
         (
             &requests[1],
@@ -270,7 +262,7 @@ fn connector_lifecycle_methods_keep_maintenance_and_authority_requests_separate(
         ),
     ] {
         assert!(request.starts_with(&format!(
-            "PUT /api/v1/infrastructures/lab/connectors/worker/{endpoint} HTTP/1.1\r\n"
+            "PUT /api/v1/connectors/worker/{endpoint} HTTP/1.1\r\n"
         )));
         assert_eq!(
             serde_json::from_str::<Value>(request.split_once("\r\n\r\n").unwrap().1).unwrap(),
@@ -476,9 +468,9 @@ fn prepared_operations_reject_retired_fields_and_wrong_api_or_user() {
 
 #[test]
 fn management_client_decodes_shared_records_and_preserves_pagination_and_guards() {
-    use enumeray_contracts::management::{AccessMode, AccessPolicyUpdate, InfrastructureCreate};
+    use enumeray_contracts::management::{AccessMode, AccessPolicyUpdate};
     let owner = uuid::Uuid::new_v4();
-    let record = json!({"id":"lab","owner_id":owner,"label":"Lab","description":"","generation":1,"archived_at":null});
+    let record = json!({"connector_id":"worker","owner_id":owner,"ownership_generation":1,"label":"Lab","generation":1,"observed_generation":0,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4,"archived_at":null});
     let page = json!({"items":[],"next_cursor":"a+b/c?="});
     let policy = json!({"mode":"request","visibility":"listed","generation":8});
     let (origin, worker) = serve(vec![
@@ -489,16 +481,7 @@ fn management_client_decodes_shared_records_and_preserves_pagination_and_guards(
     let client =
         EnumerayClient::new(&origin, Some("secret".into()), Duration::from_secs(5)).unwrap();
     let api = client.management();
-    assert_eq!(
-        api.create_infrastructure(&InfrastructureCreate {
-            id: "lab".into(),
-            label: "Lab".into(),
-            description: String::new()
-        })
-        .unwrap()
-        .owner_id,
-        owner
-    );
+    assert_eq!(api.connector("worker").unwrap().owner_id, owner);
     assert_eq!(
         api.publications("example", &[("cursor", "a+b/c?="), ("limit", "10")])
             .unwrap()

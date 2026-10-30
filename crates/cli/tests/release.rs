@@ -153,7 +153,7 @@ impl Fixture {
             let items = self
                 .grant
                 .as_ref()
-                .map(|id| vec![json!({"id":id,"user_id":USER,"context_id":"context","infrastructure_id":"lab","infrastructure_label":"Lab","generation":1,"max_queued_runs":100,"max_outstanding_assignments":4,"context":{"id":"context","driver":"process","connection":"direct","installation_roots":["/opt/models"],"metadata":{"location":"Research compute","disclosure":"Research administrators process scientific data."}}})])
+                .map(|id| vec![json!({"id":id,"user_id":USER,"context_id":"context","connector_id":"worker","connector_label":"Lab","generation":1,"max_queued_runs":100,"max_outstanding_assignments":4,"context":{"id":"context","driver":"process","connection":"direct","installation_roots":["/opt/models"],"metadata":{"location":"Research compute","disclosure":"Research administrators process scientific data."}}})])
                 .unwrap_or_default();
             return Some((200, json!({"items":items,"next_cursor":null})));
         }
@@ -887,7 +887,7 @@ fn authority_changes_block_promotion_without_substituting_a_reissued_grant() {
         "installation",
         "retirement",
         "failed",
-        "infrastructure",
+        "compute",
     ] {
         let root = tempfile::tempdir().unwrap();
         let server = Server::new();
@@ -919,7 +919,7 @@ fn authority_changes_block_promotion_without_substituting_a_reissued_grant() {
                         .get_mut(&server.candidate(root.path()))
                         .unwrap()["status"] = json!("failed")
                 }
-                "infrastructure" => {
+                "compute" => {
                     f.publications
                         .get_mut(&server.candidate(root.path()))
                         .unwrap()["rollback_availability"]["unavailable_reason"] =

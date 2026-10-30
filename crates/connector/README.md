@@ -45,8 +45,7 @@ cd "$HOME/enumeray-development"
 enumeray auth configure https://enumeray.example.org
 enumeray auth login
 enumeray auth whoami
-enumeray infra create development --label 'Personal trusted experiments'
-enumeray connector create development development-connector \
+enumeray connector create development-connector \
   --label 'Personal development connector' --max-outstanding-assignments 1 \
   --output enrollment.json
 enumeray connector enroll --directory connector/credentials \
@@ -66,9 +65,9 @@ containing the absolute path to your `enumeray` executable, and the model/work
 roots created above. Keep the example's reduced-isolation disclosure visible.
 
 ```sh
-enumeray infra context-create development --file context.json
-enumeray infra contexts development
-enumeray infra grant development --context development-process --user AUTHOR_UUID \
+enumeray connector context create development-connector --file context.json
+enumeray connector context list development-connector
+enumeray connector grant create development-connector --context development-process --user AUTHOR_UUID \
   --max-queued-runs 10 --max-outstanding-assignments 1
 ```
 
@@ -160,9 +159,46 @@ The controlled `claim-once` and `execute-once` commands require the same option
 when used with development contexts. The option has no effect on managed
 contexts' separate-identity requirement. Development does not support SSH or Slurm.
 
+## Connector ownership and compute access
+
+Register each connector directly under your user account. Each connector has one
+owner and its own optional co-administrators. Connector registration requires no
+infrastructure or administrative group. Co-administrators can manage execution
+contexts, enrollment, grants and operational controls; only the owner changes
+membership, proposes an ownership transfer or archives the connector.
+
+```sh
+enumeray connector list
+enumeray connector get lab-connector
+enumeray connector member list lab-connector
+enumeray connector member add lab-connector --user COADMIN_UUID --generation 1
+enumeray connector ownership transfer lab-connector --to NEW_OWNER_UUID --generation 2
+# The named recipient accepts using their own authenticated profile:
+enumeray connector ownership accept lab-connector TRANSFER_UUID
+```
+
+Use the current ownership generation returned by `connector get` or `member list`
+in place of the example numbers. Membership, transfer and archive guards use
+`ownership_generation`; configuration, maintenance and authority controls use
+`generation`. Ownership changes do not require re-enrollment or a new journal.
+Tokens for discovery need `connectors:read`; management needs `connectors:manage`.
+
+Compute usage remains an explicit per-user grant to an execution context, including
+when the owner also runs models. `connector grant available` discovers your grants;
+`connector context list CONNECTOR_ID` lists contexts under your connector.
+Owning a connector or becoming a co-administrator does not grant model access or
+create compute grants. Removing an administrator or transferring ownership does
+not revoke independent compute grants. Revoke those grants explicitly.
+
+Archive is permanent and uses the observed ownership generation. It blocks new
+management and execution authority while retaining identities, audit records and
+recovery evidence. Drain and inspect accepted work with the ordinary maintenance
+and context lifecycle commands before archiving; accepted work keeps its original
+connector, context, publication and grant identities.
+
 ## Enrollment and service operation
 
-The infrastructure owner uses the authenticated `enumeray` CLI. The connector
+The connector owner uses the authenticated `enumeray` CLI. The connector
 service account uses `enumeray connector run`; the execution account runs the
 credential-free runner. Install the same matching binary on each execution host
 and, for Slurm, on compute nodes. The connector needs outbound API access, private
@@ -171,15 +207,14 @@ The explicit [development exception](#single-user-development) permits trusted
 same-user process/direct execution. File jobs also require
 the service's verified versioned storage.
 
-Choose IDs once, then create the infrastructure and one-time enrollment on the
+Choose IDs once, then create the connector and one-time enrollment on the
 owner's CLI machine:
 
 ```sh
 umask 077
 enumeray auth configure https://enumeray.example.org
 enumeray auth login
-enumeray infra create lab --label 'Research compute'
-enumeray connector create lab lab-connector --label 'Lab connector' \
+enumeray connector create lab-connector --label 'Lab connector' \
   --max-outstanding-assignments 4 --output enrollment.json
 ```
 
@@ -193,8 +228,8 @@ outcome unknown; a failed save may still have published a valid file. Inspect it
 privately before requesting another secret. If no usable file was retained:
 
 ```sh
-enumeray connector get lab lab-connector
-enumeray connector enrollment lab lab-connector --output replacement-enrollment.json
+enumeray connector get lab-connector
+enumeray connector enrollment lab-connector --output replacement-enrollment.json
 ```
 
 Choose a new output path. Replacement invalidates earlier unused enrollments and
@@ -235,12 +270,12 @@ contains complete Linux account, restricted launcher and systemd setup.
 After preparing the host, register a reviewed context and give an author compute:
 
 ```sh
-enumeray infra context-create lab --file context.json
-enumeray infra contexts lab
-enumeray infra grant lab --context lab-cpu --user MODEL_OWNER_UUID \
+enumeray connector context create lab-connector --file context.json
+enumeray connector context list lab-connector
+enumeray connector grant create lab-connector --context lab-cpu --user MODEL_OWNER_UUID \
   --max-queued-runs 100 --max-outstanding-assignments 4
-enumeray infra grants lab
-enumeray connector diagnostics lab lab-connector
+enumeray connector grant list lab-connector
+enumeray connector diagnostics lab-connector
 ```
 
 Use the context manifest in [the backend guide](EXTENDING.md#register-a-context-without-reading-the-code)
@@ -255,7 +290,7 @@ stop its daemon. Enroll into a **new private credential directory**; retain the
 original journal so accepted work and backend evidence remain recoverable:
 
 ```sh
-enumeray connector enrollment INFRA_ID CONNECTOR_ID --output rotated-enrollment.json
+enumeray connector enrollment CONNECTOR_ID --output rotated-enrollment.json
 # Stop the existing connector daemon before replacing its credential.
 enumeray connector enroll --directory rotated-connector-credentials \
   --api-base-url https://enumeray.example.org --enrollment-file rotated-enrollment.json
@@ -353,11 +388,11 @@ The owner can enter maintenance with typed guarded commands. Read the connector
 generation and inspect the affected-work preview before applying:
 
 ```sh
-enumeray connector get lab lab-connector
-enumeray connector maintenance lab lab-connector --generation 3 --dry-run
-enumeray connector maintenance lab lab-connector --generation 3
-enumeray connector diagnostics lab lab-connector
-enumeray connector wait-maintenance lab lab-connector --generation 4
+enumeray connector get lab-connector
+enumeray connector maintenance lab-connector --generation 3 --dry-run
+enumeray connector maintenance lab-connector --generation 3
+enumeray connector diagnostics lab-connector
+enumeray connector wait-maintenance lab-connector --generation 4
 ```
 
 Use `3` only if the read returned it and replace `4` with the post-maintenance
@@ -455,14 +490,14 @@ blocks cleanup of the whole run. A broad release directory that merely contains
 the work root does not by itself block unrelated scratch reclamation.
 
 The connector always pulls `/connector/v1/configuration`, validates each immutable
-installation against its infrastructure context, persists usable installations,
+installation against its connector context, persists usable installations,
 and acknowledges their exact generations. The installation's entrypoint and Slurm
 batch file digests are checked again before execution. Required installation configurations remain in the
 private cache for accepted work and retained candidates. This verifies those installed files, not every
 imported library or data file; model/runtime/dataset identities remain provider
 claims. Keep complete release directories immutable.
 
-New process contexts require an explicit infrastructure-owned `driver.scratch`
+New process contexts require an explicit connector-owned `driver.scratch`
 policy for total workspace bytes, entries, depth, scan interval, cache routing and
 links. See [process scratch settings](https://doc.enumeray.com/infrastructure/contexts/#process-scratch-policy).
 The connector retains that policy in each worker snapshot. Existing contexts and
@@ -502,7 +537,7 @@ The API rejects additional candidates or contexts with
 and retire unused configuration before choosing another connector/context. Retain
 the original connector while accepted work references its installations.
 
-Local contexts and local Slurm submission hosts must provide an infrastructure-controlled
+Local contexts and local Slurm submission hosts must provide an site-controlled
 restricted launcher. Its complete command includes the unified executable, for example:
 
 ```json

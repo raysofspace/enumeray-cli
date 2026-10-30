@@ -1,5 +1,8 @@
 use super::{field, fields, next, present_fields, scientific, table};
-use crate::args::{Access, Args, Artifact, Auth, Command, Connector, Infra, Model, Run, Service};
+use crate::args::{
+    Access, Args, Artifact, Auth, Command, Connector, ConnectorContext, ConnectorMember, Model,
+    Run, Service,
+};
 use serde_json::Value;
 
 pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
@@ -218,22 +221,9 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
             receipt(output, value);
             output.push_str("Local validation does not establish API authorization, connector readiness or scientific correctness.\n");
         }
-        Command::Infra(Infra::Get { .. } | Infra::Create { .. }) => {
-            output.push_str("Infrastructure\n");
-            fields(
-                output,
-                value,
-                &[
-                    ("Infrastructure", "/id"),
-                    ("Label", "/label"),
-                    ("Owner", "/owner_id"),
-                    ("Generation", "/generation"),
-                    ("Description", "/description"),
-                ],
-            );
-            present_fields(output, value, &[("Archived at", "/archived_at")]);
-        }
-        Command::Infra(Infra::ContextCreate { .. } | Infra::ContextUpdate { .. }) => {
+        Command::Connector(Connector::Context(
+            ConnectorContext::Create { .. } | ConnectorContext::Update { .. },
+        )) => {
             output.push_str("Execution context\n");
             fields(
                 output,
@@ -255,16 +245,18 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 ],
             );
         }
-        Command::Infra(Infra::ContextGet { .. } | Infra::ContextWaitRetirement { .. }) => {
+        Command::Connector(Connector::Context(
+            ConnectorContext::Get { .. } | ConnectorContext::WaitRetirement { .. },
+        )) => {
             context(output, value);
         }
-        Command::Infra(Infra::ContextReplacementPlan {
-            infra,
+        Command::Connector(Connector::Context(ConnectorContext::ReplacementPlan {
+            connector,
             context: id,
             replacement,
             section,
             page,
-        }) => {
+        })) => {
             output.push_str("Context replacement plan\n");
             context(output, &value["context"]);
             scientific(output, "Proposed replacement", value.get("replacement"));
@@ -283,9 +275,10 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 .and_then(Value::as_str)
             {
                 let mut words = vec![
-                    "infra".into(),
-                    "context-replacement-plan".into(),
-                    infra.clone(),
+                    "connector".into(),
+                    "context".into(),
+                    "replacement-plan".into(),
+                    connector.clone(),
                     id.clone(),
                     "--section".into(),
                     enumeray_contracts::management::ContextDependencySection::from(*section)
@@ -302,12 +295,12 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 output.push_str(&format!("Next page: {}\n", super::invocation(args, &words)));
             }
         }
-        Command::Infra(
-            Infra::ContextCutover { dry_run, .. }
-            | Infra::ContextReopen { dry_run, .. }
-            | Infra::ContextReleaseConfigurations { dry_run, .. }
-            | Infra::ContextRetire { dry_run, .. },
-        ) => {
+        Command::Connector(Connector::Context(
+            ConnectorContext::Cutover { dry_run, .. }
+            | ConnectorContext::Reopen { dry_run, .. }
+            | ConnectorContext::ReleaseConfigurations { dry_run, .. }
+            | ConnectorContext::Retire { dry_run, .. },
+        )) => {
             if *dry_run {
                 output.push_str("Context change preview (no change applied)\n");
                 fields(
@@ -340,7 +333,8 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 context(output, &value["context"]);
             }
         }
-        Command::Model(Model::Members { .. }) | Command::Infra(Infra::Members { .. }) => {
+        Command::Model(Model::Members { .. })
+        | Command::Connector(Connector::Member(ConnectorMember::List { .. })) => {
             output.push_str("Resource administration\n");
             fields(
                 output,
@@ -352,6 +346,9 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 ],
             );
             output.push_str("Use this observed generation for a guarded membership change; re-read after each change.\n");
+            if matches!(&args.command, Command::Connector(Connector::Member(_))) {
+                output.push_str("This is the ownership generation; execution configuration uses a separate generation.\n");
+            }
         }
         Command::Connector(
             Connector::Get { .. }
@@ -552,12 +549,20 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
         _ => {
             output.push_str("Operation receipt\n");
             receipt(output, value);
+            if matches!(
+                &args.command,
+                Command::Connector(
+                    Connector::Member(_) | Connector::Ownership(_) | Connector::Archive { .. }
+                )
+            ) {
+                output.push_str("Generation is the connector ownership generation; execution configuration uses a separate generation.\n");
+            }
             match &args.command {
                 Command::Connector(
-                    Connector::Create { infra, id, .. } | Connector::Enrollment { infra, id, .. },
+                    Connector::Create { id, .. } | Connector::Enrollment { id, .. },
                 ) => {
                     output.push_str("Keep the saved enrollment document private and retain the host's durable identity and execution journal.\n");
-                    next(output, args, &["connector", "get", infra, id]);
+                    next(output, args, &["connector", "get", id]);
                 }
                 Command::Access(Access::Invite { .. })
                 | Command::Auth(Auth::TokenCreate { .. }) => output.push_str(
@@ -580,7 +585,7 @@ fn receipt(output: &mut String, value: &Value) {
             ("Publication", "/publication_id"),
             ("Current publication", "/current_publication_id"),
             ("Connector", "/connector_id"),
-            ("Infrastructure", "/infra"),
+            ("Connector", "/connector"),
             ("Context", "/context_id"),
             ("Grant", "/grant_id"),
             ("User", "/user_id"),
@@ -908,7 +913,6 @@ fn context(output: &mut String, value: &Value) {
         value,
         &[
             ("Context", "/id"),
-            ("Infrastructure", "/infrastructure_id"),
             ("Connector", "/connector_id"),
             ("Generation", "/generation"),
             ("State", "/state"),
@@ -936,7 +940,7 @@ fn context(output: &mut String, value: &Value) {
     work(output, value);
     output.push_str("Whole connector retained work\n");
     work(output, &serde_json::json!({"work":value["connector_work"]}));
-    output.push_str("Context retirement readiness does not establish whole-connector shutdown readiness or local cleanup safety. Inspect local evidence with enumeray-connector inspect --journal PATH and enumeray-connector cleanup --journal PATH --dry-run.\n");
+    output.push_str("Context retirement readiness does not establish whole-connector shutdown readiness or local cleanup safety. Inspect local evidence with enumeray connector inspect --journal PATH and enumeray connector cleanup --journal PATH --dry-run.\n");
 }
 
 fn connector(output: &mut String, value: &Value) {
@@ -946,6 +950,9 @@ fn connector(output: &mut String, value: &Value) {
         value,
         &[
             ("Connector", "/connector_id"),
+            ("Owner", "/owner_id"),
+            ("Ownership generation", "/ownership_generation"),
+            ("Archived at", "/archived_at"),
             ("Generation", "/generation"),
         ],
     );

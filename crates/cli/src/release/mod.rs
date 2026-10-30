@@ -797,7 +797,7 @@ fn blocked_action(reasons: &[String]) -> &'static str {
             "Ask the captured grant holder for a fresh named delegation, then review this release again."
         }
         Some("captured_grant_unavailable") => {
-            "Ask the infrastructure owner about the exact captured grant. A reissued grant requires a fresh candidate in a new release directory."
+            "Ask the connector owner about the exact captured grant. A reissued grant requires a fresh candidate in a new release directory."
         }
         Some("installation_revoked") => {
             "Use a new authorized installation and a fresh candidate; permanent installation revocation cannot be reversed."
@@ -810,10 +810,10 @@ fn blocked_action(reasons: &[String]) -> &'static str {
             "Initialize a fresh candidate in a new release directory with current authorization and installation validation."
         }
         Some("installation_validation_failed") => {
-            "Ask the infrastructure owner to resolve the validation message, then resume. Changed science or installation settings require a fresh candidate."
+            "Ask the connector owner to resolve the validation message, then resume. Changed science or installation settings require a fresh candidate."
         }
         _ => {
-            "Ask the infrastructure owner to restore context/connector compute authority, then inspect this saved release again."
+            "Ask the connector owner to restore context/connector compute authority, then inspect this saved release again."
         }
     }
 }

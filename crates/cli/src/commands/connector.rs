@@ -25,13 +25,10 @@ pub(crate) fn connector(
 ) -> Result<Value, Error> {
     match command {
         Connector::Host(_) => unreachable!("host dispatch precedes user profile access"),
-        Connector::List { infra, page } => typed_paged_get::<Collection<ConnectorSummary>>(
-            client,
-            &["infrastructures", infra, "connectors"],
-            page,
-        ),
+        Connector::List { page } => {
+            typed_paged_get::<Collection<ConnectorSummary>>(client, &["connectors"], page)
+        }
         Connector::Create {
-            infra,
             id,
             label,
             max_outstanding_assignments,
@@ -41,36 +38,32 @@ pub(crate) fn connector(
             let response = typed_mutate::<ConnectorRegistration, _>(
                 client,
                 Method::POST,
-                &["infrastructures", infra, "connectors"],
+                &["connectors"],
                 &ConnectorCreate {
                     id: id.clone(),
                     label: label.clone(),
                     max_outstanding_assignments: *max_outstanding_assignments,
                 },
             );
-            save_enrollment(client, infra, id, output, response, true)
+            save_enrollment(client, id, output, response, true)
         }
-        Connector::Enrollment { infra, id, output } => {
+        Connector::Enrollment { id, output } => {
             let _output_lock = require_new_output(output)?;
             let response = typed_mutate::<ConnectorEnrollment, _>(
                 client,
                 Method::POST,
-                &["infrastructures", infra, "connectors", id, "enrollments"],
+                &["connectors", id, "enrollments"],
                 &json!({}),
             );
-            save_enrollment(client, infra, id, output, response, false)
+            save_enrollment(client, id, output, response, false)
         }
-        Connector::Get { infra, id } => {
-            typed_get::<ConnectorSummary>(client, &["infrastructures", infra, "connectors", id])
-        }
+        Connector::Get { id } => typed_get::<ConnectorSummary>(client, &["connectors", id]),
         Connector::Configure {
-            infra,
             id,
             label,
             max_outstanding_assignments,
             generation,
         } => client.configure_connector(
-            infra,
             id,
             &ConnectorUpdate {
                 label: label.clone(),
@@ -79,13 +72,11 @@ pub(crate) fn connector(
             },
         ),
         Connector::Maintenance {
-            infra,
             id,
             generation,
             dry_run,
         } => lifecycle(
             client,
-            infra,
             id,
             *generation,
             *dry_run,
@@ -93,13 +84,11 @@ pub(crate) fn connector(
             Change::Maintenance(true),
         ),
         Connector::Resume {
-            infra,
             id,
             generation,
             dry_run,
         } => lifecycle(
             client,
-            infra,
             id,
             *generation,
             *dry_run,
@@ -107,13 +96,11 @@ pub(crate) fn connector(
             Change::Maintenance(false),
         ),
         Connector::WithdrawAuthority {
-            infra,
             id,
             generation,
             dry_run,
         } => lifecycle(
             client,
-            infra,
             id,
             *generation,
             *dry_run,
@@ -121,13 +108,11 @@ pub(crate) fn connector(
             Change::Authority(true),
         ),
         Connector::RestoreAuthority {
-            infra,
             id,
             generation,
             dry_run,
         } => lifecycle(
             client,
-            infra,
             id,
             *generation,
             *dry_run,
@@ -135,25 +120,15 @@ pub(crate) fn connector(
             Change::Authority(false),
         ),
         Connector::WaitMaintenance {
-            infra,
             id,
             generation,
             interval,
             deadline,
-        } => wait_maintenance(
-            client,
-            infra,
-            id,
-            *generation,
-            *interval,
-            *deadline,
-            json_output,
-        ),
-        Connector::Update { infra, id, file } => {
+        } => wait_maintenance(client, id, *generation, *interval, *deadline, json_output),
+        Connector::Update { id, file } => {
             let request: ConnectorStateChange = config::read_json(file)?;
             lifecycle(
                 client,
-                infra,
                 id,
                 request.expected_generation,
                 false,
@@ -161,10 +136,10 @@ pub(crate) fn connector(
                 Change::Maintenance(request.draining),
             )
         }
-        Connector::Diagnostics { infra, id } => typed_get::<ConnectorDiagnostics>(
-            client,
-            &["infrastructures", infra, "connectors", id, "diagnostics"],
-        ),
+        Connector::Diagnostics { id } => {
+            typed_get::<ConnectorDiagnostics>(client, &["connectors", id, "diagnostics"])
+        }
+        _ => super::connector_resource::resource(client, command, json_output),
     }
 }
 
@@ -191,7 +166,6 @@ fn valid_expiry(value: &str) -> bool {
 
 fn save_enrollment(
     client: &EnumerayClient,
-    infra: &str,
     id: &str,
     output: &Path,
     response: Result<Value, Error>,
@@ -208,7 +182,6 @@ fn save_enrollment(
         Err(_) => {
             return Err(enrollment_recovery(
                 client,
-                infra,
                 id,
                 "Enrollment outcome unknown after the request failed. No enrollment file was saved.",
                 false,
@@ -222,7 +195,6 @@ fn save_enrollment(
         {
             return Err(enrollment_recovery(
                 client,
-                infra,
                 id,
                 "The connector was already registered; creation replay returned no enrollment secret. No enrollment file was saved.",
                 true,
@@ -231,7 +203,6 @@ fn save_enrollment(
         _ => {
             return Err(enrollment_recovery(
                 client,
-                infra,
                 id,
                 "Invalid enrollment response; no enrollment file was saved. The request may have committed.",
                 false,
@@ -241,24 +212,21 @@ fn save_enrollment(
     if config::write_private(output, &value, false).is_err() {
         return Err(enrollment_recovery(
             client,
-            infra,
             id,
             "Enrollment saving was not confirmed. The output may already exist; preserve and inspect it privately before requesting a replacement. The request may have committed.",
             true,
         ));
     }
-    Ok(json!({"saved_to":output,"connector_id":id,"infra":infra}))
+    Ok(json!({"saved_to":output,"connector_id":id}))
 }
 
 fn enrollment_recovery(
     client: &EnumerayClient,
-    infra: &str,
     id: &str,
     reason: &str,
     registration_confirmed: bool,
 ) -> Error {
-    let observed =
-        typed_get::<ConnectorSummary>(client, &["infrastructures", infra, "connectors", id]);
+    let observed = typed_get::<ConnectorSummary>(client, &["connectors", id]);
     let registered = observed
         .as_ref()
         .is_ok_and(|value| value["connector_id"] == id);
@@ -271,17 +239,16 @@ fn enrollment_recovery(
     };
     // Resource names are shell-quoted because these commands are recovery advice.
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
-    let infra = quote(infra);
     let id = quote(id);
     let replacement = if registered || registration_confirmed {
         format!(
-            " If no usable enrollment file was retained, explicitly request a replacement with `enumeray connector enrollment {infra} {id} --output NEW-ENROLLMENT.json` using a new output path. Replacement invalidates prior unused enrollments."
+            " If no usable enrollment file was retained, explicitly request a replacement with `enumeray connector enrollment {id} --output NEW-ENROLLMENT.json` using a new output path. Replacement invalidates prior unused enrollments."
         )
     } else {
         String::new()
     };
     Error::Invalid(format!(
-        "{reason} {inspection} Inspect with `enumeray connector get {infra} {id}`.{replacement} Retry an uncertain host enrollment with its same durable identity directory. After successful enrollment, credential replacement needs a new private credential directory; retain the original execution journal."
+        "{reason} {inspection} Inspect with `enumeray connector get {id}`.{replacement} Retry an uncertain host enrollment with its same durable identity directory. After successful enrollment, credential replacement needs a new private credential directory; retain the original execution journal."
     ))
 }
 
@@ -312,7 +279,6 @@ impl Change {
 
 fn inspect_generation(
     client: &EnumerayClient,
-    infra: &str,
     id: &str,
     generation: i64,
 ) -> Result<ConnectorLifecycleStatus, Error> {
@@ -321,7 +287,7 @@ fn inspect_generation(
             "Connector generation must be positive.".into(),
         ));
     }
-    let observed = client.connector_diagnostics(infra, id)?;
+    let observed = client.connector_diagnostics(id)?;
     if observed.connector_id != id {
         return Err(Error::Invalid(
             "Connector diagnostics returned a different connector.".into(),
@@ -375,14 +341,13 @@ fn work_description(observed: &ConnectorLifecycleStatus) -> String {
 
 fn lifecycle(
     client: &EnumerayClient,
-    infra: &str,
     id: &str,
     generation: i64,
     dry_run: bool,
     json_output: bool,
     change: Change,
 ) -> Result<Value, Error> {
-    let observed = inspect_generation(client, infra, id, generation)?;
+    let observed = inspect_generation(client, id, generation)?;
     let (draining, authority_withdrawn) = match change {
         Change::Maintenance(draining) => (draining, observed.authority_withdrawn),
         Change::Authority(withdrawn) => (observed.draining, withdrawn),
@@ -406,7 +371,6 @@ fn lifecycle(
     }
     let receipt = match change {
         Change::Maintenance(draining) => client.set_connector_maintenance(
-            infra,
             id,
             &ConnectorStateChange {
                 draining,
@@ -414,7 +378,6 @@ fn lifecycle(
             },
         )?,
         Change::Authority(withdrawn) => client.set_connector_authority(
-            infra,
             id,
             &ConnectorAuthorityChange {
                 withdrawn,
@@ -427,7 +390,6 @@ fn lifecycle(
 
 fn wait_maintenance(
     client: &EnumerayClient,
-    infra: &str,
     id: &str,
     generation: i64,
     interval: u64,
@@ -455,7 +417,7 @@ fn wait_maintenance(
             return Err(deadline_elapsed());
         }
         let bounded = client.with_timeout_limit(remaining)?;
-        let observed = inspect_generation(&bounded, infra, id, generation).map_err(|error| {
+        let observed = inspect_generation(&bounded, id, generation).map_err(|error| {
             if Instant::now() >= until {
                 deadline_elapsed()
             } else {

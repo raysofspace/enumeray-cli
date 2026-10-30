@@ -75,22 +75,20 @@ pub(crate) fn observation(value: &Value) -> String {
                 "model administrator",
                 "Review the exact accepted publication and its authorization; retain this run ID.",
             ),
-            Some(
-                "compute_access_revoked" | "infrastructure_unavailable" | "connector_maintenance",
-            ) => (
-                "infrastructure owner",
-                "Inspect compute authority, connector maintenance and infrastructure diagnostics.",
+            Some("compute_access_revoked" | "compute_unavailable" | "connector_maintenance") => (
+                "connector owner",
+                "Inspect compute authority, connector maintenance and connector diagnostics.",
             ),
             Some(_) => (
                 "unknown",
                 "The service reported an unclassified blockage; retain this run ID for diagnosis.",
             ),
             None if value["observation_freshness"] == "stale" => (
-                "infrastructure owner",
+                "connector owner",
                 "Inspect the original connector and backend evidence; stale observation does not establish failure.",
             ),
             None if value["cancellation"]["status"] == "requested" => (
-                "connector / infrastructure owner",
+                "connector owner",
                 "Await backend cancellation confirmation; keep observing this run ID.",
             ),
             None if value["state"] == "running" => (

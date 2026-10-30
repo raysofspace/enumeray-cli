@@ -13,29 +13,6 @@ pub struct Collection<T> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InfrastructureRecord {
-    pub id: String,
-    pub owner_id: Uuid,
-    pub label: String,
-    pub description: String,
-    pub generation: i64,
-    #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub archived_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InfrastructureSummary {
-    pub id: String,
-    pub label: String,
-    pub description: String,
-    pub owner_id: Uuid,
-    pub generation: i64,
-    pub can_manage: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ContextSummary {
     pub id: String,
     pub connector_id: String,
@@ -78,8 +55,8 @@ pub struct RevokedGrant {
 pub struct AvailableGrant {
     pub id: Uuid,
     pub context_id: String,
-    pub infrastructure_id: String,
-    pub infrastructure_label: String,
+    pub connector_id: String,
+    pub connector_label: String,
     pub user_id: Uuid,
     pub generation: i64,
     pub max_queued_runs: u32,
@@ -234,6 +211,10 @@ pub struct ConnectorUpdateReceipt {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ConnectorSummary {
     pub connector_id: String,
+    pub owner_id: Uuid,
+    pub ownership_generation: i64,
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub archived_at: Option<String>,
     pub label: String,
     pub generation: i64,
     pub observed_generation: i64,
@@ -769,9 +750,8 @@ mod tests {
     }
     #[test]
     fn nullable_collection_cursor_and_timestamps_round_trip_without_normalization() {
-        let value = json!({"items":[{"id":"lab","owner_id":Uuid::nil(),"label":"Lab","description":"","generation":1,"archived_at":"2026-10-17T12:13:14.123456+00:00"}],"next_cursor":null});
-        let decoded: Collection<InfrastructureRecord> =
-            serde_json::from_value(value.clone()).unwrap();
+        let value = json!({"items":[{"connector_id":"worker","owner_id":Uuid::nil(),"ownership_generation":1,"label":"Lab","generation":1,"observed_generation":0,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4,"archived_at":"2026-10-17T12:13:14.123456+00:00"}],"next_cursor":null});
+        let decoded: Collection<ConnectorSummary> = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(decoded).unwrap(), value);
     }
 }

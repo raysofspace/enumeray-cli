@@ -176,6 +176,7 @@ fn management_commands_keep_their_argument_diagnostics() {
     assert_eq!(output.status.code(), Some(2));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("required arguments were not provided"));
-    assert!(error.contains("<INFRA>"));
+    assert!(error.contains("<ID>"));
+    assert!(!error.contains("<INFRA>"));
     assert!(!error.contains("invalid connector or runner command"));
 }

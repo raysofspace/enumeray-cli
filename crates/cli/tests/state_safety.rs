@@ -166,19 +166,19 @@ fn logout_invalidates_an_unfinished_login_even_without_a_preexisting_profile() {
 fn ownership_acceptance_always_sends_the_scoped_resource_identity() {
     let directory = tempfile::tempdir().unwrap();
     let config = directory.path().join("profiles.json");
-    for (kind, noun) in [("model", "model"), ("infrastructure", "infra")] {
+    for (kind, noun) in [("model", "model"), ("connector", "connector")] {
         let (origin, worker) = serve(vec![
             json!({"id":"33333333-3333-4333-8333-333333333333","accepted":true}),
         ]);
-        let output = command(&config)
-            .args([
-                "--api",
-                &origin,
-                noun,
-                "accept-transfer",
-                "intended-resource",
-                "transfer-id",
-            ])
+        let mut invocation = command(&config);
+        invocation.args(["--api", &origin, noun]);
+        if noun == "connector" {
+            invocation.args(["ownership", "accept"]);
+        } else {
+            invocation.arg("accept-transfer");
+        }
+        let output = invocation
+            .args(["intended-resource", "transfer-id"])
             .output()
             .unwrap();
         assert!(

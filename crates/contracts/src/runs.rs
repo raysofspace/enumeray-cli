@@ -100,7 +100,7 @@ pub enum QueueBlockReason {
     NoApprovedExecutionPath,
     ModelAccessRevoked,
     ComputeAccessRevoked,
-    InfrastructureUnavailable,
+    ComputeUnavailable,
     ConnectorMaintenance,
     /// This context is cancelling its previously accepted queued work during cutover.
     ContextCutover,

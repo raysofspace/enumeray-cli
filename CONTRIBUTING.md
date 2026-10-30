@@ -2,7 +2,7 @@
 
 This public workspace is the canonical source for the unified executable,
 client, connector and contracts. Update source here; service integrations consume
-a pinned revision. User and infrastructure workflows start in the [README](README.md).
+a pinned revision. User and connector workflows start in the [README](README.md).
 
 ## Build and local checks
 
@@ -70,7 +70,7 @@ Edit the canonical guides in `crates/cli` and `crates/connector`, examples under
 documentation imports the pinned guides and examples; generated pages/downloads
 are derived outputs. Keep one authored source for each guide and fixture.
 
-Customer guides contain user, author and infrastructure workflows. Keep private
+Customer guides contain user, author and connector workflows. Keep private
 service administration and deployment procedures in the service repository.
 Public guide links must resolve inside this repository or point to published
 customer documentation. Use explicit working directories, prerequisites and

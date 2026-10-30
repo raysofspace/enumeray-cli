@@ -1,6 +1,7 @@
 use super::{invocation, present_fields, safe_text, scalar, table};
 use crate::args::{
-    Access, Analysis, Args, Auth, Command, Connector, Infra, Model, PageArgs, Run, Service,
+    Access, Analysis, Args, Auth, Command, Connector, ConnectorContext, ConnectorGrant, Model,
+    PageArgs, Run, Service,
 };
 use serde_json::Value;
 use std::fmt::Write;
@@ -69,22 +70,11 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) -> bool {
                 page,
                 vec!["model".into(), "audit".into(), id.clone()],
             ),
-            Command::Infra(Infra::List { page }) => (
-                "Infrastructures",
-                &[
-                    ("INFRASTRUCTURE", "/id"),
-                    ("LABEL", "/label"),
-                    ("CAN MANAGE", "/can_manage"),
-                    ("GENERATION", "/generation"),
-                ],
-                page,
-                vec!["infra".into(), "list".into()],
-            ),
-            Command::Infra(Infra::Available { page }) => (
+            Command::Connector(Connector::Grant(ConnectorGrant::Available { page })) => (
                 "Available compute grants",
                 &[
                     ("GRANT", "/id"),
-                    ("INFRASTRUCTURE", "/infrastructure_id"),
+                    ("CONNECTOR", "/connector_id"),
                     ("CONTEXT", "/context_id"),
                     ("LOCATION", "/context/metadata/location"),
                     ("GENERATION", "/generation"),
@@ -92,9 +82,9 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) -> bool {
                     ("ASSIGNMENT LIMIT", "/max_outstanding_assignments"),
                 ],
                 page,
-                vec!["infra".into(), "available".into()],
+                vec!["connector".into(), "grant".into(), "available".into()],
             ),
-            Command::Infra(Infra::Contexts { id, page }) => (
+            Command::Connector(Connector::Context(ConnectorContext::List { id, page })) => (
                 "Execution contexts",
                 &[
                     ("CONTEXT", "/id"),
@@ -106,16 +96,26 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) -> bool {
                     ("GENERATION", "/generation"),
                 ],
                 page,
-                vec!["infra".into(), "contexts".into(), id.clone()],
+                vec![
+                    "connector".into(),
+                    "context".into(),
+                    "list".into(),
+                    id.clone(),
+                ],
             ),
-            Command::Infra(Infra::Grants { id, page }) => (
+            Command::Connector(Connector::Grant(ConnectorGrant::List { id, page })) => (
                 "Compute grants",
                 GRANTS,
                 page,
-                vec!["infra".into(), "grants".into(), id.clone()],
+                vec![
+                    "connector".into(),
+                    "grant".into(),
+                    "list".into(),
+                    id.clone(),
+                ],
             ),
-            Command::Infra(Infra::Runs { id, page }) => (
-                "Infrastructure run history",
+            Command::Connector(Connector::Runs { id, page }) => (
+                "Connector run history",
                 &[
                     ("RUN", "/run_id"),
                     ("MODEL", "/model_id"),
@@ -125,26 +125,28 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) -> bool {
                     ("BLOCKAGE", "/blocked_reason"),
                 ],
                 page,
-                vec!["infra".into(), "runs".into(), id.clone()],
+                vec!["connector".into(), "runs".into(), id.clone()],
             ),
-            Command::Infra(Infra::Audit { id, page }) => (
-                "Infrastructure audit",
+            Command::Connector(Connector::Audit { id, page }) => (
+                "Connector audit",
                 AUDIT,
                 page,
-                vec!["infra".into(), "audit".into(), id.clone()],
+                vec!["connector".into(), "audit".into(), id.clone()],
             ),
-            Command::Connector(Connector::List { infra, page }) => (
+            Command::Connector(Connector::List { page }) => (
                 "Connectors",
                 &[
                     ("CONNECTOR", "/connector_id"),
                     ("LABEL", "/label"),
+                    ("OWNER", "/owner_id"),
+                    ("OWNERSHIP GENERATION", "/ownership_generation"),
                     ("GENERATION", "/generation"),
                     ("OBSERVED", "/observed_generation"),
                     ("MAINTENANCE", "/draining"),
                     ("AUTHORITY WITHDRAWN", "/authority_withdrawn"),
                 ],
                 page,
-                vec!["connector".into(), "list".into(), infra.clone()],
+                vec!["connector".into(), "list".into()],
             ),
             Command::Access(Access::Requests { model, page }) => (
                 "Access requests",
@@ -313,9 +315,9 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) -> bool {
     match &args.command {
         Command::Model(Model::List { .. }) => output.push_str("Inspect access, availability, contract and disclosure with model get MODEL_ID.\n"),
         Command::Model(Model::Publications { id, .. }) => super::next(output, args, &["model", "publication", id, "PUBLICATION_ID"]),
-        Command::Infra(Infra::Grants { .. }) => output.push_str("A revoked timestamp marks withdrawn authority; a missing timestamp alone does not establish execution readiness.\n"),
+        Command::Connector(Connector::Grant(ConnectorGrant::List { .. })) => output.push_str("A revoked timestamp marks withdrawn authority; a missing timestamp alone does not establish execution readiness.\n"),
         Command::Run(Run::List { .. }) | Command::Model(Model::Runs { .. }) => output.push_str("Inspect current state and results with run get RUN_ID.\n"),
-        Command::Infra(Infra::Runs { .. }) => output.push_str("Infrastructure authority exposes operational metadata; inspect connector diagnostics for the selected context.\n"),
+        Command::Connector(Connector::Runs { .. }) => output.push_str("Connector authority exposes operational metadata; inspect connector diagnostics for the selected context.\n"),
         Command::Run(Run::Artifacts { .. }) => output.push_str("Download by full artifact ID: artifact download ARTIFACT_ID --output NEW_PATH.\n"),
         _ => (),
     }

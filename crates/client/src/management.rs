@@ -369,42 +369,7 @@ impl ManagementClient<'_> {
                 None,
             )
     }
-    pub fn infrastructures(
-        &self,
-        query: &[(&str, &str)],
-    ) -> Result<Collection<InfrastructureSummary>, Error> {
-        let path = resource_path(&["infrastructures"])?;
-        let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
-            .expect("encoded resource path");
-        if !query.is_empty() {
-            url.query_pairs_mut().extend_pairs(query.iter().copied());
-        }
-        let path = format!(
-            "{}{}",
-            url.path(),
-            url.query().map(|q| format!("?{q}")).unwrap_or_default()
-        );
-        self.client
-            .request::<Collection<InfrastructureSummary>, serde_json::Value>(
-                Method::GET,
-                &path,
-                None,
-                None,
-            )
-    }
-    pub fn create_infrastructure(
-        &self,
-        request: &InfrastructureCreate,
-    ) -> Result<InfrastructureRecord, Error> {
-        let path = resource_path(&["infrastructures"])?;
-        self.client
-            .request::<InfrastructureRecord, InfrastructureCreate>(
-                Method::POST,
-                &path,
-                Some(request),
-                None,
-            )
-    }
+
     pub fn available_compute_grants(
         &self,
         query: &[(&str, &str)],
@@ -442,17 +407,13 @@ impl ManagementClient<'_> {
                 None,
             )
     }
-    pub fn infrastructure(&self, infrastructure_id: &str) -> Result<InfrastructureRecord, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id])?;
-        self.client
-            .request::<InfrastructureRecord, serde_json::Value>(Method::GET, &path, None, None)
-    }
+
     pub fn contexts(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         query: &[(&str, &str)],
     ) -> Result<Collection<ContextSummary>, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "contexts"])?;
+        let path = resource_path(&["connectors", connector_id, "contexts"])?;
         let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
             .expect("encoded resource path");
         if !query.is_empty() {
@@ -473,10 +434,10 @@ impl ManagementClient<'_> {
     }
     pub fn create_context(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         request: &ContextCreate,
     ) -> Result<ContextRegistration, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "contexts"])?;
+        let path = resource_path(&["connectors", connector_id, "contexts"])?;
         self.client.request::<ContextRegistration, ContextCreate>(
             Method::POST,
             &path,
@@ -486,13 +447,13 @@ impl ManagementClient<'_> {
     }
     pub fn update_context_metadata(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         request: &ContextMetadataUpdate,
     ) -> Result<ContextMetadataReceipt, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
+            "connectors",
+            connector_id,
             "contexts",
             context_id,
             "metadata",
@@ -507,22 +468,22 @@ impl ManagementClient<'_> {
     }
     pub fn context(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
     ) -> Result<ContextLifecycleStatus, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "contexts", context_id])?;
+        let path = resource_path(&["connectors", connector_id, "contexts", context_id])?;
         self.client
             .request::<ContextLifecycleStatus, serde_json::Value>(Method::GET, &path, None, None)
     }
     pub fn context_plan(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         query: &[(&str, &str)],
     ) -> Result<ContextReplacementPlan, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
+            "connectors",
+            connector_id,
             "contexts",
             context_id,
             "replacement-plan",
@@ -542,13 +503,13 @@ impl ManagementClient<'_> {
     }
     pub fn context_cutover(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         request: &ContextCutover,
     ) -> Result<ContextLifecycleReceipt, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
+            "connectors",
+            connector_id,
             "contexts",
             context_id,
             "cutover",
@@ -563,17 +524,11 @@ impl ManagementClient<'_> {
     }
     pub fn context_reopen(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         request: &GenerationChange,
     ) -> Result<ContextLifecycleReceipt, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "contexts",
-            context_id,
-            "reopen",
-        ])?;
+        let path = resource_path(&["connectors", connector_id, "contexts", context_id, "reopen"])?;
         self.client
             .request::<ContextLifecycleReceipt, GenerationChange>(
                 Method::PUT,
@@ -584,13 +539,13 @@ impl ManagementClient<'_> {
     }
     pub fn context_release_configurations(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         request: &GenerationChange,
     ) -> Result<ContextLifecycleReceipt, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
+            "connectors",
+            connector_id,
             "contexts",
             context_id,
             "configuration-retirements",
@@ -605,13 +560,13 @@ impl ManagementClient<'_> {
     }
     pub fn context_retirement(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         context_id: &str,
         request: &GenerationChange,
     ) -> Result<ContextLifecycleReceipt, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
+            "connectors",
+            connector_id,
             "contexts",
             context_id,
             "retirement",
@@ -626,10 +581,10 @@ impl ManagementClient<'_> {
     }
     pub fn compute_grants(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         query: &[(&str, &str)],
     ) -> Result<Collection<ComputeGrant>, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "grants"])?;
+        let path = resource_path(&["connectors", connector_id, "grants"])?;
         let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
             .expect("encoded resource path");
         if !query.is_empty() {
@@ -643,49 +598,45 @@ impl ManagementClient<'_> {
         self.client
             .request::<Collection<ComputeGrant>, serde_json::Value>(Method::GET, &path, None, None)
     }
-    pub fn compute_grant(
-        &self,
-        infrastructure_id: &str,
-        grant_id: &str,
-    ) -> Result<ComputeGrant, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "grants", grant_id])?;
+    pub fn compute_grant(&self, connector_id: &str, grant_id: &str) -> Result<ComputeGrant, Error> {
+        let path = resource_path(&["connectors", connector_id, "grants", grant_id])?;
         self.client
             .request::<ComputeGrant, serde_json::Value>(Method::GET, &path, None, None)
     }
     pub fn grant_compute(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         request: &GrantCreate,
     ) -> Result<ComputeGrant, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "grants"])?;
+        let path = resource_path(&["connectors", connector_id, "grants"])?;
         self.client
             .request::<ComputeGrant, GrantCreate>(Method::POST, &path, Some(request), None)
     }
     pub fn change_compute_grant(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         grant_id: &str,
         request: &GrantUpdate,
     ) -> Result<ComputeGrant, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "grants", grant_id])?;
+        let path = resource_path(&["connectors", connector_id, "grants", grant_id])?;
         self.client
             .request::<ComputeGrant, GrantUpdate>(Method::PUT, &path, Some(request), None)
     }
     pub fn revoke_compute_grant(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         grant_id: &str,
     ) -> Result<RevokedGrant, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "grants", grant_id])?;
+        let path = resource_path(&["connectors", connector_id, "grants", grant_id])?;
         self.client
             .request::<RevokedGrant, serde_json::Value>(Method::DELETE, &path, None, None)
     }
-    pub fn infrastructure_runs(
+    pub fn connector_runs(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         query: &[(&str, &str)],
     ) -> Result<Collection<OperationalRun>, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "runs"])?;
+        let path = resource_path(&["connectors", connector_id, "runs"])?;
         let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
             .expect("encoded resource path");
         if !query.is_empty() {
@@ -706,10 +657,9 @@ impl ManagementClient<'_> {
     }
     pub fn connectors(
         &self,
-        infrastructure_id: &str,
         query: &[(&str, &str)],
     ) -> Result<Collection<ConnectorSummary>, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "connectors"])?;
+        let path = resource_path(&["connectors"])?;
         let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
             .expect("encoded resource path");
         if !query.is_empty() {
@@ -730,10 +680,9 @@ impl ManagementClient<'_> {
     }
     pub fn register_connector(
         &self,
-        infrastructure_id: &str,
         request: &ConnectorCreate,
     ) -> Result<ConnectorRegistration, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "connectors"])?;
+        let path = resource_path(&["connectors"])?;
         self.client
             .request::<ConnectorRegistration, ConnectorCreate>(
                 Method::POST,
@@ -742,32 +691,17 @@ impl ManagementClient<'_> {
                 None,
             )
     }
-    pub fn connector(
-        &self,
-        infrastructure_id: &str,
-        connector_id: &str,
-    ) -> Result<ConnectorSummary, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-        ])?;
+    pub fn connector(&self, connector_id: &str) -> Result<ConnectorSummary, Error> {
+        let path = resource_path(&["connectors", connector_id])?;
         self.client
             .request::<ConnectorSummary, serde_json::Value>(Method::GET, &path, None, None)
     }
     pub fn update_connector(
         &self,
-        infrastructure_id: &str,
         connector_id: &str,
         request: &ConnectorUpdate,
     ) -> Result<ConnectorUpdateReceipt, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-        ])?;
+        let path = resource_path(&["connectors", connector_id])?;
         self.client
             .request::<ConnectorUpdateReceipt, ConnectorUpdate>(
                 Method::PUT,
@@ -776,49 +710,25 @@ impl ManagementClient<'_> {
                 None,
             )
     }
-    pub fn connector_diagnostics(
-        &self,
-        infrastructure_id: &str,
-        connector_id: &str,
-    ) -> Result<ConnectorDiagnostics, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-            "diagnostics",
-        ])?;
+    pub fn connector_diagnostics(&self, connector_id: &str) -> Result<ConnectorDiagnostics, Error> {
+        let path = resource_path(&["connectors", connector_id, "diagnostics"])?;
         self.client
             .request::<ConnectorDiagnostics, serde_json::Value>(Method::GET, &path, None, None)
     }
     pub fn new_connector_enrollment(
         &self,
-        infrastructure_id: &str,
         connector_id: &str,
     ) -> Result<ConnectorEnrollment, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-            "enrollments",
-        ])?;
+        let path = resource_path(&["connectors", connector_id, "enrollments"])?;
         self.client
             .request::<ConnectorEnrollment, serde_json::Value>(Method::POST, &path, None, None)
     }
     pub fn connector_state(
         &self,
-        infrastructure_id: &str,
         connector_id: &str,
         request: &ConnectorStateChange,
     ) -> Result<ConnectorLifecycleReceipt, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-            "state",
-        ])?;
+        let path = resource_path(&["connectors", connector_id, "state"])?;
         self.client
             .request::<ConnectorLifecycleReceipt, ConnectorStateChange>(
                 Method::PUT,
@@ -829,17 +739,10 @@ impl ManagementClient<'_> {
     }
     pub fn connector_authority(
         &self,
-        infrastructure_id: &str,
         connector_id: &str,
         request: &ConnectorAuthorityChange,
     ) -> Result<ConnectorLifecycleReceipt, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-            "authority",
-        ])?;
+        let path = resource_path(&["connectors", connector_id, "authority"])?;
         self.client
             .request::<ConnectorLifecycleReceipt, ConnectorAuthorityChange>(
                 Method::PUT,
@@ -850,16 +753,9 @@ impl ManagementClient<'_> {
     }
     pub fn revoke_connector(
         &self,
-        infrastructure_id: &str,
         connector_id: &str,
     ) -> Result<ConnectorRevocationReceipt, Error> {
-        let path = resource_path(&[
-            "infrastructures",
-            infrastructure_id,
-            "connectors",
-            connector_id,
-            "credentials",
-        ])?;
+        let path = resource_path(&["connectors", connector_id, "credentials"])?;
         self.client
             .request::<ConnectorRevocationReceipt, serde_json::Value>(
                 Method::DELETE,
@@ -927,20 +823,17 @@ impl ManagementClient<'_> {
                 None,
             )
     }
-    pub fn infrastructure_members(
-        &self,
-        infrastructure_id: &str,
-    ) -> Result<ResourceMembers, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "members"])?;
+    pub fn connector_members(&self, connector_id: &str) -> Result<ResourceMembers, Error> {
+        let path = resource_path(&["connectors", connector_id, "members"])?;
         self.client
             .request::<ResourceMembers, serde_json::Value>(Method::GET, &path, None, None)
     }
-    pub fn infrastructure_add_member(
+    pub fn connector_add_member(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         request: &MembershipChange,
     ) -> Result<MembershipReceipt, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "members"])?;
+        let path = resource_path(&["connectors", connector_id, "members"])?;
         self.client.request::<MembershipReceipt, MembershipChange>(
             Method::POST,
             &path,
@@ -948,13 +841,13 @@ impl ManagementClient<'_> {
             None,
         )
     }
-    pub fn infrastructure_remove_member(
+    pub fn connector_remove_member(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         user_id: &str,
         request: &GenerationChange,
     ) -> Result<MembershipReceipt, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "members", user_id])?;
+        let path = resource_path(&["connectors", connector_id, "members", user_id])?;
         self.client.request::<MembershipReceipt, GenerationChange>(
             Method::DELETE,
             &path,
@@ -962,12 +855,12 @@ impl ManagementClient<'_> {
             None,
         )
     }
-    pub fn infrastructure_archive(
+    pub fn connector_archive(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         request: &GenerationChange,
     ) -> Result<ArchiveReceipt, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "archive"])?;
+        let path = resource_path(&["connectors", connector_id, "archive"])?;
         self.client.request::<ArchiveReceipt, GenerationChange>(
             Method::POST,
             &path,
@@ -975,12 +868,12 @@ impl ManagementClient<'_> {
             None,
         )
     }
-    pub fn infrastructure_propose_transfer(
+    pub fn connector_propose_transfer(
         &self,
-        infrastructure_id: &str,
+        connector_id: &str,
         request: &TransferCreate,
     ) -> Result<TransferProposalReceipt, Error> {
-        let path = resource_path(&["infrastructures", infrastructure_id, "ownership-transfers"])?;
+        let path = resource_path(&["connectors", connector_id, "ownership-transfers"])?;
         self.client
             .request::<TransferProposalReceipt, TransferCreate>(
                 Method::POST,

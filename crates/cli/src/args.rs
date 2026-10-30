@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "enumeray",
     version,
-    about = "Model execution, infrastructure management and connector operation"
+    about = "Model execution and connector management"
 )]
 pub struct Args {
     /// API origin. Overrides the selected profile (credentials never cross API origins).
@@ -33,8 +33,6 @@ pub enum Command {
     Service(Service),
     #[command(subcommand)]
     Auth(Auth),
-    #[command(subcommand)]
-    Infra(Infra),
     #[command(subcommand)]
     Connector(Connector),
     #[command(subcommand)]
@@ -279,40 +277,22 @@ pub enum Auth {
 }
 
 #[derive(Subcommand)]
-pub enum Infra {
+pub enum ConnectorContext {
+    /// List execution contexts visible under this connector.
     List {
-        #[command(flatten)]
-        page: PageArgs,
-    },
-    /// Discover the compute grants available to your account.
-    Available {
-        #[command(flatten)]
-        page: PageArgs,
-    },
-    Get {
-        id: String,
-    },
-    Create {
-        id: String,
-        #[arg(long)]
-        label: String,
-        #[arg(long, default_value = "")]
-        description: String,
-    },
-    Contexts {
         #[command(flatten)]
         page: PageArgs,
         id: String,
     },
     /// Register a context from a versioned execution-context manifest.
-    ContextCreate {
+    Create {
         id: String,
         #[arg(long)]
         file: PathBuf,
     },
-    /// Change a context's descriptive location and data-access disclosure.
-    ContextUpdate {
-        infra: String,
+    /// Change descriptive location and data-access disclosure.
+    Update {
+        connector: String,
         context: String,
         #[arg(long)]
         location: String,
@@ -322,13 +302,10 @@ pub enum Infra {
         generation: i64,
     },
     /// Inspect context lifecycle, retained work and retirement readiness.
-    ContextGet {
-        infra: String,
-        context: String,
-    },
-    /// Inspect replacement dependencies and actions for infrastructure and authors.
-    ContextReplacementPlan {
-        infra: String,
+    Get { connector: String, context: String },
+    /// Inspect replacement dependencies and actions for connector owners and authors.
+    ReplacementPlan {
+        connector: String,
         context: String,
         #[arg(long)]
         replacement: Option<String>,
@@ -337,9 +314,9 @@ pub enum Infra {
         #[command(flatten)]
         page: PageArgs,
     },
-    /// Close new work on a context and explicitly drain or cancel its queued runs.
-    ContextCutover {
-        infra: String,
+    /// Close new work and explicitly drain or cancel queued runs.
+    Cutover {
+        connector: String,
         context: String,
         #[arg(long)]
         replacement: Option<String>,
@@ -350,9 +327,9 @@ pub enum Infra {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Reopen future operations; cancellations and configuration releases remain.
-    ContextReopen {
-        infra: String,
+    /// Reopen future operations while retaining cancellations and configuration releases.
+    Reopen {
+        connector: String,
         context: String,
         #[arg(long)]
         generation: i64,
@@ -360,8 +337,8 @@ pub enum Infra {
         dry_run: bool,
     },
     /// Request retirement of obsolete publication configuration on a draining context.
-    ContextReleaseConfigurations {
-        infra: String,
+    ReleaseConfigurations {
+        connector: String,
         context: String,
         #[arg(long)]
         generation: i64,
@@ -369,17 +346,17 @@ pub enum Infra {
         dry_run: bool,
     },
     /// Permanently archive a context after work, delivery and configuration finish.
-    ContextRetire {
-        infra: String,
+    Retire {
+        connector: String,
         context: String,
         #[arg(long)]
         generation: i64,
         #[arg(long)]
         dry_run: bool,
     },
-    /// Wait for context retirement readiness without shutting down its connector.
-    ContextWaitRetirement {
-        infra: String,
+    /// Wait for context retirement readiness without shutting down the connector.
+    WaitRetirement {
+        connector: String,
         context: String,
         #[arg(long)]
         generation: i64,
@@ -388,12 +365,18 @@ pub enum Infra {
         #[arg(long, default_value_t = 3600)]
         deadline: u64,
     },
-    Grants {
+}
+
+#[derive(Subcommand)]
+pub enum ConnectorGrant {
+    /// List this connector's context-scoped compute grants.
+    List {
         #[command(flatten)]
         page: PageArgs,
         id: String,
     },
-    Grant {
+    /// Give a user explicit compute access to one execution context.
+    Create {
         id: String,
         #[arg(long)]
         context: String,
@@ -404,14 +387,14 @@ pub enum Infra {
         #[arg(long, default_value_t = 4)]
         max_outstanding_assignments: u32,
     },
-    /// Inspect a grant's current limits, generation and permanent revocation state.
-    GrantGet {
-        infra: String,
+    /// Inspect current limits, generation and permanent revocation state.
+    Get {
+        connector: String,
         grant_id: uuid::Uuid,
     },
-    /// Replace both limits at the observed generation while existing work drains.
-    GrantUpdate {
-        infra: String,
+    /// Replace both capacity limits at the observed grant generation.
+    Update {
+        connector: String,
         grant_id: uuid::Uuid,
         #[arg(long)]
         max_queued_runs: u32,
@@ -420,53 +403,52 @@ pub enum Infra {
         #[arg(long)]
         generation: i64,
     },
-    RevokeGrant {
-        id: String,
-        grant_id: String,
-    },
-    Runs {
+    /// Permanently revoke one grant without substituting another grant.
+    Revoke { id: String, grant_id: String },
+    /// Discover the compute grants available to your authenticated account.
+    Available {
         #[command(flatten)]
         page: PageArgs,
-        id: String,
     },
-    Audit {
-        #[command(flatten)]
-        page: PageArgs,
-        id: String,
-    },
-    Members {
-        id: String,
-    },
-    MemberAdd {
+}
+
+#[derive(Subcommand)]
+pub enum ConnectorMember {
+    /// Inspect the owner, co-administrators and ownership generation.
+    List { id: String },
+    /// Add a co-administrator using the observed ownership generation.
+    Add {
         id: String,
         #[arg(long)]
         user: uuid::Uuid,
+        /// Observed ownership generation; independent of execution configuration.
         #[arg(long)]
         generation: i64,
     },
-    MemberRemove {
+    /// Remove a co-administrator without revoking independent compute grants.
+    Remove {
         id: String,
         #[arg(long)]
         user: uuid::Uuid,
+        /// Observed ownership generation; independent of execution configuration.
         #[arg(long)]
         generation: i64,
     },
+}
+
+#[derive(Subcommand)]
+pub enum ConnectorOwnership {
+    /// Propose transfer to a named recipient using the ownership generation.
     Transfer {
         id: String,
         #[arg(long)]
         to: uuid::Uuid,
+        /// Observed ownership generation; independent of execution configuration.
         #[arg(long)]
         generation: i64,
     },
-    AcceptTransfer {
-        id: String,
-        transfer_id: String,
-    },
-    Archive {
-        id: String,
-        #[arg(long)]
-        generation: i64,
-    },
+    /// Accept a transfer only for the explicitly selected connector.
+    Accept { id: String, transfer_id: String },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -508,11 +490,9 @@ pub enum Connector {
     List {
         #[command(flatten)]
         page: PageArgs,
-        infra: String,
     },
     /// Create a connector enrollment and save its one-time secret privately.
     Create {
-        infra: String,
         id: String,
         #[arg(long)]
         label: String,
@@ -523,18 +503,15 @@ pub enum Connector {
     },
     /// Issue a replacement one-time enrollment credential and save it privately.
     Enrollment {
-        infra: String,
         id: String,
         #[arg(long)]
         output: PathBuf,
     },
     Get {
-        infra: String,
         id: String,
     },
     /// Change connector label and dispatch capacity at the observed generation.
     Configure {
-        infra: String,
         id: String,
         #[arg(long)]
         label: String,
@@ -545,7 +522,6 @@ pub enum Connector {
     },
     /// Stop new acceptance and claims while assigned work and delivery finish.
     Maintenance {
-        infra: String,
         id: String,
         #[arg(long)]
         generation: i64,
@@ -554,7 +530,6 @@ pub enum Connector {
     },
     /// Permit acceptance and claims without restoring withdrawn authority.
     Resume {
-        infra: String,
         id: String,
         #[arg(long)]
         generation: i64,
@@ -563,7 +538,6 @@ pub enum Connector {
     },
     /// Withdraw connector execution authority independently of maintenance.
     WithdrawAuthority {
-        infra: String,
         id: String,
         #[arg(long)]
         generation: i64,
@@ -572,7 +546,6 @@ pub enum Connector {
     },
     /// Restore connector authority without clearing maintenance or other revocations.
     RestoreAuthority {
-        infra: String,
         id: String,
         #[arg(long)]
         generation: i64,
@@ -581,7 +554,6 @@ pub enum Connector {
     },
     /// Wait for assigned work and delivery to finish at one maintenance generation.
     WaitMaintenance {
-        infra: String,
         id: String,
         #[arg(long)]
         generation: i64,
@@ -592,14 +564,40 @@ pub enum Connector {
     },
     /// Apply a guarded maintenance state from a JSON request; prefer maintenance/resume.
     Update {
-        infra: String,
         id: String,
         #[arg(long)]
         file: PathBuf,
     },
     Diagnostics {
-        infra: String,
         id: String,
+    },
+    /// Register and manage this connector's execution contexts.
+    #[command(subcommand)]
+    Context(ConnectorContext),
+    /// Grant explicit compute access to one context or discover your available grants.
+    #[command(subcommand)]
+    Grant(ConnectorGrant),
+    /// Inspect co-administrators; owner changes use the ownership generation.
+    #[command(subcommand)]
+    Member(ConnectorMember),
+    /// Propose or accept an explicit transfer of this connector's ownership.
+    #[command(subcommand)]
+    Ownership(ConnectorOwnership),
+    Runs {
+        #[command(flatten)]
+        page: PageArgs,
+        id: String,
+    },
+    Audit {
+        #[command(flatten)]
+        page: PageArgs,
+        id: String,
+    },
+    Archive {
+        id: String,
+        /// Observed ownership generation; archive is permanent.
+        #[arg(long)]
+        generation: i64,
     },
 }
 

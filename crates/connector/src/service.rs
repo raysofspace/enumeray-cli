@@ -25,7 +25,7 @@ pub enum Recovery {
 pub struct Options {
     #[arg(long)]
     journal: PathBuf,
-    /// Infrastructure-owned capture/archive policy, pinned before launch.
+    /// Connector-owned capture/archive policy, pinned before launch.
     #[arg(long)]
     log_policy_file: Option<PathBuf>,
     #[arg(long)]

@@ -285,12 +285,12 @@ impl EnumerayClient {
     /// Inspect current limits and generation, including a retained revoked grant.
     pub fn compute_grant(
         &self,
-        infrastructure: &str,
+        connector: &str,
         grant: uuid::Uuid,
     ) -> Result<enumeray_contracts::management::ComputeGrant, Error> {
         self.get(&resource_path(&[
-            "infrastructures",
-            infrastructure,
+            "connectors",
+            connector,
             "grants",
             &grant.to_string(),
         ])?)
@@ -299,18 +299,13 @@ impl EnumerayClient {
     /// Replace limits at the supplied generation. Never refresh or retry the guard.
     pub fn update_compute_grant(
         &self,
-        infrastructure: &str,
+        connector: &str,
         grant: uuid::Uuid,
         request: &enumeray_contracts::management::GrantUpdate,
     ) -> Result<enumeray_contracts::management::ComputeGrant, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "grants",
-                &grant.to_string(),
-            ])?,
+            &resource_path(&["connectors", connector, "grants", &grant.to_string()])?,
             Some(request),
             None,
         )
@@ -318,54 +313,35 @@ impl EnumerayClient {
 
     pub fn configure_connector(
         &self,
-        infrastructure: &str,
         connector: &str,
         request: &enumeray_contracts::management::ConnectorUpdate,
     ) -> Result<Value, Error> {
-        for id in [infrastructure, connector] {
-            if !enumeray_contracts::models::validation::valid_model_id(id) {
-                return Err(Error::Invalid(
-                    "Invalid connector resource identifier.".into(),
-                ));
-            }
+        if !enumeray_contracts::models::validation::valid_model_id(connector) {
+            return Err(Error::Invalid(
+                "Invalid connector resource identifier.".into(),
+            ));
         }
-        Ok(serde_json::to_value(self.management().update_connector(
-            infrastructure,
-            connector,
-            request,
-        )?)?)
+        Ok(serde_json::to_value(
+            self.management().update_connector(connector, request)?,
+        )?)
     }
     /// Inspect maintenance, authority and retained work without claiming assignments.
     pub fn connector_diagnostics(
         &self,
-        infrastructure: &str,
         connector: &str,
     ) -> Result<enumeray_contracts::management::ConnectorLifecycleStatus, Error> {
-        self.get(&resource_path(&[
-            "infrastructures",
-            infrastructure,
-            "connectors",
-            connector,
-            "diagnostics",
-        ])?)
+        self.get(&resource_path(&["connectors", connector, "diagnostics"])?)
     }
 
     /// Change only maintenance state at the supplied generation, without retrying.
     pub fn set_connector_maintenance(
         &self,
-        infrastructure: &str,
         connector: &str,
         request: &enumeray_contracts::management::ConnectorStateChange,
     ) -> Result<enumeray_contracts::management::ConnectorLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "connectors",
-                connector,
-                "state",
-            ])?,
+            &resource_path(&["connectors", connector, "state"])?,
             Some(request),
             None,
         )
@@ -374,19 +350,12 @@ impl EnumerayClient {
     /// Change only reversible execution authority at the supplied generation.
     pub fn set_connector_authority(
         &self,
-        infrastructure: &str,
         connector: &str,
         request: &enumeray_contracts::management::ConnectorAuthorityChange,
     ) -> Result<enumeray_contracts::management::ConnectorLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "connectors",
-                connector,
-                "authority",
-            ])?,
+            &resource_path(&["connectors", connector, "authority"])?,
             Some(request),
             None,
         )
@@ -399,12 +368,12 @@ impl EnumerayClient {
     /// Inspect context-scoped retirement evidence separately from connector shutdown.
     pub fn context_status(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
     ) -> Result<enumeray_contracts::management::ContextLifecycleStatus, Error> {
         self.get(&resource_path(&[
-            "infrastructures",
-            infrastructure,
+            "connectors",
+            connector,
             "contexts",
             context,
         ])?)
@@ -413,7 +382,7 @@ impl EnumerayClient {
     /// Read one bounded dependency page without changing publications or accepted work.
     pub fn context_replacement_plan(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
         replacement_context_id: Option<&str>,
         section: enumeray_contracts::management::ContextDependencySection,
@@ -421,8 +390,8 @@ impl EnumerayClient {
         after: Option<&str>,
     ) -> Result<enumeray_contracts::management::ContextReplacementPlan, Error> {
         let path = resource_path(&[
-            "infrastructures",
-            infrastructure,
+            "connectors",
+            connector,
             "contexts",
             context,
             "replacement-plan",
@@ -451,19 +420,13 @@ impl EnumerayClient {
     /// Commit one guarded cutover. Never retry with a refreshed generation.
     pub fn cutover_context(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
         request: &enumeray_contracts::management::ContextCutover,
     ) -> Result<enumeray_contracts::management::ContextLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "contexts",
-                context,
-                "cutover",
-            ])?,
+            &resource_path(&["connectors", connector, "contexts", context, "cutover"])?,
             Some(request),
             None,
         )
@@ -471,19 +434,13 @@ impl EnumerayClient {
 
     pub fn reopen_context(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
         request: &enumeray_contracts::management::GenerationChange,
     ) -> Result<enumeray_contracts::management::ContextLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "contexts",
-                context,
-                "reopen",
-            ])?,
+            &resource_path(&["connectors", connector, "contexts", context, "reopen"])?,
             Some(request),
             None,
         )
@@ -492,15 +449,15 @@ impl EnumerayClient {
     /// Explicitly release source publication configuration; this does not revoke it.
     pub fn release_context_configurations(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
         request: &enumeray_contracts::management::GenerationChange,
     ) -> Result<enumeray_contracts::management::ContextLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
             &resource_path(&[
-                "infrastructures",
-                infrastructure,
+                "connectors",
+                connector,
                 "contexts",
                 context,
                 "configuration-retirements",
@@ -512,19 +469,13 @@ impl EnumerayClient {
 
     pub fn retire_context(
         &self,
-        infrastructure: &str,
+        connector: &str,
         context: &str,
         request: &enumeray_contracts::management::GenerationChange,
     ) -> Result<enumeray_contracts::management::ContextLifecycleReceipt, Error> {
         self.request(
             Method::PUT,
-            &resource_path(&[
-                "infrastructures",
-                infrastructure,
-                "contexts",
-                context,
-                "retirement",
-            ])?,
+            &resource_path(&["connectors", connector, "contexts", context, "retirement"])?,
             Some(request),
             None,
         )

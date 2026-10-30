@@ -10,27 +10,18 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct InfrastructureCreate {
-    pub id: String,
-    pub label: String,
-    #[serde(default)]
-    pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ContextMetadata {
     /// Descriptive location, 1–200 UTF-8 bytes without surrounding whitespace or controls.
     #[cfg_attr(feature = "openapi", schema(min_length = 1, max_length = 200))]
     pub location: String,
-    /// Infrastructure data-access disclosure, 1–3800 UTF-8 bytes without surrounding whitespace or controls.
+    /// Connector data-access disclosure, 1–3800 UTF-8 bytes without surrounding whitespace or controls.
     #[cfg_attr(feature = "openapi", schema(min_length = 1, max_length = 3800))]
     pub disclosure: String,
 }
 
 impl ContextMetadata {
-    /// Descriptive infrastructure-owned text; never a routing or authorization input.
+    /// Descriptive connector-owned text; never a routing or authorization input.
     pub fn validate(&self) -> Result<(), &'static str> {
         for (value, maximum) in [(&self.location, 200), (&self.disclosure, 3800)] {
             if value.is_empty()
@@ -199,6 +190,10 @@ pub struct ConnectorLifecycleReceipt {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ConnectorLifecycleStatus {
     pub connector_id: String,
+    pub owner_id: Uuid,
+    pub ownership_generation: i64,
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub archived_at: Option<String>,
     pub generation: i64,
     pub observed_generation: i64,
     pub configuration_pending: bool,
@@ -240,7 +235,6 @@ pub struct ContextCutover {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ContextLifecycleStatus {
     pub id: String,
-    pub infrastructure_id: String,
     pub connector_id: String,
     pub generation: i64,
     pub state: ContextLifecycleState,
@@ -532,7 +526,7 @@ impl TransferAcceptance {
         match (&self.resource_kind, &self.resource_id) {
             (None, None) => Ok(()),
             (Some(kind), Some(resource))
-                if matches!(kind.as_str(), "model" | "infrastructure")
+                if matches!(kind.as_str(), "model" | "connector")
                     && crate::models::validation::valid_model_id(resource) =>
             {
                 Ok(())
@@ -560,7 +554,7 @@ mod transfer_acceptance_tests {
         for document in [
             json!({}),
             json!({"resource_kind":"model","resource_id":"example"}),
-            json!({"resource_kind":"infrastructure","resource_id":"lab"}),
+            json!({"resource_kind":"connector","resource_id":"lab"}),
         ] {
             let request: TransferAcceptance = serde_json::from_value(document.clone()).unwrap();
             request.validate().unwrap();
@@ -584,7 +578,12 @@ mod transfer_acceptance_tests {
             let request: TransferAcceptance = serde_json::from_value(document).unwrap();
             assert!(request.validate().is_err());
         }
-        assert!(serde_json::from_str::<TransferAcceptance>(r#"{"resource_kind":"model","resource_kind":"infrastructure","resource_id":"example"}"#).is_err());
+        assert!(
+            serde_json::from_str::<TransferAcceptance>(
+                r#"{"resource_kind":"model","resource_kind":"connector","resource_id":"example"}"#
+            )
+            .is_err()
+        );
     }
 }
 

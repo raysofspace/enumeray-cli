@@ -23,7 +23,7 @@ destinations; retain the original directories and state for exact retries.
 
 The **model owner** owns scientific mapping, schemas, examples, wrappers, immutable
 installed releases, model administration and model access decisions. The
-**infrastructure owner** enrolls and operates connectors, registers approved
+**connector owner** enrolls and operates connectors, registers approved
 contexts and installation roots, configures execution identities/SSH credentials,
 and grants compute permission. Coordinate with that owner to obtain OS access or
 have the release installed. A compute grant neither creates an OS account nor
@@ -360,7 +360,7 @@ failure annotation.
 
 ## Install an immutable release and select compute
 
-Coordinate installation under an infrastructure-approved release directory, such
+Coordinate installation under an site-approved release directory, such
 as `/opt/enumeray/models/example/r1`. Copy the complete project and your solver,
 runtime requirements and datasets. Ensure the execution account can traverse
 directories, read all resources and execute `wrapper.py`. Set read-only release
@@ -404,7 +404,7 @@ for Slurm; omit it for process. Local tests do not submit a scheduler job.
 ```sh
 enumeray auth configure https://enumeray.example.org
 enumeray auth login
-enumeray infra available
+enumeray connector grant available
 ```
 
 Select an available context, inspect its driver/location/disclosure and edit
@@ -456,11 +456,11 @@ initialization. Missing files alone do not prove registration never started. If
 original checkpoints or inspect/adopt that exact candidate with `--candidate`.
 Never create a fresh ID merely to resolve uncertain registration.
 
-`resume` registers the exact frozen candidate and waits for readiness. Repeat it after interruption or an uncertain reply; it never activates or refreshes the saved review guard. `--interval` defaults to 2 seconds and `--deadline` to 3600. Deadline exit 5 and interruption exit 130 retain the operation. Known blockers exit 1 with status on stdout; request/authentication errors go to stderr. `status` shows blockers, trial evidence and the next command. Release preflight uses `me:read`, `models:read`, `models:manage` and `infra:read`.
+`resume` registers the exact frozen candidate and waits for readiness. Repeat it after interruption or an uncertain reply; it never activates or refreshes the saved review guard. `--interval` defaults to 2 seconds and `--deadline` to 3600. Deadline exit 5 and interruption exit 130 retain the operation. Known blockers exit 1 with status on stdout; request/authentication errors go to stderr. `status` shows blockers, trial evidence and the next command. Release preflight uses `me:read`, `models:read`, `models:manage` and `connectors:read`.
 
 Registration resolves your active context grant and derives the installation key. Exact retries preserve that captured grant. Identical model/context/settings and scientific installation identities can reuse a retained installation; changed installation settings or identities obtain a new key. A permanently revoked installation cannot be reused, including after grant reissue. Removed author fields (`grant_id`, `provider_binding_id`, duplicate installation claims) remain rejected.
 
-On readiness failure, inspect validation messages and coordinate context, grant, path and execution-account corrections with the infrastructure owner. Changed immutable science or installation settings require a new operation. Local validation checks contracts and settings; API registration checks authority/context policy; connector readiness checks installed entrypoint/batch files and execution/backend access. Readiness does not attest scientific correctness or every runtime dependency.
+On readiness failure, inspect validation messages and coordinate context, grant, path and execution-account corrections with the connector owner. Changed immutable science or installation settings require a new operation. Local validation checks contracts and settings; API registration checks authority/context policy; connector readiness checks installed entrypoint/batch files and execution/backend access. Readiness does not attest scientific correctness or every runtime dependency.
 
 Use the full Candidate ID displayed by `model release status release-r1` as
 `PUBLICATION_ID`, or adapt its displayed trial-init command. Before activation,
@@ -605,7 +605,7 @@ grant using a newly observed generation, including in request/invite mode.
 
 The owner alone adds/removes co-admins, transfers ownership and archives. Co-admins
 may register/activate publications, manage run access and inspect all model runs
-and scientific data. Infrastructure-only administration does not grant this data access.
+and scientific data. Connector-only administration does not grant this data access.
 
 As the owner, read the membership generation and delegate:
 
@@ -797,7 +797,7 @@ while scientific execution and delivery continue.
 
 ## Move to a replacement execution context
 
-An infrastructure owner may replace a host, execution account, backend or scratch
+A connector owner may replace a host, execution account, backend or scratch
 policy by creating a fresh context ID. Obtain that ID, its installation
 instructions and your own active compute grant. Moving contexts requires a fresh
 publication and fresh installation validation even when the science and installed
@@ -807,7 +807,7 @@ The context owns the driver. Preserve the old declaration, installed release and
 saved operation.
 
 ```sh
-enumeray infra available
+enumeray connector grant available
 # Edit publication.json to use the approved replacement context and installation.
 enumeray model release init example --file publication.json --directory release-new-context
 enumeray model release resume release-new-context
@@ -817,7 +817,7 @@ enumeray model release activate release-new-context
 enumeray model release status release-new-context
 ```
 
-The infrastructure owner cannot transfer readiness, activate on your behalf or
+The connector owner cannot transfer readiness, activate on your behalf or
 redirect an accepted run. Inspect the new location, disclosure and trial evidence
 before activation. Coordinate the handoff: cutover is blocked while a live current
 publication remains on the source. If discontinuing the offering, explicitly
@@ -830,12 +830,12 @@ queued runs can still execute; `cancel-queued` cancels only runs still queued at
 cutover. Assigned work and delivery retain their original destination and release.
 Ordinary capacity, maintenance, access and permanent revocation checks still apply.
 Historical and abandoned candidates may be explicitly released by the
-infrastructure owner through context configuration retirement. A fresh publication
+connector owner through context configuration retirement. A fresh publication
 using an active context still needs current authorization and validation.
 
 Final context retirement waits for all source work and delivery, publication
 configuration retirement and connector acknowledgement. Keep required old releases
-available and coordinate retention with the infrastructure owner. Reopening before
+available and coordinate retention with the connector owner. Reopening before
 final retirement restores only future eligibility: it never undoes cancellations,
 retirement requests, revocations or your publication choices. See the
 [infrastructure replacement procedure](https://doc.enumeray.com/infrastructure/operations/#replace-and-retire-an-execution-context)

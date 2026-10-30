@@ -1,53 +1,45 @@
-//! Infrastructure command workflows.
+//! Connector-owned context, grant and ownership workflows.
 use super::{typed_get, typed_mutate, typed_paged_get};
 use enumeray_contracts::management::*;
 
 use super::{accept_transfer, member};
-use crate::{args::Infra, manifest::manifest};
+use crate::{
+    args::{Connector, ConnectorContext, ConnectorGrant, ConnectorMember, ConnectorOwnership},
+    manifest::manifest,
+};
 use enumeray_client::{EnumerayClient, Error};
 use enumeray_contracts::management::{
     ContextAcceptedWorkPolicy, ContextCreate, ContextCutover, ContextDependencySection,
     ContextLifecycleState, ContextLifecycleStatus, ContextMetadata, ContextMetadataUpdate,
-    GenerationChange, GrantCreate, GrantUpdate, InfrastructureCreate, TransferCreate,
+    GenerationChange, GrantCreate, GrantUpdate, TransferCreate,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-pub(crate) fn infrastructure(
+pub(crate) fn resource(
     client: &EnumerayClient,
-    command: &Infra,
+    command: &Connector,
     json_output: bool,
 ) -> Result<Value, Error> {
     match command {
-        Infra::List { page } => {
-            typed_paged_get::<Collection<InfrastructureSummary>>(client, &["infrastructures"], page)
-        }
-        Infra::Available { page } => {
+        Connector::Grant(ConnectorGrant::Available { page }) => {
             typed_paged_get::<Collection<AvailableGrant>>(client, &["compute-grants"], page)
         }
-        Infra::Get { id } => typed_get::<InfrastructureRecord>(client, &["infrastructures", id]),
-        Infra::Create {
-            id,
-            label,
-            description,
-        } => typed_mutate::<InfrastructureRecord, _>(
-            client,
-            Method::POST,
-            &["infrastructures"],
-            &InfrastructureCreate {
-                id: id.clone(),
-                label: label.clone(),
-                description: description.clone(),
-            },
-        ),
-        Infra::Contexts { id, page } => typed_paged_get::<Collection<ContextSummary>>(
-            client,
-            &["infrastructures", id, "contexts"],
-            page,
-        ),
-        Infra::ContextCreate { id, file } => {
+        Connector::Context(ConnectorContext::List { id, page }) => {
+            typed_paged_get::<Collection<ContextSummary>>(
+                client,
+                &["connectors", id, "contexts"],
+                page,
+            )
+        }
+        Connector::Context(ConnectorContext::Create { id, file }) => {
             let spec: ContextCreate = manifest(file, "execution-context")?;
+            if spec.connector_id != *id {
+                return Err(Error::Invalid(
+                    "Execution-context connector_id differs from the selected connector.".into(),
+                ));
+            }
             spec.metadata
                 .validate()
                 .map_err(|message| Error::Invalid(message.into()))?;
@@ -57,17 +49,17 @@ pub(crate) fn infrastructure(
             typed_mutate::<ContextRegistration, _>(
                 client,
                 Method::POST,
-                &["infrastructures", id, "contexts"],
+                &["connectors", id, "contexts"],
                 &spec,
             )
         }
-        Infra::ContextUpdate {
-            infra,
+        Connector::Context(ConnectorContext::Update {
+            connector,
             context,
             location,
             disclosure,
             generation,
-        } => {
+        }) => {
             let metadata = ContextMetadata {
                 location: location.clone(),
                 disclosure: disclosure.clone(),
@@ -78,40 +70,40 @@ pub(crate) fn infrastructure(
             typed_mutate::<ContextMetadataReceipt, _>(
                 client,
                 Method::PUT,
-                &["infrastructures", infra, "contexts", context, "metadata"],
+                &["connectors", connector, "contexts", context, "metadata"],
                 &ContextMetadataUpdate {
                     metadata,
                     expected_generation: *generation,
                 },
             )
         }
-        Infra::ContextGet { infra, context } => Ok(serde_json::to_value(inspect_context(
-            client, infra, context,
-        )?)?),
-        Infra::ContextReplacementPlan {
-            infra,
+        Connector::Context(ConnectorContext::Get { connector, context }) => Ok(
+            serde_json::to_value(inspect_context(client, connector, context)?)?,
+        ),
+        Connector::Context(ConnectorContext::ReplacementPlan {
+            connector,
             context,
             replacement,
             section,
             page,
-        } => Ok(serde_json::to_value(client.context_replacement_plan(
-            infra,
+        }) => Ok(serde_json::to_value(client.context_replacement_plan(
+            connector,
             context,
             replacement.as_deref(),
             (*section).into(),
             page.limit,
             page.cursor.as_deref(),
         )?)?),
-        Infra::ContextCutover {
-            infra,
+        Connector::Context(ConnectorContext::Cutover {
+            connector,
             context,
             replacement,
             accepted_work,
             generation,
             dry_run,
-        } => context_change(
+        }) => context_change(
             client,
-            infra,
+            connector,
             context,
             *generation,
             *dry_run,
@@ -121,78 +113,76 @@ pub(crate) fn infrastructure(
                 accepted_work: (*accepted_work).into(),
             },
         ),
-        Infra::ContextReopen {
-            infra,
+        Connector::Context(ConnectorContext::Reopen {
+            connector,
             context,
             generation,
             dry_run,
-        } => context_change(
+        }) => context_change(
             client,
-            infra,
+            connector,
             context,
             *generation,
             *dry_run,
             json_output,
             ContextChange::Reopen,
         ),
-        Infra::ContextReleaseConfigurations {
-            infra,
+        Connector::Context(ConnectorContext::ReleaseConfigurations {
+            connector,
             context,
             generation,
             dry_run,
-        } => context_change(
+        }) => context_change(
             client,
-            infra,
+            connector,
             context,
             *generation,
             *dry_run,
             json_output,
             ContextChange::ReleaseConfigurations,
         ),
-        Infra::ContextRetire {
-            infra,
+        Connector::Context(ConnectorContext::Retire {
+            connector,
             context,
             generation,
             dry_run,
-        } => context_change(
+        }) => context_change(
             client,
-            infra,
+            connector,
             context,
             *generation,
             *dry_run,
             json_output,
             ContextChange::Retire,
         ),
-        Infra::ContextWaitRetirement {
-            infra,
+        Connector::Context(ConnectorContext::WaitRetirement {
+            connector,
             context,
             generation,
             interval,
             deadline,
-        } => wait_retirement(
+        }) => wait_retirement(
             client,
-            infra,
+            connector,
             context,
             *generation,
             *interval,
             *deadline,
             json_output,
         ),
-        Infra::Grants { id, page } => typed_paged_get::<Collection<ComputeGrant>>(
-            client,
-            &["infrastructures", id, "grants"],
-            page,
-        ),
-        Infra::Grant {
+        Connector::Grant(ConnectorGrant::List { id, page }) => {
+            typed_paged_get::<Collection<ComputeGrant>>(client, &["connectors", id, "grants"], page)
+        }
+        Connector::Grant(ConnectorGrant::Create {
             id,
             context,
             user,
             max_queued_runs,
             max_outstanding_assignments,
-        } => typed_mutate::<ComputeGrant, _>(
+        }) => typed_mutate::<ComputeGrant, _>(
             client,
             Method::POST,
-            &["infrastructures", id, "grants"],
+            &["connectors", id, "grants"],
             &GrantCreate {
                 context_id: context.clone(),
                 user_id: *user,
@@ -200,16 +190,19 @@ pub(crate) fn infrastructure(
                 max_outstanding_assignments: *max_outstanding_assignments,
             },
         ),
-        Infra::GrantGet { infra, grant_id } => Ok(serde_json::to_value(
-            client.compute_grant(infra, *grant_id)?,
+        Connector::Grant(ConnectorGrant::Get {
+            connector,
+            grant_id,
+        }) => Ok(serde_json::to_value(
+            client.compute_grant(connector, *grant_id)?,
         )?),
-        Infra::GrantUpdate {
-            infra,
+        Connector::Grant(ConnectorGrant::Update {
+            connector,
             grant_id,
             max_queued_runs,
             max_outstanding_assignments,
             generation,
-        } => {
+        }) => {
             if *generation < 1
                 || !(1..=10000).contains(max_queued_runs)
                 || !(1..=1024).contains(max_outstanding_assignments)
@@ -217,7 +210,7 @@ pub(crate) fn infrastructure(
                 return Err(Error::Invalid("Grant limits require a positive generation, 1–10000 queued runs and 1–1024 outstanding assignments.".into()));
             }
             Ok(serde_json::to_value(client.update_compute_grant(
-                infra,
+                connector,
                 *grant_id,
                 &GrantUpdate {
                     expected_generation: *generation,
@@ -226,55 +219,56 @@ pub(crate) fn infrastructure(
                 },
             )?)?)
         }
-        Infra::RevokeGrant { id, grant_id } => typed_mutate::<RevokedGrant, _>(
-            client,
-            Method::DELETE,
-            &["infrastructures", id, "grants", grant_id],
-            &Value::Null,
-        ),
-        Infra::Runs { id, page } => typed_paged_get::<Collection<OperationalRun>>(
-            client,
-            &["infrastructures", id, "runs"],
-            page,
-        ),
-        Infra::Audit { id, page } => typed_paged_get::<Collection<AuditEvent>>(
-            client,
-            &["audit", "infrastructure", id],
-            page,
-        ),
-        Infra::Members { id } => {
-            typed_get::<ResourceMembers>(client, &["infrastructures", id, "members"])
+        Connector::Grant(ConnectorGrant::Revoke { id, grant_id }) => {
+            typed_mutate::<RevokedGrant, _>(
+                client,
+                Method::DELETE,
+                &["connectors", id, "grants", grant_id],
+                &Value::Null,
+            )
         }
-        Infra::MemberAdd {
+        Connector::Runs { id, page } => {
+            typed_paged_get::<Collection<OperationalRun>>(client, &["connectors", id, "runs"], page)
+        }
+        Connector::Audit { id, page } => {
+            typed_paged_get::<Collection<AuditEvent>>(client, &["audit", "connector", id], page)
+        }
+        Connector::Member(ConnectorMember::List { id }) => {
+            typed_get::<ResourceMembers>(client, &["connectors", id, "members"])
+        }
+        Connector::Member(ConnectorMember::Add {
             id,
             user,
             generation,
-        } => member(client, "infrastructures", id, *user, *generation, true),
-        Infra::MemberRemove {
+        }) => member(client, "connectors", id, *user, *generation, true),
+        Connector::Member(ConnectorMember::Remove {
             id,
             user,
             generation,
-        } => member(client, "infrastructures", id, *user, *generation, false),
-        Infra::Transfer { id, to, generation } => typed_mutate::<TransferProposalReceipt, _>(
-            client,
-            Method::POST,
-            &["infrastructures", id, "ownership-transfers"],
-            &TransferCreate {
-                to_user_id: *to,
-                expected_generation: *generation,
-            },
-        ),
-        Infra::AcceptTransfer { id, transfer_id } => {
-            accept_transfer(client, "infrastructure", id, transfer_id)
+        }) => member(client, "connectors", id, *user, *generation, false),
+        Connector::Ownership(ConnectorOwnership::Transfer { id, to, generation }) => {
+            typed_mutate::<TransferProposalReceipt, _>(
+                client,
+                Method::POST,
+                &["connectors", id, "ownership-transfers"],
+                &TransferCreate {
+                    to_user_id: *to,
+                    expected_generation: *generation,
+                },
+            )
         }
-        Infra::Archive { id, generation } => typed_mutate::<ArchiveReceipt, _>(
+        Connector::Ownership(ConnectorOwnership::Accept { id, transfer_id }) => {
+            accept_transfer(client, "connector", id, transfer_id)
+        }
+        Connector::Archive { id, generation } => typed_mutate::<ArchiveReceipt, _>(
             client,
             Method::POST,
-            &["infrastructures", id, "archive"],
+            &["connectors", id, "archive"],
             &GenerationChange {
                 expected_generation: *generation,
             },
         ),
+        _ => unreachable!("connector resource dispatch"),
     }
 }
 
@@ -327,11 +321,11 @@ impl ContextChange {
 
 fn inspect_context(
     client: &EnumerayClient,
-    infra: &str,
+    connector: &str,
     context: &str,
 ) -> Result<ContextLifecycleStatus, Error> {
-    let observed = client.context_status(infra, context)?;
-    if observed.id != context || observed.infrastructure_id != infra {
+    let observed = client.context_status(connector, context)?;
+    if observed.id != context || observed.connector_id != connector {
         return Err(Error::Invalid(
             "Context inspection returned a different resource.".into(),
         ));
@@ -417,7 +411,7 @@ fn work_description(observed: &ContextLifecycleStatus) -> String {
 
 fn context_change(
     client: &EnumerayClient,
-    infra: &str,
+    connector: &str,
     context: &str,
     generation: i64,
     dry_run: bool,
@@ -429,7 +423,7 @@ fn context_change(
             "Context generation must be positive.".into(),
         ));
     }
-    let observed = inspect_context(client, infra, context)?;
+    let observed = inspect_context(client, connector, context)?;
     let request = match &change {
         ContextChange::Cutover {
             replacement,
@@ -447,7 +441,7 @@ fn context_change(
         check_generation(&observed, generation)?;
         let plan = if let ContextChange::Cutover { replacement, .. } = &change {
             let plan = client.context_replacement_plan(
-                infra,
+                connector,
                 context,
                 replacement.as_deref(),
                 ContextDependencySection::Publications,
@@ -483,7 +477,7 @@ fn context_change(
             replacement,
             accepted_work,
         } => client.cutover_context(
-            infra,
+            connector,
             context,
             &ContextCutover {
                 expected_generation: generation,
@@ -491,18 +485,18 @@ fn context_change(
                 accepted_work,
             },
         )?,
-        ContextChange::Reopen => client.reopen_context(infra, context, &guard)?,
+        ContextChange::Reopen => client.reopen_context(connector, context, &guard)?,
         ContextChange::ReleaseConfigurations => {
-            client.release_context_configurations(infra, context, &guard)?
+            client.release_context_configurations(connector, context, &guard)?
         }
-        ContextChange::Retire => client.retire_context(infra, context, &guard)?,
+        ContextChange::Retire => client.retire_context(connector, context, &guard)?,
     };
     Ok(serde_json::to_value(receipt)?)
 }
 
 fn wait_retirement(
     client: &EnumerayClient,
-    infra: &str,
+    connector: &str,
     context: &str,
     generation: i64,
     interval: u64,
@@ -527,7 +521,7 @@ fn wait_retirement(
             return Err(elapsed());
         }
         let bounded = client.with_timeout_limit(remaining)?;
-        let observed = inspect_context(&bounded, infra, context).map_err(|error| {
+        let observed = inspect_context(&bounded, connector, context).map_err(|error| {
             if Instant::now() >= until {
                 elapsed()
             } else {

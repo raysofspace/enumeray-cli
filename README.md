@@ -4,7 +4,7 @@ Enumeray makes installed scientific models available through a self-service CLI
 and HTTP API. This repository owns the independent `enumeray` executable, typed
 HTTP client, outbound connector, compute runner and shared wire contracts.
 
-One executable supports model users, model authors and infrastructure owners.
+One executable supports model users, model authors and connector owners.
 It connects to an authorized Enumeray service. Building and local tests require
 no service checkout, database credentials or running API.
 

@@ -34,9 +34,9 @@ fn observations_name_responsible_roles_without_inventing_blockage_or_outcome() {
         ("publication_revoked", "model administrator"),
         ("installation_revoked", "model administrator"),
         ("no_approved_execution_path", "model administrator"),
-        ("compute_access_revoked", "infrastructure owner"),
-        ("infrastructure_unavailable", "infrastructure owner"),
-        ("connector_maintenance", "infrastructure owner"),
+        ("compute_access_revoked", "connector owner"),
+        ("compute_unavailable", "connector owner"),
+        ("connector_maintenance", "connector owner"),
         ("future_reason", "unknown"),
     ] {
         let value =
@@ -56,7 +56,7 @@ fn observations_name_responsible_roles_without_inventing_blockage_or_outcome() {
         &json!({"state":"running","phase":"executing","observation_freshness":"stale"}),
     );
     assert!(stale.contains("stale observation does not establish failure"));
-    assert!(stale.contains("Next responsible role: infrastructure owner"));
+    assert!(stale.contains("Next responsible role: connector owner"));
     for state in ["succeeded", "failed", "cancelled"] {
         let output = observation(&json!({"state":state,"observation_freshness":"stale"}));
         assert!(output.contains("run submitter / model administrator"));
@@ -244,7 +244,6 @@ fn previews_generations_profiles_and_secret_receipts_are_readable() {
         &args(&[
             "connector",
             "maintenance",
-            "lab",
             "worker",
             "--generation",
             "7",
@@ -551,8 +550,8 @@ fn raw_api_keeps_pretty_json_and_missing_fields_never_panic() {
     );
     for command in [
         vec!["service", "status"],
-        vec!["infra", "get", "lab"],
-        vec!["connector", "get", "lab", "worker"],
+        vec!["connector", "get", "worker"],
+        vec!["connector", "member", "list", "worker"],
         vec!["artifact", "get", "artifact"],
         vec!["model", "publication", "example", "one"],
         vec!["run", "provenance", "run-one"],

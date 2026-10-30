@@ -44,7 +44,6 @@ fn execute_value(args: &Args) -> Result<Value, Error> {
         Command::Auth(_) => unreachable!(),
         Command::Runtime(_) => unreachable!("runtime dispatch precedes user profile access"),
         Command::Service(command) => commands::service(&client, command),
-        Command::Infra(command) => commands::infrastructure(&client, command, args.json),
         Command::Connector(command) => commands::connector(&client, command, args.json),
         Command::Model(command) => commands::model(&client, command),
         Command::Access(command) => commands::access(&client, command, args.json),

@@ -1,7 +1,7 @@
 # Connector drivers and connections
 
 This reference also appears in the [web documentation](https://doc.enumeray.com/).
-See that entry point for local preview and role-based infrastructure guides.
+See that entry point for local preview and connector guides.
 
 An execution context combines a **driver**, which owns the job lifecycle, with a
 **connection**, which reaches the compute runner. Model wrappers own scientific
@@ -64,9 +64,8 @@ and invokes `"$1" local-worker --directory "$2"` in the foreground. See the
 
 ## Register a context without reading the code
 
-As an authenticated infrastructure owner, save this complete process/direct
-manifest as `context.json`. The example assumes an infrastructure `lab` and its
-enrolled `lab-connector`:
+As an authenticated connector owner, save this complete process/direct
+manifest as `context.json`. The example assumes an enrolled connector `lab-connector`:
 
 ```json
 {
@@ -112,10 +111,10 @@ execution awaiting publication. Location/disclosure text is consumer-facing;
 publications snapshot it at registration.
 
 ```sh
-enumeray infra context-create lab --file context.json
-enumeray infra contexts lab
-enumeray connector diagnostics lab lab-connector
-enumeray infra grant lab --context lab-cpu --user MODEL_OWNER_UUID
+enumeray connector context create lab-connector --file context.json
+enumeray connector context list lab-connector
+enumeray connector diagnostics lab-connector
+enumeray connector grant create lab-connector --context lab-cpu --user MODEL_OWNER_UUID
 ```
 
 Use the model author's stable `auth whoami` user UUID. Registration saves the
@@ -124,7 +123,7 @@ execution identity and backend readiness. The grant permits author publication
 but provides no host login or file deployment. Agree the deployment route and
 runtime with the author before publication. Execution settings are immutable;
 create a new context to change roots, identity, driver or connection. Metadata
-edits use `infra context-update` with its observed generation.
+edits use `connector context update` with its observed generation.
 
 For SSH, replace `definition.connection` with the object below, retaining the
 complete manifest envelope and other definition fields:

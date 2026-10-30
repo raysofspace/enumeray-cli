@@ -127,7 +127,6 @@ fn call(root: &Path, server: &Server, creation: bool, json: bool, destination: &
     command.args([
         "connector",
         if creation { "create" } else { "enrollment" },
-        "lab",
         "worker",
     ]);
     if creation {
@@ -168,13 +167,12 @@ fn creation_and_replacement_publish_private_documents_with_compatible_summaries(
                 let summary: Value = serde_json::from_slice(&output.stdout).unwrap();
                 assert_eq!(
                     summary,
-                    json!({"saved_to":destination,"connector_id":"worker","infra":"lab"})
+                    json!({"saved_to":destination,"connector_id":"worker"})
                 );
             } else {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 assert!(stdout.contains(&format!("Saved to: {}", destination.display())));
                 assert!(stdout.contains("Connector: worker"));
-                assert!(stdout.contains("Infrastructure: lab"));
             }
             assert!(
                 !String::from_utf8_lossy(&output.stdout)
@@ -195,9 +193,9 @@ fn creation_and_replacement_publish_private_documents_with_compatible_summaries(
             let requests = server.finish();
             assert_eq!(requests.len(), 1);
             let route = if creation {
-                "/api/v1/infrastructures/lab/connectors"
+                "/api/v1/connectors"
             } else {
-                "/api/v1/infrastructures/lab/connectors/worker/enrollments"
+                "/api/v1/connectors/worker/enrollments"
             };
             assert!(requests[0].starts_with(&format!("POST {route} HTTP/1.1")));
         }
@@ -249,15 +247,12 @@ fn replay_and_invalid_documents_are_never_saved_and_inspect_only_once() {
                 let message = assert_failure(&output, json);
                 assert!(message.contains("confirmed that the connector is registered"));
                 assert!(message.contains(
-                    "enumeray connector enrollment 'lab' 'worker' --output NEW-ENROLLMENT.json"
+                    "enumeray connector enrollment 'worker' --output NEW-ENROLLMENT.json"
                 ));
                 assert!(!destination.exists());
                 let requests = server.finish();
                 assert_eq!(requests.len(), 2);
-                assert!(
-                    requests[1]
-                        .starts_with("GET /api/v1/infrastructures/lab/connectors/worker HTTP/1.1")
-                );
+                assert!(requests[1].starts_with("GET /api/v1/connectors/worker HTTP/1.1"));
             }
         }
     }
@@ -426,5 +421,5 @@ fn save_failures_and_destination_races_never_clobber_or_claim_success() {
 }
 
 fn registered_connector() -> Value {
-    json!({"connector_id":"worker","label":"Worker","generation":1,"observed_generation":1,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4,"secret":URL_SAFE_NO_PAD.encode(SECRET_BYTES)})
+    json!({"connector_id":"worker","owner_id":"11111111-1111-4111-8111-111111111111","ownership_generation":1,"archived_at":null,"label":"Worker","generation":1,"observed_generation":1,"draining":false,"authority_withdrawn":false,"max_outstanding_assignments":4,"secret":URL_SAFE_NO_PAD.encode(SECRET_BYTES)})
 }

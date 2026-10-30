@@ -4,7 +4,7 @@ mod access;
 mod artifact;
 mod auth;
 mod connector;
-mod infrastructure;
+mod connector_resource;
 mod model;
 mod run;
 mod service;
@@ -13,7 +13,7 @@ pub(crate) use access::access;
 pub(crate) use artifact::artifact;
 pub(crate) use auth::auth;
 pub(crate) use connector::connector;
-pub(crate) use infrastructure::infrastructure;
+
 pub(crate) use model::model;
 pub(crate) use run::run;
 pub(crate) use service::service;
