@@ -97,6 +97,23 @@ class MemoryGitHub:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_metadata_changed_after_fetch_cannot_be_published_or_repaired_silently(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
+            root = Path(temporary)
+            record, _ = artifacts(root, '0.1.0-alpha.1', 'candidate')
+            publication, _ = identity('publish', '0.1.0-alpha.1', 'candidate')
+            publication['manifest_sha256'] = delivery.sha256(root / delivery.MANIFEST)
+            receipt = root / 'service-publish.json'
+            receipt.write_text(json.dumps({k: v for k, v in publication.items() if k != 'receipt_sha256'}))
+            publication['receipt_sha256'] = delivery.sha256(receipt)
+            (root / 'service-publish.sigstore.json').write_text('{}')
+            client = MemoryGitHub(root)
+            original = copy.deepcopy(client.record)
+            client.release = mock.Mock(side_effect=[original, {**original, 'prerelease': False}])
+            with self.assertRaisesRegex(ValueError, 'release metadata'):
+                delivery.publish(client, publication, Path(destination), root, run=mock.Mock())
+            self.assertEqual(client.calls, [])
+
     def test_alpha_release_metadata_and_baseline_status_cannot_be_substituted(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
             root = Path(temporary)

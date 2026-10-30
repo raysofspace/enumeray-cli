@@ -506,6 +506,7 @@ def publish(client, identity, directory, evidence, run=subprocess.run):
         if prepare[field] != identity[field]:
             raise ValueError('Preparation and publication identities differ')
     release = client.release(identity['tag'])
+    validate_release(release, identity['version'])
     if release['draft']:
         upload_service_evidence(client, release, evidence, 'publish', run)
     else:
