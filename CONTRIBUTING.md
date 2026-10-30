@@ -27,16 +27,32 @@ The public selector also provides focused check groups:
 ```sh
 scripts/verify.sh plan --area native-clients
 scripts/verify.sh native-clients
+scripts/verify.sh native-platform
 scripts/verify.sh connector
 scripts/verify.sh python
 scripts/verify.sh validate
 ```
 
-`static`, `native-clients`, `connector` and `python` are ordinary profiles;
-`full` runs all ordinary public checks. `backends` explicitly runs the bounded
-real SSH/Slurm fixture; `mounts` explicitly runs the native Linux bind-mount
-regression. Register new suites and ignored tests in `scripts/test-strategy.json`
-and run `scripts/verify.sh validate` after changing their structure.
+`static`, `native-clients`, `native-platform`, `connector` and `python` are ordinary
+profiles; `full` runs all ordinary public checks. `native-platform` adds connector
+library and compute-runner tests to the client checks, covering native process,
+filesystem, cleanup and recovery behavior. `connector` also runs the connector
+host, service and host-enrollment integration suites.
+
+Public CI runs `full` on Linux x86-64 and `native-platform` on Linux ARM64 and
+both macOS CPUs. Formatting, static analysis, Python tooling and the connector
+integration suites run on Linux x86-64. The macOS 15 checks exercise native
+behavior; release qualification separately requires actual macOS 14 on each CPU,
+the packaged archive and Homebrew lifecycle checks.
+CI caches Rust dependencies separately for each runner image, CPU and profile,
+including after test failures. It disables debug symbols and incremental builds
+and limits Rust test concurrency to two threads. Superseded pull-request runs
+are cancelled.
+
+`backends` explicitly runs the bounded real SSH/Slurm fixture; `mounts` explicitly
+runs the native Linux bind-mount regression. Register new suites and ignored
+tests in `scripts/test-strategy.json` and run `scripts/verify.sh validate` after
+changing their structure.
 
 Add focused regressions for behavior changes. Preserve deterministic race,
 authorization, cancellation, rollback and recovery coverage. Ordinary tests use

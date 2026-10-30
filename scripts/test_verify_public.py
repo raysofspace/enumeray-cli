@@ -1,6 +1,9 @@
 """Public verification inventory and isolation regressions without running builds."""
 import copy
+import contextlib
 import importlib.util
+import io
+import json
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -21,11 +24,57 @@ class PublicVerificationTests(unittest.TestCase):
     def test_full_profile_keeps_backend_fixtures_explicit(self):
         catalogue = verify.load_catalogue()
         checks = catalogue['profiles']['full']
-        self.assertTrue({'contracts', 'client-cli', 'connector', 'python'} <= set(checks))
+        self.assertTrue({'contracts', 'client-cli', 'connector-native', 'connector-integration', 'python'} <= set(checks))
+        self.assertEqual(set(checks), {name for name, check in catalogue['checks'].items()
+                                      if not check.get('explicit')})
+        self.assertEqual(len(checks), len(set(checks)))
         self.assertTrue(all(not catalogue['checks'][name].get('explicit') for name in checks))
         variants = catalogue['checks']['contracts']['commands']
         self.assertTrue(any('--no-default-features' in argv for argv in variants))
         self.assertTrue(any('openapi' in argv for argv in variants))
+
+    def test_connector_profile_preserves_both_native_and_integration_suites(self):
+        catalogue = verify.load_catalogue()
+        checks = catalogue['profiles']['connector']
+        self.assertEqual(set(checks), {'connector-native', 'connector-integration'})
+        expected = {
+            'connector_runner': 'connector-native',
+            'connector_host': 'connector-integration',
+            'connector_service': 'connector-integration',
+            'connector_host_enrollment': 'connector-integration',
+        }
+        for target, check in expected.items():
+            with self.subTest(target=target):
+                self.assertIn(check, catalogue['profiles']['full'])
+                self.assertEqual(catalogue['suites']['crates/cli/tests/' + target + '.rs'], check)
+                commands = catalogue['checks'][check]['commands']
+                self.assertTrue(any(target in command for command in commands))
+
+    def test_native_platform_executes_client_and_native_connector_behavior(self):
+        catalogue = verify.load_catalogue()
+        checks = catalogue['profiles']['native-platform']
+        self.assertTrue(set(catalogue['profiles']['native-clients']) <= set(checks))
+        self.assertIn('connector-native', checks)
+        with mock.patch.object(verify.subprocess, 'run', return_value=mock.Mock(returncode=0)) as run, \
+             mock.patch.object(verify.shutil, 'which', return_value='/tool'), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(verify.main(['native-platform']), 0)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(['cargo', 'test', '--locked', '-p', 'enumeray-connector', '--lib', '--all-features'], commands)
+        self.assertTrue(any('-p' in command and 'enumeray-client' in command and '--all-targets' in command
+                            for command in commands))
+        self.assertTrue(any('enumeray-cli' in command and 'connector_runner' in command for command in commands))
+        self.assertFalse(any('connector_service' in command or 'connector_host' in command
+                             or 'connector_host_enrollment' in command for command in commands))
+        self.assertTrue(all(command[:2] == ['cargo', 'test'] and '--doc' not in command for command in commands))
+
+    def test_native_plan_combines_profiles_without_repeating_checks(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), mock.patch.object(verify.subprocess, 'run') as run:
+            self.assertEqual(verify.main(['plan', 'native-platform', 'connector', '--json']), 0)
+        self.assertEqual(json.loads(output.getvalue())['checks'],
+                         ['contracts', 'client-cli', 'connector-native', 'connector-integration'])
+        run.assert_not_called()
 
     def test_unregistered_suite_and_ignored_case_are_rejected(self):
         for section in ('suites', 'ignored'):

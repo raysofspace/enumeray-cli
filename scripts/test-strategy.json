@@ -124,7 +124,7 @@
         "cargo"
       ]
     },
-    "connector": {
+    "connector-native": {
       "commands": [
         [
           "cargo",
@@ -143,13 +143,28 @@
           "enumeray-cli",
           "--all-features",
           "--test",
+          "connector_runner"
+        ]
+      ],
+      "tools": [
+        "cargo"
+      ]
+    },
+    "connector-integration": {
+      "commands": [
+        [
+          "cargo",
+          "test",
+          "--locked",
+          "-p",
+          "enumeray-cli",
+          "--all-features",
+          "--test",
           "connector_host",
           "--test",
           "connector_service",
           "--test",
-          "connector_host_enrollment",
-          "--test",
-          "connector_runner"
+          "connector_host_enrollment"
         ]
       ],
       "tools": [
@@ -275,8 +290,14 @@
       "contracts",
       "client-cli"
     ],
+    "native-platform": [
+      "contracts",
+      "client-cli",
+      "connector-native"
+    ],
     "connector": [
-      "connector"
+      "connector-native",
+      "connector-integration"
     ],
     "python": [
       "python"
@@ -286,7 +307,8 @@
       "static",
       "contracts",
       "client-cli",
-      "connector",
+      "connector-native",
+      "connector-integration",
       "python"
     ],
     "backends": [
@@ -305,10 +327,10 @@
     "crates/cli/tests/unified.rs": "client-cli",
     "crates/cli/tests/observation.rs": "client-cli",
     "crates/cli/tests/commands.rs": "client-cli",
-    "crates/cli/tests/connector_runner.rs": "connector",
-    "crates/cli/tests/connector_host.rs": "connector",
-    "crates/cli/tests/connector_service.rs": "connector",
-    "crates/cli/tests/connector_host_enrollment.rs": "connector",
+    "crates/cli/tests/connector_runner.rs": "connector-native",
+    "crates/cli/tests/connector_host.rs": "connector-integration",
+    "crates/cli/tests/connector_service.rs": "connector-integration",
+    "crates/cli/tests/connector_host_enrollment.rs": "connector-integration",
     "crates/client/tests/http.rs": "client-cli",
     "crates/client/tests/transfer_recovery.rs": "client-cli",
     "scripts/test_package_binaries.py": "python",

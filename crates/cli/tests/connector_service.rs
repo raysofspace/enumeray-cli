@@ -1404,6 +1404,10 @@ async fn completed_payload_cleanup_resumes_archives_without_changing_receipts_or
         peer.lose_report = true;
     }
     let child = start(&scratch, &api, 3);
+    // Real runner launches and lost-reply reconciliation have their own
+    // convergence budget; archive convergence starts after all results arrive.
+    api.until(|peer| peer.jobs.len() == 4 && peer.jobs.values().all(|job| job.result.is_some()))
+        .await;
     archived(&scratch, 4).await;
     stop(child).await;
     let archives: Vec<_> = fs::read_dir(scratch.journal().join("archive"))
@@ -2792,10 +2796,22 @@ async fn development_restart_without_consent_observes_delivers_and_cancels_one_l
         use_real_identity(&scratch, true);
         let api = Api::start(1, true).await;
         let mut child = start_with_policy(&scratch, &api, 1, true);
+        // The executing event precedes the model process starting. Wait for
+        // the gated wrapper itself so cancellation after restart must recover
+        // an existing scientific launch, even on a busy test host.
         api.until(|peer| {
             peer.events
                 .values()
                 .any(|event| event["phase"] == "executing")
+                && peer.jobs.values().any(|job| {
+                    scratch
+                        .0
+                        .join(format!(
+                            "wrapper-started-{}",
+                            job.assignment["attempt_id"].as_str().unwrap()
+                        ))
+                        .exists()
+                })
         })
         .await;
         let intent = scratch.read()["prepared_assignments"][0]["launch_intent_id"].clone();
