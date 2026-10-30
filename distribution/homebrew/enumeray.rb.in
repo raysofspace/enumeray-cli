@@ -9,7 +9,7 @@ class Enumeray < Formula
   depends_on :macos
 
   on_macos do
-    depends_on macos: :sonoma
+    depends_on macos: :sequoia
     on_arm do
       url "@ARM_URL@"
       sha256 "@ARM_SHA256@"
@@ -28,6 +28,9 @@ class Enumeray < Formula
 
   def caveats
     <<~EOS
+      This release may be an alpha, as indicated by its version. Alpha updates
+      may require a fresh installation; no in-place alpha upgrade is promised.
+      Preserve existing state and matching binaries before changing versions.
       Connector and compute-runner hosts need the matching qualified release.
       Stop the connector daemon before replacing its executable; preserve its
       credentials and journal, coordinate runner replacement, and restart explicitly.

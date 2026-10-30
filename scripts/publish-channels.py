@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Submit or inspect immutable channel-update PRs; dry-run unless --submit is set.
 
-Use a separately scoped GH_TOKEN for each invocation. A Conda review never gates
-the independent Homebrew update. This helper does not publish release assets,
+Use a GH_TOKEN scoped to the project Homebrew tap. This helper does not publish release assets,
 merge PRs, fork repositories, or create repositories.
 """
 import argparse
@@ -12,7 +11,6 @@ import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
-import re
 import subprocess
 from urllib.parse import quote, urlencode
 
@@ -56,13 +54,12 @@ def load_delivery(directory, channel, config):
     for name in ("repository", "base_branch"):
         if entry.get(name) != settings.get(name, "main" if name == "base_branch" else None):
             raise DeliveryError("Channel configuration changed; regenerate into a new delivery directory")
-    if channel == "conda":
-        for name in ("mode", "fork_repository", "recipe_directory", "maintainers"):
-            if entry.get("state") == "ready" and entry.get(name) != settings.get(name):
-                raise DeliveryError("Conda configuration changed; regenerate the delivery plan")
     version = plan.get("release", {}).get("version", "")
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise DeliveryError("Invalid delivery version")
+    try:
+        generation.artifacts_policy.validate_version(version)
+        generation.artifacts_policy.validate_baseline(plan.get("release", {}).get("baseline"), version)
+    except ValueError as error:
+        raise DeliveryError(str(error)) from None
     if entry.get("branch") != "codex/enumeray-v" + version:
         raise DeliveryError("The update branch does not identify this immutable version")
     desired = {}
@@ -103,7 +100,7 @@ def verify_branch_contents(api, repository, revision, desired):
 
 def submit_channel(api, plan, entry, desired):
     repository = entry["repository"]
-    head_repository = entry.get("fork_repository") or repository
+    head_repository = repository
     branch = entry["branch"]
     base = entry["base_branch"]
     pr = find_pull_request(api, repository, head_repository, branch, base)
@@ -172,8 +169,6 @@ def deliver(directory, channel, config, submit=False, api=None):
     result = {"schema_version": 1, "channel": channel, "version": plan["release"]["version"]}
     if entry["state"] != "ready":
         return {**result, "state": entry["state"], "reason": entry.get("reason", "Channel is not ready")}
-    if channel == "conda" and not entry.get("fork_repository"):
-        return {**result, "state": "blocked-configuration", "reason": "Configure the maintainer-owned Conda fork"}
     if not desired:
         raise DeliveryError("The channel has no generated package files")
     if not submit:
@@ -188,7 +183,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--delivery", required=True, type=Path)
     parser.add_argument("--config", type=Path, default=ROOT / "distribution/channels.json")
-    parser.add_argument("--channel", choices=("homebrew", "conda"), required=True)
+    parser.add_argument("--channel", choices=("homebrew",), required=True)
     parser.add_argument("--submit", action="store_true", help="Create or reuse this channel's versioned update PR")
     parser.add_argument("--status", type=Path, help="Write this attempt's channel status outside immutable release assets")
     args = parser.parse_args()

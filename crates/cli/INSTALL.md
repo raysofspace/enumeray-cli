@@ -4,15 +4,22 @@ One `enumeray` executable provides user commands, connector operation and the
 compute runner. Install the same qualified package on each required host.
 Users need no API checkout, PostgreSQL, database credentials, Python or installer
 to run the executable. Select a qualified archive for your operating system and
-CPU. The supported matrix is macOS **14 or newer** and Linux **glibc 2.28 or newer**,
+CPU. The supported matrix is macOS **15 or newer** and Linux **glibc 2.28 or newer**,
 each on x86-64 and ARM64. Alpine/musl, Windows and older systems are outside this
 matrix. Each platform must pass its own oldest-supported-environment checks before
 publication. A build on a newer system alone does not qualify that minimum.
 
 Package availability follows the matching service's release qualification.
-Until a qualified release is published, build from source below. Homebrew tap
-publication and conda-forge acceptance are tracked independently; a pending
-Conda review does not block qualified direct downloads or Homebrew delivery.
+Until a qualified release is published, build from source below. Direct downloads
+and the project Homebrew tap are the supported distribution channels.
+
+**Alpha: 0.1.0-alpha.1.** Commands and APIs may change. Alpha updates may require
+a separate fresh installation; no in-place upgrade compatibility is promised.
+Read the target release's instructions before upgrading. Keep valuable existing
+state with its matching binaries; installation and removal never recreate or
+clear credentials, configuration or connector journals. The persistent baseline
+remains provisional. Alpha labeling does not relax execution, authorization or
+recovery checks.
 
 ## Homebrew on macOS
 
@@ -45,7 +52,7 @@ replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
 `x86_64-unknown-linux-gnu` as appropriate:
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.0-alpha.1
 TARGET=aarch64-apple-darwin
 REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
@@ -82,7 +89,7 @@ checksum from the same untrusted download happens to match.
 Choose any writable prefix, with `$HOME/.local` as the default. The commands below
 stage beside the destination and rename on the same filesystem, so an interrupted
 copy leaves the previous executable in place. Use a prefix you manage directly;
-use Homebrew or Conda to update executables owned by those package managers.
+use Homebrew to update executables owned by that package manager.
 Coordinate connector/runner maintenance before replacing an existing package.
 
 <!-- manual-install-copy -->
@@ -125,29 +132,6 @@ SSH execution needs OpenSSH on the connector host and the matching Enumeray
 executable on each remote execution host. Slurm compute nodes need the same
 qualified executable. Install it at the path approved by the site operator.
 
-## Conda and Mamba
-
-After the recipe has been accepted and its four platform packages qualified,
-select an explicit version in a new or existing environment:
-
-```sh
-conda create --name enumeray-work -c conda-forge enumeray=0.1.0
-conda activate enumeray-work
-enumeray --version
-```
-
-The equivalent `mamba create` command is supported by the package format. Conda
-builds this package from the same versioned public source and `Cargo.lock` as the
-release, using the pinned Rust toolchain. It does not repackage an upstream
-executable. No Python runtime dependency or service startup hook is introduced.
-Compatibility/source metadata and dependency license evidence are installed in
-`$CONDA_PREFIX/share/enumeray`.
-
-After coordinating maintenance, request a qualified upgrade with
-`conda install -c conda-forge enumeray=VERSION`. Remove only this package with
-`conda remove enumeray` in the selected environment; keep private credentials and
-journals outside the environment. Channel acceptance or solver success alone
-does not authorize mixing connector, runner and API release identities.
 
 ## Build from a release source archive
 
@@ -157,7 +141,7 @@ explicit release version as the service and download these three files from the
 public release:
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.0-alpha.1
 TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-source.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"

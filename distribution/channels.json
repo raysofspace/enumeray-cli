@@ -3,13 +3,5 @@
   "homebrew": {
     "repository": "raysofspace/homebrew-tap",
     "base_branch": "main"
-  },
-  "conda": {
-    "mode": "staged-recipes",
-    "repository": "conda-forge/staged-recipes",
-    "fork_repository": null,
-    "base_branch": "main",
-    "recipe_directory": "recipes/enumeray",
-    "maintainers": []
   }
 }

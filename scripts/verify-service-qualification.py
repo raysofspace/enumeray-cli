@@ -2,6 +2,7 @@
 """Authenticate a private service receipt before public preparation or publication."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,10 @@ import tempfile
 SERVICE_REPOSITORY = 'raysofspace/enumeray'
 PUBLIC_REPOSITORY = 'raysofspace/enumeray-cli'
 ISSUER = 'https://token.actions.githubusercontent.com'
+
+_spec = importlib.util.spec_from_file_location('release_artifacts', Path(__file__).with_name('release_artifacts.py'))
+artifacts = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(artifacts)
 
 
 def full_hash(value, length=64):
@@ -30,15 +35,10 @@ def validate_record(record, purpose):
         if not full_hash(record.get(field), 40):
             raise ValueError('A full immutable source revision is required: ' + field)
     version = record.get('version')
-    if not isinstance(version, str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
-        raise ValueError('A stable release version is required')
+    artifacts.validate_version(version)
     if not isinstance(record.get('qualification_run'), str) or not re.fullmatch(r'[1-9][0-9]*', record['qualification_run']):
         raise ValueError('A matching-service qualification run is required')
-    baseline = record.get('baseline')
-    if (not isinstance(baseline, dict) or set(baseline) != {'id', 'sha256'} or
-            not isinstance(baseline['id'], str) or not re.fullmatch(r'persistent-v[1-9][0-9]*', baseline['id']) or
-            not full_hash(baseline['sha256'])):
-        raise ValueError('An activated persistent baseline identity is required')
+    artifacts.validate_baseline(record.get('baseline'), version)
     if purpose == 'publish' and not full_hash(record.get('manifest_sha256')):
         raise ValueError('Publication requires the exact candidate manifest digest')
     return record

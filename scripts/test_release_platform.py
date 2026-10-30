@@ -49,8 +49,8 @@ class PlatformAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'native execution'):
                 audit.audit_platform(Path('/unused'), 'x86_64-unknown-linux-gnu', {'os': 'linux', 'glibc': '2.28'})
 
-    def test_macos15_does_not_qualify_macos14_and_late_deployment_target_is_rejected(self):
-        for runtime, minimum, expected in [('14.7.1', '14.0', True), ('15.5', '14.0', False)]:
+    def test_newer_macos_does_not_qualify_macos15_and_late_deployment_target_is_rejected(self):
+        for runtime, minimum, expected in [('15.7.1', '15.0', True), ('26.7', '15.0', False)]:
             with self.subTest(runtime=runtime), \
                  mock.patch.object(audit.platform, 'system', return_value='Darwin'), \
                  mock.patch.object(audit.platform, 'machine', return_value='arm64'), \
@@ -58,16 +58,16 @@ class PlatformAuditTests(unittest.TestCase):
                 replies = ['0\n', 'arm64\n', 'cmd LC_BUILD_VERSION\n minos ' + minimum,
                            'enumeray:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n']
                 result = audit.audit_platform(Path('/unused'), 'aarch64-apple-darwin',
-                                              {'os': 'macos', 'version': '14.0'},
+                                              {'os': 'macos', 'version': '15.0'},
                                               run=mock.Mock(side_effect=replies))
                 self.assertEqual(result['platform_qualified'], expected)
         with mock.patch.object(audit.platform, 'system', return_value='Darwin'), \
              mock.patch.object(audit.platform, 'machine', return_value='arm64'), \
-             mock.patch.object(audit.platform, 'mac_ver', return_value=('14.7', (), '')):
+             mock.patch.object(audit.platform, 'mac_ver', return_value=('15.7', (), '')):
             with self.assertRaisesRegex(ValueError, 'deployment target'):
                 audit.audit_platform(Path('/unused'), 'aarch64-apple-darwin',
-                                     {'os': 'macos', 'version': '14.0'},
-                                     run=mock.Mock(side_effect=['0', 'arm64', 'minos 15.0']))
+                                     {'os': 'macos', 'version': '15.0'},
+                                     run=mock.Mock(side_effect=['0', 'arm64', 'minos 16.0']))
 
     def test_rosetta_process_cannot_establish_native_intel_qualification(self):
         with mock.patch.object(audit.platform, 'system', return_value='Darwin'), \
@@ -75,7 +75,7 @@ class PlatformAuditTests(unittest.TestCase):
             runner = mock.Mock(return_value='1\n')
             with self.assertRaisesRegex(ValueError, 'Rosetta'):
                 audit.audit_platform(Path('/unused'), 'x86_64-apple-darwin',
-                                     {'os': 'macos', 'version': '14.0'}, run=runner)
+                                     {'os': 'macos', 'version': '15.0'}, run=runner)
             self.assertEqual(runner.call_args.args[0], ['sysctl', '-n', 'sysctl.proc_translated'])
 
     def test_only_real_intel_unknown_oid_can_bypass_absent_translation_flag(self):

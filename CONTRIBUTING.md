@@ -42,7 +42,7 @@ host, service and host-enrollment integration suites.
 Public CI runs `full` on Linux x86-64 and `native-platform` on Linux ARM64 and
 both macOS CPUs. Formatting, static analysis, Python tooling and the connector
 integration suites run on Linux x86-64. The macOS 15 checks exercise native
-behavior; release qualification separately requires actual macOS 14 on each CPU,
+behavior; release qualification separately requires actual macOS 15 on each CPU,
 the packaged archive and Homebrew lifecycle checks.
 CI caches Rust dependencies separately for each runner image, CPU and profile,
 including after test failures. It disables debug symbols and incremental builds
@@ -113,15 +113,14 @@ service release; publication also requires the matching service integration gate
 ## Channel delivery
 
 See [distribution maintenance](distribution/README.md) for the shared signed
-manifest, Homebrew formula and conda-forge source recipe. Generate updates only
+manifest and Homebrew formula. Generate updates only
 from a manifest accepted by the release delivery verifier. The generator is pure;
 the publication helper defaults to a local plan and requires `--submit` plus a
 separately scoped channel token before it creates a GitHub branch or pull request.
 
-Use the project's configured tap. Conda submission requires an explicitly
-configured maintainer-owned fork and consenting recipe maintainers; never infer
-those identities from a filesystem username or automatically list someone.
-Conda review remains independent of Homebrew and direct archive publication.
+Use the project's configured tap. Formula updates require maintainer review
+and merge after native tap checks pass. Direct downloads and Homebrew are the
+supported distribution channels.
 
 Build-tool Python is not an end-user installation dependency. Keep direct
 installation transparent: signature/checksum verification, archive extraction,
