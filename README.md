@@ -20,13 +20,16 @@ no service checkout, database credentials or running API.
 
 ## Install a qualified package
 
+**Alpha: 0.1.0-alpha.1.** Commands and APIs may change. Alpha updates may require
+fresh installations; in-place upgrade compatibility is not promised. Preserve
+an existing installation's state and matching binaries before changing versions.
+
 One native executable supplies the CLI, connector and compute runner. Qualified
-releases support macOS 14+ and Linux with glibc 2.28+, each on Intel/x86-64 and
+releases support macOS 15+ and Linux with glibc 2.28+, each on Intel/x86-64 and
 ARM64. Installation starts no service and needs no Python runtime.
 
 The [installation guide](crates/cli/INSTALL.md) covers the project Homebrew tap,
-explicit-version signed binary archives for direct/offline/SSH installation,
-and conda-forge source-built packages after their external review. Direct
+and explicit-version signed binary archives for direct/offline/SSH installation. Direct
 installation uses ordinary verification, extraction and file-copy commands;
 there is no custom installer or self-updater. Channel availability remains
 subject to release qualification and each channel's publication status.

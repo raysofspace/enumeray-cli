@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise a native candidate in a unique, keg-only temporary Homebrew formula.
 
-Only macOS 14 on the archive's native CPU establishes this channel qualification.
+Only macOS 15 on the archive's native CPU establishes this channel qualification.
 The upgrade changes the temporary formula revision while retaining the exact
 candidate bytes; it proves packaging mechanics, not cross-release state safety.
 """
@@ -40,8 +40,8 @@ def sha256(path):
 def native_platform(target):
     machines = {"aarch64-apple-darwin": "arm64", "x86_64-apple-darwin": "x86_64"}
     if (target not in machines or platform.system() != "Darwin"
-            or platform.machine() != machines[target] or platform.mac_ver()[0].split(".")[0] != "14"):
-        raise ValueError("Homebrew qualification requires actual macOS 14 on the candidate's native CPU")
+            or platform.machine() != machines[target] or platform.mac_ver()[0].split(".")[0] != "15"):
+        raise ValueError("Homebrew qualification requires actual macOS 15 on the candidate's native CPU")
     platform_audit.require_untranslated_macos(platform.machine(), run=subprocess.check_output)
 
 
@@ -108,11 +108,11 @@ def isolated_environment(temporary, environment=None):
 
 def qualify(archive, target, version, run=subprocess.run, check_platform=native_platform,
             root=ROOT, token=None, environment=None):
+    generation.artifacts_policy.validate_version(version)
     if Path(archive).is_symlink():
         raise ValueError("Candidate archive must be a regular file")
     archive = Path(archive).resolve()
-    if (not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
-            or archive.name != "enumeray-%s-%s.tar.gz" % (version, target)
+    if (archive.name != "enumeray-%s-%s.tar.gz" % (version, target)
             or not archive.is_file() or archive.is_symlink()):
         raise ValueError("Expected the exact native candidate archive and version")
     check_platform(target)
@@ -131,7 +131,7 @@ def qualify(archive, target, version, run=subprocess.run, check_platform=native_
               "runtime": {"system": platform.system(), "macos": platform.mac_ver()[0],
                           "machine": platform.machine()},
               "minimum_platform_qualified": platform.system() == "Darwin"
-                  and platform.mac_ver()[0].split(".")[0] == "14"
+                  and platform.mac_ver()[0].split(".")[0] == "15"
                   and platform.machine() == ("arm64" if target == "aarch64-apple-darwin" else "x86_64"),
               "upgrade_evidence": "same-candidate-formula-revision; installation mechanics only"}
     with tempfile.TemporaryDirectory(prefix="enumeray-homebrew-") as temporary:

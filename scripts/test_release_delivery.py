@@ -14,43 +14,43 @@ delivery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(delivery)
 
 
-def identity(purpose='prepare'):
-    record = {'schema_version': 1, 'purpose': purpose, 'version': '0.1.0',
+def identity(purpose='prepare', version='0.1.0', status='released'):
+    record = {'schema_version': 1, 'purpose': purpose, 'version': version,
               'public_repository': delivery.PUBLIC_REPOSITORY, 'public_revision': 'a' * 40,
               'service_repository': 'raysofspace/enumeray', 'service_revision': 'b' * 40,
-              'baseline': {'id': 'persistent-v1', 'sha256': 'c' * 64},
-              'qualification_run': '123', 'tag': 'v0.1.0', 'revision': 'a' * 40}
+              'baseline': {'id': 'persistent-v1', 'sha256': 'c' * 64, 'status': status},
+              'qualification_run': '123', 'tag': 'v' + version, 'revision': 'a' * 40}
     receipt = json.dumps(record)
     import hashlib
     record['receipt_sha256'] = hashlib.sha256(receipt.encode()).hexdigest()
     return record, receipt
 
 
-def artifacts(root):
-    record, receipt = identity()
+def artifacts(root, version='0.1.0', status='released'):
+    record, receipt = identity(version=version, status=status)
     source = {'repository': 'https://github.com/' + delivery.PUBLIC_REPOSITORY,
               'revision': record['public_revision'], 'tree': 'd' * 40,
               'lockfile_sha256': 'e' * 64, 'clean': True}
     (root / 'service-prepare.json').write_text(receipt)
     (root / 'service-prepare.sigstore.json').write_text('{}')
     for target in delivery.TARGETS:
-        archive = 'enumeray-0.1.0-' + target + '.tar.gz'
+        archive = 'enumeray-' + version + '-' + target + '.tar.gz'
         (root / archive).write_bytes(target.encode())
-        minimum = {'os': 'macos', 'version': '14.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
+        minimum = {'os': 'macos', 'version': '15.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
         report = {'schema_version': 1, 'target': target, 'archive': archive,
                   'sha256': delivery.sha256(root / archive), 'source': source,
                   'minimum_platform': minimum, 'platform_qualified': True}
         if 'apple' in target:
             report['channel_qualification'] = {'homebrew': {
                 'schema_version': 1, 'channel': 'homebrew', 'target': target,
-                'version': '0.1.0', 'archive': archive, 'sha256': report['sha256'],
+                'version': version, 'archive': archive, 'sha256': report['sha256'],
                 'state': 'passed', 'minimum_platform_qualified': True,
                 'binary_sha256': '0' * 64, 'lifecycle': delivery.HOMEBREW_LIFECYCLE,
-                'runtime': {'system': 'Darwin', 'macos': '14.7.1',
+                'runtime': {'system': 'Darwin', 'macos': '15.7.1',
                             'machine': 'arm64' if target.startswith('aarch64-') else 'x86_64'}}}
         (root / ('qualification-' + target + '.json')).write_text(json.dumps(report))
-    (root / 'enumeray-0.1.0-source.tar.gz').write_bytes(b'source')
-    (root / 'enumeray-0.1.0-source.json').write_text(json.dumps({'schema_version': 1, 'version': '0.1.0', 'rust_toolchain': '1.98.1', 'source': source, 'archive': 'enumeray-0.1.0-source.tar.gz', 'sha256': delivery.sha256(root / 'enumeray-0.1.0-source.tar.gz')}))
+    (root / ('enumeray-' + version + '-source.tar.gz')).write_bytes(b'source')
+    (root / ('enumeray-' + version + '-source.json')).write_text(json.dumps({'schema_version': 1, 'version': version, 'rust_toolchain': '1.98.1', 'source': source, 'archive': ('enumeray-' + version + '-source.tar.gz'), 'sha256': delivery.sha256(root / ('enumeray-' + version + '-source.tar.gz'))}))
     for archive in root.glob('*.tar.gz'):
         checksum = archive.with_name(archive.name + '.sha256')
         checksum.write_text(delivery.sha256(archive) + '  ' + archive.name + '\n')
@@ -64,7 +64,9 @@ def artifacts(root):
 class MemoryGitHub:
     def __init__(self, root, draft=True):
         self.files = {path.name: path.read_bytes() for path in root.iterdir() if path.is_file()}
-        self.record = {'id': 1, 'draft': draft, 'tag_name': 'v0.1.0'}
+        version = json.loads((root / delivery.MANIFEST).read_text())['version']
+        self.record = {'id': 1, 'draft': draft, 'tag_name': 'v' + version,
+                       'prerelease': delivery.artifacts_policy.is_prerelease(version)}
         self.calls = []
 
     def release(self, tag):
@@ -89,12 +91,31 @@ class MemoryGitHub:
     def api(self, suffix, method='GET', body=None, **kwargs):
         self.calls.append((method, suffix))
         if method == 'PATCH':
-            self.record['draft'] = body['draft']
+            self.record.update(body)
             return self.record
         raise AssertionError((suffix, method))
 
 
 class ManifestTests(unittest.TestCase):
+    def test_alpha_release_metadata_and_baseline_status_cannot_be_substituted(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
+            root = Path(temporary)
+            record, manifest = artifacts(root, '0.1.0-alpha.1', 'candidate')
+            client = MemoryGitHub(root)
+            client.record['prerelease'] = False
+            with self.assertRaisesRegex(ValueError, 'release metadata'):
+                delivery.fetch_candidate(client, record['tag'], Path(destination), run=mock.Mock())
+            modified = copy.deepcopy(manifest)
+            modified['baseline']['status'] = 'released'
+            with self.assertRaisesRegex(ValueError, 'authorized baseline'):
+                delivery.validate_manifest(modified, identity=record)
+            for version, status in (('0.1.0', 'candidate'), ('0.1.0-alpha.1', 'unknown')):
+                modified = copy.deepcopy(manifest)
+                modified.update(version=version, tag='v' + version)
+                modified['baseline']['status'] = status
+                with self.subTest(version=version, status=status), self.assertRaises(ValueError):
+                    delivery.validate_manifest(modified)
+
     def test_public_release_tag_is_distinct_from_private_or_legacy_trigger(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -189,7 +210,7 @@ class ManifestTests(unittest.TestCase):
             client.record = None
 
             def ensure_release(record):
-                client.record = {'id': 1, 'draft': True, 'tag_name': record['tag']}
+                client.record = {'id': 1, 'draft': True, 'tag_name': record['tag'], 'prerelease': False}
                 return client.record
 
             def signer(command, **kwargs):
@@ -241,7 +262,7 @@ class ManifestTests(unittest.TestCase):
                 elif change == 'failed':
                     homebrew['state'] = 'failed'
                 elif change == 'newer-os':
-                    homebrew['runtime']['macos'] = '15.0'
+                    homebrew['runtime']['macos'] = '26.0'
                 elif change == 'wrong-archive':
                     homebrew['sha256'] = '0' * 64
                 else:
@@ -255,7 +276,7 @@ class ManifestTests(unittest.TestCase):
             root = Path(temporary)
             record, _ = artifacts(root)
             client = MemoryGitHub(root)
-            with self.assertRaisesRegex(ValueError, 'published stable'):
+            with self.assertRaisesRegex(ValueError, 'published release'):
                 delivery.fetch_candidate(client, record['tag'], Path(destination), run=mock.Mock(), published=True)
             client.record['draft'] = False
             with self.assertRaisesRegex(ValueError, 'publication authorization'):
@@ -270,31 +291,54 @@ class ManifestTests(unittest.TestCase):
                 delivery.verify_evidence(record, root, 'prepare', mock.Mock())
 
     def test_publish_binds_manifest_and_source_and_never_rebuilds(self):
-        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
-            root = Path(temporary)
-            record, _ = artifacts(root)
-            publication, _ = identity('publish')
-            publication['manifest_sha256'] = delivery.sha256(root / delivery.MANIFEST)
-            receipt = json.dumps({key: value for key, value in publication.items() if key != 'receipt_sha256'})
-            (root / 'service-publish.json').write_text(receipt)
-            publication['receipt_sha256'] = delivery.sha256(root / 'service-publish.json')
-            (root / 'service-publish.sigstore.json').write_text('{}')
-            client = MemoryGitHub(root)
-            verifier = mock.Mock()
-            delivery.publish(client, publication, Path(destination), root, run=verifier)
-            self.assertFalse(client.record['draft'])
-            self.assertEqual([call for call in client.calls if call[0] == 'PATCH'], [('PATCH', 'releases/1')])
-            delivery.publish(client, publication, Path(destination), root, run=verifier)
-            self.assertEqual(len([call for call in client.calls if call[0] == 'PATCH']), 1)
-            self.assertTrue(all(call.args[0][:2] == ['cosign', 'verify-blob'] for call in verifier.call_args_list))
-            publication['manifest_sha256'] = '0' * 64
-            (root / 'service-publish.json').write_text(json.dumps({key: value for key, value in publication.items() if key != 'receipt_sha256'}))
-            publication['receipt_sha256'] = delivery.sha256(root / 'service-publish.json')
-            with self.assertRaisesRegex(ValueError, 'different candidate'):
+        for version, status in (('0.1.0', 'released'), ('0.1.0-alpha.1', 'candidate')):
+            with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
+                root = Path(temporary)
+                record, _ = artifacts(root, version, status)
+                publication, _ = identity('publish', version, status)
+                publication['manifest_sha256'] = delivery.sha256(root / delivery.MANIFEST)
+                receipt = json.dumps({key: value for key, value in publication.items() if key != 'receipt_sha256'})
+                (root / 'service-publish.json').write_text(receipt)
+                publication['receipt_sha256'] = delivery.sha256(root / 'service-publish.json')
+                (root / 'service-publish.sigstore.json').write_text('{}')
+                client = MemoryGitHub(root)
+                verifier = mock.Mock()
                 delivery.publish(client, publication, Path(destination), root, run=verifier)
+                self.assertFalse(client.record['draft'])
+                self.assertEqual(client.record['prerelease'], '-' in version)
+                if '-' in version:
+                    self.assertEqual(client.record['make_latest'], 'false')
+                self.assertEqual(delivery.fetch_candidate(client, record['tag'], Path(destination),
+                                 run=verifier, published=True)['version'], version)
+                self.assertEqual([call for call in client.calls if call[0] == 'PATCH'], [('PATCH', 'releases/1')])
+                delivery.publish(client, publication, Path(destination), root, run=verifier)
+                self.assertEqual(len([call for call in client.calls if call[0] == 'PATCH']), 1)
+                self.assertTrue(all(call.args[0][:2] == ['cosign', 'verify-blob'] for call in verifier.call_args_list))
+                publication['manifest_sha256'] = '0' * 64
+                (root / 'service-publish.json').write_text(json.dumps({key: value for key, value in publication.items() if key != 'receipt_sha256'}))
+                publication['receipt_sha256'] = delivery.sha256(root / 'service-publish.json')
+                with self.assertRaisesRegex(ValueError, 'different candidate'):
+                    delivery.publish(client, publication, Path(destination), root, run=verifier)
 
 
 class GitHubTests(unittest.TestCase):
+    def test_alpha_draft_is_explicitly_prerelease_and_never_latest(self):
+        client = delivery.GitHub()
+        record, _ = identity(version='0.1.0-alpha.1', status='candidate')
+        client.revision = mock.Mock(return_value=record['public_revision'])
+        client.release = mock.Mock(return_value=None)
+        client.api = mock.Mock(return_value={'id': 1, 'tag_name': record['tag'],
+                                             'draft': True, 'prerelease': True})
+        client.ensure_release(record)
+        payload = client.api.call_args.args[2]
+        self.assertTrue(payload['prerelease'])
+        self.assertEqual(payload['make_latest'], 'false')
+        self.assertIn('Alpha', payload['name'])
+        self.assertIn('fresh installation', payload['body'])
+        client.release.return_value = {**client.api.return_value, 'prerelease': False}
+        with self.assertRaisesRegex(ValueError, 'release metadata'):
+            client.ensure_release(record)
+
     def test_annotated_tags_are_peeled_to_the_original_commit(self):
         client = delivery.GitHub()
         client.api = mock.Mock(side_effect=[{'object': {'type': 'tag', 'sha': 'c' * 40}},

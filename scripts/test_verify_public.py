@@ -14,6 +14,20 @@ spec.loader.exec_module(verify)
 
 
 class PublicVerificationTests(unittest.TestCase):
+    def test_release_targets_require_native_macos15_and_separate_homebrew_delivery(self):
+        workflow = (verify.ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn("runner: '[\"macos-15\"]'", workflow)
+        self.assertIn("runner: '[\"macos-15-intel\"]'", workflow)
+        self.assertNotIn('macos14', workflow)
+        self.assertNotIn('ENUMERAY_CONDA_TOKEN', workflow)
+        self.assertLess(workflow.index('native_docker_arch='), workflow.index('docker run --rm'))
+        self.assertIn('build-release-native.sh', workflow)
+        tap = (verify.ROOT / 'distribution/homebrew/tap/.github/workflows/verify.yml').read_text()
+        self.assertIn('fetch --published', tap)
+        self.assertLess(tap.index('cmp Formula/enumeray.rb'), tap.index('brew install'))
+        self.assertIn('macos-15-intel', tap)
+        self.assertIn('journal.sha256', tap)
+
     def test_catalogue_classifies_native_suites_and_both_backend_cases(self):
         catalogue = verify.load_catalogue()
         suites, ignored = verify.validate(catalogue)

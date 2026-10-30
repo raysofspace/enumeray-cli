@@ -120,6 +120,7 @@ def main():
     executable = Path(metadata["target_directory"]) / args.target / "release" / binary
     if not executable.is_file():
         raise SystemExit(f"Build the independent target binary first: {executable}")
+    artifacts.validate_version(version)
     archive_name = f"{binary}-{version}-{args.target}"
     with tempfile.TemporaryDirectory(prefix="enumeray-package-") as temporary:
         contents = Path(temporary) / archive_name

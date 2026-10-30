@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--target", required=True)
     parser.add_argument("--report", type=Path, help="Write the successful native qualification record")
     parser.add_argument("--require-minimum-platform", action="store_true",
-                        help="Require execution on macOS 14 or glibc 2.28, not a newer runtime")
+                        help="Require execution on macOS 15 or glibc 2.28, not a newer runtime")
     args = parser.parse_args()
     archives = sorted(args.archives.glob(f"*-{args.target}.tar.gz"))
     if len(archives) != 1:
@@ -67,6 +67,7 @@ def main():
         tar.extractall(fresh, filter="data")
     contents = fresh / archive.name.removesuffix(".tar.gz")
     compatibility = json.loads((contents / "compatibility.json").read_text())
+    artifacts.validate_version(compatibility.get("version"))
     name = compatibility["binary"]
     if name != "enumeray" or compatibility.get("capabilities") != ["cli", "connector", "compute_runner"]:
         raise SystemExit("Unknown binary identity")

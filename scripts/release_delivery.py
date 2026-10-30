@@ -24,8 +24,8 @@ MANIFEST = 'release-manifest.json'
 TARGETS = {
     'x86_64-unknown-linux-gnu': {'minimum_glibc': '2.28'},
     'aarch64-unknown-linux-gnu': {'minimum_glibc': '2.28'},
-    'x86_64-apple-darwin': {'minimum_macos': '14.0'},
-    'aarch64-apple-darwin': {'minimum_macos': '14.0'},
+    'x86_64-apple-darwin': {'minimum_macos': '15.0'},
+    'aarch64-apple-darwin': {'minimum_macos': '15.0'},
 }
 RESERVED = {MANIFEST, MANIFEST + '.sigstore.json', 'service-prepare.json',
             'service-prepare.sigstore.json', 'service-publish.json', 'service-publish.sigstore.json'}
@@ -35,6 +35,7 @@ HOMEBREW_LIFECYCLE = ['clean-install-and-formula-test',
 _spec = importlib.util.spec_from_file_location('service_qualification', Path(__file__).with_name('verify-service-qualification.py'))
 qualification = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(qualification)
+artifacts_policy = qualification.artifacts
 
 
 class PendingCandidate(ValueError):
@@ -51,6 +52,13 @@ def sha256(path):
 
 def canonical(record):
     return json.dumps(record, sort_keys=True, indent=2) + '\n'
+
+
+def validate_release(release, version):
+    if (release.get('tag_name') != 'v' + version
+            or type(release.get('prerelease')) is not bool
+            or release['prerelease'] != artifacts_policy.is_prerelease(version)):
+        raise ValueError('GitHub release metadata differs from the authorized version')
 
 
 def asset_name(value):
@@ -74,9 +82,9 @@ def validate_homebrew(report, target, version, archive, digest):
     runtime = evidence.get('runtime', {})
     expected_cpu = 'arm64' if target.startswith('aarch64-') else 'x86_64'
     if (not isinstance(runtime, dict) or runtime.get('system') != 'Darwin' or
-            not isinstance(runtime.get('macos'), str) or not runtime['macos'].startswith('14.') or
+            not isinstance(runtime.get('macos'), str) or not runtime['macos'].startswith('15.') or
             runtime.get('machine') != expected_cpu):
-        raise ValueError('Homebrew qualification requires native macOS 14: ' + target)
+        raise ValueError('Homebrew qualification requires native macOS 15: ' + target)
 
 
 def verify_public(path, bundle, run=subprocess.run, workflow_revision=None):
@@ -155,9 +163,15 @@ class GitHub:
             raise ValueError('Release version already names different public source')
         release = self.release(tag)
         if release is None:
+            prerelease = artifacts_policy.is_prerelease(identity['version'])
             release = self.api('releases', 'POST', {'tag_name': tag, 'target_commitish': revision,
-                'name': tag, 'draft': True, 'prerelease': False,
-                'body': 'Unified Enumeray CLI, connector and compute runner. Publication requires matching-service artifact qualification.'})
+                'name': ('Alpha — ' if '-alpha' in identity['version'] else '') + tag,
+                'draft': True, 'prerelease': prerelease, 'make_latest': 'false' if prerelease else 'legacy',
+                'body': ('Alpha release. Commands and APIs may change; updates may require a fresh installation. '
+                         'No in-place alpha upgrade compatibility is promised. Preserve existing state and matching binaries.\n\n'
+                         if '-alpha' in identity['version'] else '')
+                        + 'Unified Enumeray CLI, connector and compute runner. Publication requires matching-service artifact qualification.'})
+        validate_release(release, identity['version'])
         return release
 
     def upload(self, release, path):
@@ -202,17 +216,12 @@ def validate_manifest(manifest, directory=None, identity=None, require_signature
         if not qualification.full_hash(manifest.get(field)):
             raise ValueError('Invalid manifest digest: ' + field)
     version = manifest.get('version')
-    if not isinstance(version, str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
-        raise ValueError('Invalid stable release version')
+    artifacts_policy.validate_version(version)
     if not isinstance(manifest.get('rust_toolchain'), str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', manifest['rust_toolchain']):
         raise ValueError('Manifest requires the exact source Rust toolchain')
     if manifest.get('tag') != 'v' + version:
         raise ValueError('Manifest tag and version differ')
-    baseline = manifest.get('baseline')
-    if (not isinstance(baseline, dict) or not isinstance(baseline.get('id'), str) or
-            not re.fullmatch(r'persistent-v[1-9][0-9]*', baseline['id']) or
-            not qualification.full_hash(baseline.get('sha256'))):
-        raise ValueError('Invalid manifest baseline')
+    artifacts_policy.validate_baseline(manifest.get('baseline'), version)
     entries = manifest.get('files')
     if not isinstance(entries, list) or not entries:
         raise ValueError('Manifest has no release files')
@@ -285,7 +294,7 @@ def validate_manifest(manifest, directory=None, identity=None, require_signature
         for target, minimum in TARGETS.items():
             item = targets[target]
             report = json.loads((Path(directory) / item['qualification']).read_text())
-            platform = {'os': 'macos', 'version': '14.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
+            platform = {'os': 'macos', 'version': '15.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
             if (report.get('schema_version') != 1 or report.get('target') != target or
                     report.get('archive') != item['archive'] or report.get('sha256') != files[item['archive']]['sha256'] or
                     report.get('source') != source or report.get('minimum_platform') != platform or
@@ -307,8 +316,8 @@ def fetch_candidate(client, tag, directory, run=subprocess.run, published=False)
     release = client.release(tag)
     if not release:
         raise PendingCandidate('Candidate draft is not available yet')
-    if published and (release.get('draft') or release.get('prerelease')):
-        raise ValueError('Channel delivery requires a published stable release')
+    if published and release.get('draft'):
+        raise ValueError('Channel delivery requires a published release')
     assets = client.assets(release)
     if MANIFEST not in assets or MANIFEST + '.sigstore.json' not in assets:
         if not release['draft']:
@@ -320,6 +329,7 @@ def fetch_candidate(client, tag, directory, run=subprocess.run, published=False)
     manifest = validate_manifest(json.loads((directory / MANIFEST).read_text()))
     if manifest['tag'] != tag or client.revision(tag) != manifest['public_revision']:
         raise ValueError('Release tag differs from signed candidate source')
+    validate_release(release, manifest['version'])
     verify_public(directory / MANIFEST, directory / (MANIFEST + '.sigstore.json'), run,
                   workflow_revision=manifest['builder_workflow_revision'])
     for entry in manifest['files']:
@@ -417,7 +427,7 @@ def build_manifest(identity, artifacts, workflow_revision, signed=True):
         name = 'qualification-' + target + '.json'
         report = json.loads((artifacts / name).read_text())
         archive = 'enumeray-%s-%s.tar.gz' % (version, target)
-        platform = {'os': 'macos', 'version': '14.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
+        platform = {'os': 'macos', 'version': '15.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
         if (report.get('schema_version') != 1 or report.get('target') != target or
                 report.get('archive') != archive or report.get('sha256') != sha256(artifacts / archive) or
                 report.get('source') != source or report.get('minimum_platform') != platform or
@@ -505,7 +515,9 @@ def publish(client, identity, directory, evidence, run=subprocess.run):
                 raise ValueError('Published release lacks its publication authorization')
             client.download(assets[name], Path(directory) / name)
     if release['draft']:
-        client.api('releases/' + str(release['id']), 'PATCH', {'draft': False, 'prerelease': False, 'make_latest': 'legacy'})
+        prerelease = artifacts_policy.is_prerelease(identity['version'])
+        client.api('releases/' + str(release['id']), 'PATCH', {
+            'draft': False, 'prerelease': prerelease, 'make_latest': 'false' if prerelease else 'legacy'})
     else:
         request = {'receipt': (Path(directory) / 'service-publish.json').read_text(),
                    'bundle': json.loads((Path(directory) / 'service-publish.sigstore.json').read_text())}

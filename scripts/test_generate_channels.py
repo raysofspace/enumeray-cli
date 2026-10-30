@@ -17,30 +17,47 @@ channels = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(channels)
 
 
-def manifest_fixture():
-    version = "0.1.0"
+def manifest_fixture(version="0.1.0", status="released"):
     files, targets = [], {}
     for index, (target, minimum) in enumerate(channels.TARGETS.items()):
         name = "enumeray-%s-%s.tar.gz" % (version, target)
         files.append({"name": name, "sha256": str(index + 1) * 64, "kind": "binary", "target": target})
         targets[target] = {**minimum, "archive": name, "qualification": "qualification-" + target + ".json"}
-    files.append({"name": "enumeray-0.1.0-source.tar.gz", "sha256": "5" * 64, "kind": "source"})
+    files.append({"name": "enumeray-" + version + "-source.tar.gz", "sha256": "5" * 64, "kind": "source"})
     return {"schema_version": 1, "version": version, "tag": "v" + version,
             "public_repository": channels.PUBLIC_REPOSITORY, "public_revision": "a" * 40,
             "source_tree": "b" * 40, "lockfile_sha256": "c" * 64,
             "rust_toolchain": "1.98.1",
             "builder_workflow_revision": "d" * 40,
-            "baseline": {"id": "persistent-v1", "sha256": "e" * 64},
+            "baseline": {"id": "persistent-v1", "sha256": "e" * 64, "status": status},
             "files": files, "targets": targets}
 
 
 def config_fixture():
     config = json.loads((ROOT / "distribution/channels.json").read_text())
-    config["conda"].update(maintainers=["consenting-test-maintainer"], fork_repository="maintainer/staged-recipes")
     return config
 
 
 class GenerateChannelTests(unittest.TestCase):
+    def test_alpha_formula_uses_exact_prerelease_and_candidate_identity(self):
+        manifest = manifest_fixture('0.1.0-alpha.1', 'candidate')
+        artifacts, plan = channels.generate(manifest, config_fixture())
+        formula = artifacts['homebrew/Formula/enumeray.rb'].decode()
+        self.assertIn('version "0.1.0-alpha.1"', formula)
+        self.assertIn('/releases/download/v0.1.0-alpha.1/', formula)
+        self.assertEqual(plan['release']['baseline']['status'], 'candidate')
+        self.assertEqual(set(plan['channels']), {'homebrew'})
+        self.assertEqual(list(artifacts), ['homebrew/Formula/enumeray.rb'])
+
+    def test_removed_channels_and_unsafe_channel_configuration_are_rejected(self):
+        for config in ({**config_fixture(), 'conda': {}},
+                       {**config_fixture(), 'homebrew': {'repository': 'owner/repo\nother'}},
+                       {**config_fixture(), 'homebrew': {'base_branch': '../../escape'}}):
+            with self.subTest(config=config), self.assertRaises(ValueError):
+                channels.generate(manifest_fixture(), config)
+        with self.assertRaises(ValueError):
+            channels.generate(manifest_fixture(), config_fixture(), channel='conda')
+
     def test_formula_selects_verified_mac_archives_and_starts_no_service(self):
         artifacts, plan = channels.generate(manifest_fixture(), config_fixture())
         formula = artifacts["homebrew/Formula/enumeray.rb"].decode()
@@ -48,7 +65,7 @@ class GenerateChannelTests(unittest.TestCase):
             self.assertIn("enumeray-0.1.0-" + target + ".tar.gz", formula)
         self.assertIn("/releases/download/v0.1.0/", formula)
         self.assertNotIn("unknown-linux", formula)
-        self.assertIn("depends_on macos: :sonoma", formula)
+        self.assertIn("depends_on macos: :sequoia", formula)
         self.assertNotIn("service do", formula)
         self.assertIn("journal_id", formula)
         self.assertEqual(plan["channels"]["homebrew"]["state"], "ready")
@@ -56,34 +73,7 @@ class GenerateChannelTests(unittest.TestCase):
             result = subprocess.run(["ruby", "-c"], input=formula, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_conda_builds_pinned_source_and_retains_dependency_license_evidence(self):
-        artifacts, plan = channels.generate(manifest_fixture(), config_fixture())
-        recipe = artifacts["conda/recipe/recipe.yaml"].decode()
-        build = artifacts["conda/recipe/build.sh"].decode()
-        self.assertIn("enumeray-0.1.0-source.tar.gz", recipe)
-        self.assertIn("/releases/download/v0.1.0/", recipe)
-        self.assertNotIn("apple-darwin.tar.gz", recipe)
-        self.assertIn("rust ==1.98.1", recipe)
-        self.assertIn("cargo-bundle-licenses", recipe)
-        self.assertIn("cargo-auditable", recipe)
-        self.assertIn("cargo auditable install --locked --offline --no-track", build)
-        self.assertIn("--path crates/cli", build)
-        self.assertIn("THIRDPARTY.yml", recipe)
-        self.assertIn("THIRD_PARTY_NOTICES.json", recipe)
-        self.assertIn('cmp "$RECIPE_DIR/upstream-source.json" release-source.json', build)
-        self.assertNotIn("rustup", build.split("case", 1)[1])
-        self.assertNotIn("python", recipe)
-        self.assertEqual(json.loads(artifacts["conda/recipe/source.json"])["public_revision"], "a" * 40)
-        self.assertEqual(plan["channels"]["conda"]["files"][0]["destination"].split("/")[:2],
-                         ["recipes", "enumeray"])
 
-    def test_missing_maintainers_blocks_only_conda_without_fabricating_an_identity(self):
-        config = config_fixture()
-        config["conda"]["maintainers"] = []
-        artifacts, plan = channels.generate(manifest_fixture(), config)
-        self.assertEqual(plan["channels"]["conda"]["state"], "blocked-configuration")
-        self.assertEqual(plan["channels"]["homebrew"]["state"], "ready")
-        self.assertEqual(list(artifacts), ["homebrew/Formula/enumeray.rb"])
 
     def test_wrong_source_target_version_or_unsafe_asset_is_rejected(self):
         for mutate in (
@@ -105,13 +95,6 @@ class GenerateChannelTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     channels.generate(manifest, config_fixture())
 
-    def test_rust_compiler_pin_comes_from_signed_source_rather_than_current_checkout(self):
-        manifest = manifest_fixture()
-        manifest["rust_toolchain"] = "1.97.2"
-        artifacts, _ = channels.generate(manifest, config_fixture())
-        self.assertIn(b"rust ==1.97.2", artifacts["conda/recipe/recipe.yaml"])
-        self.assertIn(b'"1.97.2"', artifacts["conda/recipe/conda_build_config.yaml"])
-        self.assertIn(b"rustc 1.97.2 ", artifacts["conda/recipe/build.sh"])
 
     def test_generation_retries_are_identical_and_do_not_replace_existing_version(self):
         artifacts, plan = channels.generate(manifest_fixture(), config_fixture())
@@ -127,13 +110,6 @@ class GenerateChannelTests(unittest.TestCase):
             self.assertEqual((output / "homebrew/Formula/enumeray.rb").read_bytes(),
                              artifacts["homebrew/Formula/enumeray.rb"])
 
-    def test_recipe_destination_cannot_escape_or_inject_a_repository(self):
-        for key, value in (("recipe_directory", "../../escape"), ("repository", "owner/repo\nother"),
-                           ("maintainers", ["name\ncode"])):
-            config = config_fixture()
-            config["conda"][key] = value
-            with self.assertRaises(ValueError):
-                channels.generate(manifest_fixture(), config)
 
 
 class DocumentedCopyTests(unittest.TestCase):
@@ -179,26 +155,6 @@ class DocumentedCopyTests(unittest.TestCase):
             self.assertEqual(list(binary.parent.glob(".enumeray.*")), [])
 
 
-class CondaBuildBoundaryTests(unittest.TestCase):
-    def test_changed_lockfile_fails_before_cargo_or_dependency_network_access(self):
-        artifacts, _ = channels.generate(manifest_fixture(), config_fixture())
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            tools = root / "tools"
-            tools.mkdir()
-            (tools / "rustc").write_text("#!/bin/sh\necho 'rustc 1.98.1 (test)'\n")
-            trace = root / "cargo-was-called"
-            (tools / "cargo").write_text("#!/bin/sh\ntouch '" + str(trace) + "'\n")
-            for path in tools.iterdir():
-                path.chmod(0o755)
-            (root / "Cargo.lock").write_text("changed source lockfile")
-            build = root / "build.sh"
-            build.write_bytes(artifacts["conda/recipe/build.sh"])
-            result = subprocess.run(["bash", str(build)], cwd=root,
-                                    env={**os.environ, "PATH": str(tools) + ":/usr/bin:/bin"},
-                                    capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertFalse(trace.exists())
 
 
 if __name__ == "__main__":

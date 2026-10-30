@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run inside the workflow's native glibc 2.28 build image or macOS 14 host.
+# Run inside the workflow's native glibc 2.28 build image or macOS 15 host.
 set -euo pipefail
 release_tools="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 release_source="$release_tools"
@@ -29,10 +29,10 @@ case "$release_target" in
     command -v readelf >/dev/null
     ;;
   x86_64-apple-darwin|aarch64-apple-darwin)
-    [[ "$(uname -s)" == Darwin && "$(sw_vers -productVersion)" == 14.* ]] || {
-      echo 'macOS release builds require the native macOS 14 environment' >&2; exit 2;
+    [[ "$(uname -s)" == Darwin && "$(sw_vers -productVersion)" == 15.* ]] || {
+      echo 'macOS release builds require the native macOS 15 environment' >&2; exit 2;
     }
-    export MACOSX_DEPLOYMENT_TARGET=14.0
+    export MACOSX_DEPLOYMENT_TARGET=15.0
     command -v otool >/dev/null
     command -v lipo >/dev/null
     ;;

@@ -89,6 +89,23 @@ class FakeGitHub:
 
 
 class PublishChannelTests(unittest.TestCase):
+    def test_alpha_delivery_reuses_one_reviewable_homebrew_pr(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts, plan = channels.generate(manifest_fixture('0.1.0-alpha.1', 'candidate'), config_fixture())
+            channels.write_delivery(directory, artifacts, plan)
+            api = FakeGitHub()
+            first = publishing.deliver(directory, 'homebrew', config_fixture(), submit=True, api=api)
+            second = publishing.deliver(directory, 'homebrew', config_fixture(), submit=True, api=api)
+            self.assertEqual(first, second)
+            self.assertEqual(first['state'], 'pending-review')
+            self.assertEqual(len(api.prs), 1)
+            self.assertIn(('raysofspace/homebrew-tap', 'codex/enumeray-v0.1.0-alpha.1'), api.refs)
+
+    def test_removed_channel_is_rejected_before_github_access(self):
+        with self.assertRaises(publishing.DeliveryError):
+            self.deliver(channel='conda')
+        self.assertEqual(self.api.calls, [])
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -148,25 +165,7 @@ class PublishChannelTests(unittest.TestCase):
         self.assertEqual(self.deliver()["state"], "pending-review")
         self.assertEqual(len(self.api.prs), 1)
 
-    def test_pending_conda_review_is_separate_from_the_homebrew_update(self):
-        brew = self.deliver()
-        conda = self.deliver(channel="conda")
-        self.assertEqual(brew["state"], "pending-review")
-        self.assertEqual(conda["state"], "pending-review")
-        self.assertNotEqual(brew["url"], conda["url"])
-        self.assertEqual(len(self.api.prs), 2)
-        conda_tree = self.api.trees[self.api.commits[self.api.prs[1]["head"]["sha"]]["tree"]["sha"]]
-        self.assertTrue(all(path.startswith("recipes/enumeray/") for path in conda_tree))
 
-    def test_missing_conda_configuration_does_not_block_formula_generation(self):
-        self.config["conda"]["maintainers"] = []
-        with tempfile.TemporaryDirectory() as temporary:
-            artifacts, plan = channels.generate(manifest_fixture(), self.config)
-            channels.write_delivery(temporary, artifacts, plan)
-            result = publishing.deliver(temporary, "conda", self.config, submit=True, api=self.api)
-            self.assertEqual(result["state"], "blocked-configuration")
-            self.assertEqual(publishing.deliver(temporary, "homebrew", self.config, submit=False)["state"], "planned")
-            self.assertEqual(self.api.calls, [])
 
     def test_changed_generated_file_is_rejected_before_github_access(self):
         (self.directory / "homebrew/Formula/enumeray.rb").write_text("tampered")

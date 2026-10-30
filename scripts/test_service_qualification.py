@@ -14,12 +14,35 @@ spec.loader.exec_module(qualification)
 
 
 class QualificationTests(unittest.TestCase):
+    def test_canonical_versions_and_prerelease_identifiers(self):
+        for version in ('0.1.0', '0.1.0-alpha.1', '0.1.0-alpha.10', '1.0.0-beta.1', '1.0.0-rc.1', '1.0.0-0.a-1'):
+            with self.subTest(version=version):
+                self.assertEqual(qualification.artifacts.validate_version(version), version)
+        for version in ('01.1.0', '0.1', '0.1.0-', '0.1.0-alpha.01', '0.1.0+build.1',
+                        '0.1.0-alpha..1', '0.1.0\n', '0.1.0/alpha', None, 1):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                qualification.artifacts.validate_version(version)
+
+    def test_candidate_baseline_requires_a_prerelease_and_explicit_status(self):
+        baseline = {'id': 'persistent-v1', 'sha256': 'c' * 64, 'status': 'candidate'}
+        with tempfile.TemporaryDirectory() as temporary:
+            run = mock.Mock()
+            result = qualification.verify_request(self.request(version='0.1.0-alpha.1', baseline=baseline),
+                                                  Path(temporary), run=run)
+            self.assertEqual(result['tag'], 'v0.1.0-alpha.1')
+            self.assertIn('refs/tags/cli-v0.1.0-alpha.1', run.call_args.args[0])
+            for changes in ({'version': '0.1.0', 'baseline': baseline},
+                            {'baseline': {k: v for k, v in baseline.items() if k != 'status'}},
+                            {'baseline': {**baseline, 'status': 'unknown'}}):
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    qualification.verify_request(self.request(**changes), Path(temporary), run=mock.Mock())
+
     def request(self, **changes):
         receipt = {'schema_version': 1, 'purpose': 'prepare',
                    'public_revision': 'a' * 40, 'service_revision': 'b' * 40,
                    'version': '0.1.0', 'service_repository': 'raysofspace/enumeray',
                    'public_repository': 'raysofspace/enumeray-cli',
-                   'baseline': {'id': 'persistent-v1', 'sha256': 'c' * 64},
+                   'baseline': {'id': 'persistent-v1', 'sha256': 'c' * 64, 'status': 'released'},
                    'qualification_run': '123'}
         receipt.update(changes)
         return {'receipt': json.dumps(receipt), 'bundle': {'mediaType': 'fixture'}}
@@ -62,8 +85,8 @@ class QualificationTests(unittest.TestCase):
     def test_invalid_authority_source_baseline_and_version_are_rejected(self):
         changes = ({'service_repository': 'other/service'}, {'public_repository': 'other/client'},
                    {'public_revision': 'main'}, {'service_revision': ''}, {'schema_version': 2},
-                   {'version': '0.1.0\nrevision=forged'}, {'version': '0.1.0-rc1'},
-                   {'qualification_run': ''}, {'baseline': {'id': 'candidate', 'sha256': 'c' * 64}})
+                   {'version': '0.1.0\nrevision=forged'}, {'version': '0.1.0-alpha.01'},
+                   {'qualification_run': ''}, {'baseline': {'id': 'candidate', 'sha256': 'c' * 64, 'status': 'released'}})
         for change in changes:
             verifier = mock.Mock()
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:

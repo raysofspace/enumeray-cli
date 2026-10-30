@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "enumeray-cli"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "base64",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "enumeray-client"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "base64",
  "enumeray-contracts",
@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "enumeray-connector"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum",
  "base64",
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "enumeray-contracts"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "base64",
  "jsonschema",

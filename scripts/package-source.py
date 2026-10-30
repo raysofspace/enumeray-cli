@@ -24,6 +24,7 @@ def package_source(root, output, revision, version=None):
     if version is not None and version != actual_version:
         raise ValueError('Source archive version differs from the qualified package version')
     version = actual_version
+    artifacts.validate_version(version)
     notices_by_package = {}
     for target in targets:
         target_metadata = metadata if target == targets[0] else json.loads(subprocess.check_output(

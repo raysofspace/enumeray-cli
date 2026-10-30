@@ -1,0 +1,84 @@
+name: Verify Homebrew delivery
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    name: Homebrew (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+      HOMEBREW_NO_INSTALL_FROM_API: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+      HOMEBREW_NO_INSTALL_UPGRADE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Report an empty initial tap
+        if: hashFiles('Formula/enumeray.rb') == ''
+        run: echo 'No qualified formula has been published yet; installation remains unverified.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Check out trusted public release verification tools
+        if: hashFiles('Formula/enumeray.rb') != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: raysofspace/enumeray-cli
+          ref: main
+          path: release-tools
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        if: hashFiles('Formula/enumeray.rb') != ''
+        with:
+          cosign-release: v3.0.6
+      - name: Require the exact formula generated from a signed published release
+        if: hashFiles('Formula/enumeray.rb') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          import os, re, sys
+          sys.path.insert(0, 'release-tools/scripts')
+          from release_artifacts import validate_version
+          versions = re.findall(r'^\s*version "([^"\n]+)"$', Path('Formula/enumeray.rb').read_text(), re.M)
+          if len(versions) != 1:
+              raise SystemExit('Expected exactly one explicit formula version')
+          version = validate_version(versions[0])
+          Path(os.environ['RUNNER_TEMP'], 'qualified-version').write_text(version)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('ENUMERAY_VERSION=' + version + '\n')
+          PYTHON
+          version="$(cat "$RUNNER_TEMP/qualified-version")"
+          python3 release-tools/scripts/release_delivery.py fetch --published --tag "v$version" --directory "$RUNNER_TEMP/release"
+          python3 release-tools/scripts/generate-channels.py --manifest "$RUNNER_TEMP/release/release-manifest.json" --output "$RUNNER_TEMP/channel" --channel homebrew
+          cmp Formula/enumeray.rb "$RUNNER_TEMP/channel/homebrew/Formula/enumeray.rb"
+      - name: Install and test the actual tap formula
+        if: hashFiles('Formula/enumeray.rb') != ''
+        run: |
+          brew tap raysofspace/tap "$GITHUB_WORKSPACE"
+          brew install raysofspace/tap/enumeray
+          test "$(enumeray --version)" = "enumeray $ENUMERAY_VERSION"
+          brew test raysofspace/tap/enumeray
+          enumeray connector init --journal "$RUNNER_TEMP/retained-journal" --api-base-url http://127.0.0.1:8080 --connector-id homebrew-tap-qualification
+          shasum -a 256 "$RUNNER_TEMP/retained-journal/journal.json" > "$RUNNER_TEMP/journal.sha256"
+          brew uninstall raysofspace/tap/enumeray
+          shasum -a 256 --check "$RUNNER_TEMP/journal.sha256"
+      - name: Clean the owned tap and package
+        if: always() && hashFiles('Formula/enumeray.rb') != ''
+        run: |
+          if brew list --formula --versions raysofspace/tap/enumeray >/dev/null 2>&1; then brew uninstall raysofspace/tap/enumeray; fi
+          if brew tap | rg -qx 'raysofspace/tap'; then brew untap raysofspace/tap; fi

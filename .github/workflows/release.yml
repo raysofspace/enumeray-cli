@@ -58,12 +58,10 @@ jobs:
             runner: '["ubuntu-24.04-arm"]'
             image_variable: ENUMERAY_MANYLINUX_2_28_AARCH64_IMAGE
           - target: x86_64-apple-darwin
-            runner_variable: ENUMERAY_MACOS14_X86_64_RUNNER
-            runner: '["self-hosted","macOS","X64","enumeray-macos14"]'
+            runner: '["macos-15-intel"]'
           - target: aarch64-apple-darwin
-            runner_variable: ENUMERAY_MACOS14_ARM64_RUNNER
-            runner: '["self-hosted","macOS","ARM64","enumeray-macos14"]'
-    runs-on: ${{ fromJSON(vars[matrix.runner_variable] || matrix.runner) }}
+            runner: '["macos-15"]'
+    runs-on: ${{ fromJSON(matrix.runner) }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -94,7 +92,7 @@ jobs:
         with:
           toolchain: 1.98.1
           targets: ${{ matrix.target }}
-      - name: Build and qualify on actual macOS 14
+      - name: Build and qualify on actual macOS 15
         if: runner.os == 'macOS'
         run: bash tools/scripts/build-release-native.sh --source "$GITHUB_WORKSPACE/source" --target "$TARGET" --revision "$PUBLIC_REVISION" --output "$RUNNER_TEMP/release-out"
       - name: Build and qualify natively on glibc 2.28
@@ -234,8 +232,6 @@ jobs:
         include:
           - channel: homebrew
             token_secret: ENUMERAY_HOMEBREW_TOKEN
-          - channel: conda
-            token_secret: ENUMERAY_CONDA_TOKEN
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

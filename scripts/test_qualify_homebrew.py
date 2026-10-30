@@ -191,8 +191,8 @@ class HomebrewQualificationTests(unittest.TestCase):
     def test_minimum_platform_refusal_happens_before_homebrew_is_touched(self):
         with mock.patch.object(qualification.platform, "system", return_value="Darwin"), \
              mock.patch.object(qualification.platform, "machine", return_value="arm64"), \
-             mock.patch.object(qualification.platform, "mac_ver", return_value=("15.0", (), "")):
-            with self.assertRaisesRegex(ValueError, "actual macOS 14"):
+             mock.patch.object(qualification.platform, "mac_ver", return_value=("26.0", (), "")):
+            with self.assertRaisesRegex(ValueError, "actual macOS 15"):
                 qualification.qualify(self.archive, "aarch64-apple-darwin", "0.1.0", run=self.fake)
         self.assertEqual(self.fake.calls, [])
 
@@ -206,7 +206,7 @@ class HomebrewQualificationTests(unittest.TestCase):
         archive.write_bytes(self.archive.read_bytes())
         with mock.patch.object(qualification.platform, "system", return_value="Darwin"), \
              mock.patch.object(qualification.platform, "machine", return_value="x86_64"), \
-             mock.patch.object(qualification.platform, "mac_ver", return_value=("14.8", (), "")), \
+             mock.patch.object(qualification.platform, "mac_ver", return_value=("15.8", (), "")), \
              mock.patch.object(qualification.subprocess, "check_output", return_value="1\n") as sysctl:
             with self.assertRaisesRegex(ValueError, "Rosetta"):
                 qualification.qualify(archive, "x86_64-apple-darwin", "0.1.0", run=self.fake)

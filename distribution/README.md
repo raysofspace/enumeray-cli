@@ -1,157 +1,88 @@
 # Distribution maintenance
 
-All channels derive from one qualified published release of
-[`raysofspace/enumeray-cli`](https://github.com/raysofspace/enumeray-cli/releases).
-The signed release manifest binds the public revision, source tree, lockfile,
-compatibility baseline and all archive hashes. Direct downloads retain the
-complete verified archive; no end-user installer or Python runtime is involved.
+Direct downloads and the project Homebrew tap derive from one qualified published
+release of [`raysofspace/enumeray-cli`](https://github.com/raysofspace/enumeray-cli/releases).
+The signed manifest binds the public revision, tree, lockfile, baseline status,
+source archive and all four native archive hashes. Users verify/extract/copy the
+native executable with ordinary tools; Python is only a maintainer dependency.
 
-Public CLI releases use `vVERSION` tags, such as `v0.1.0`. The matching private
-service qualification starts from `cli-vVERSION`, such as `cli-v0.1.0`. Signed
-authorization binds that private workflow run to the exact public source revision
-and version; public download URLs always use the public `vVERSION` tag.
+## First alpha
 
-The release delivery gate must verify the manifest's Sigstore signature, matching
-service authorization, all four native platform reports and public release state
-before generating or submitting channel updates. The generator is not an
-alternative release authorization mechanism.
+The first release is **0.1.0-alpha.1**, using public tag `v0.1.0-alpha.1` and
+private qualification tag `cli-v0.1.0-alpha.1`. Canonical SemVer prereleases and
+stable versions are supported; build metadata is rejected to keep artifact
+identities unambiguous. GitHub prereleases are never marked as the latest stable
+release. All retries and channel downloads verify that GitHub's prerelease flag
+matches the signed version.
 
-## Generate and inspect
+Alpha updates may require fresh installations, with no in-place upgrade promise.
+`persistent-v1` remains a candidate. Candidate snapshots must still validate and
+their signed baseline identity includes `status: candidate`; stable publication
+requires `status: released` and deliberate baseline activation. Keep an older
+alpha's valuable state and original matching binaries together. No installation
+or removal command resets user state or starts a daemon.
 
-From the public repository root, with an already verified manifest:
+## Native qualification
+
+The four targets are macOS **15+** on ARM64/Intel and Linux **glibc 2.28+** on
+ARM64/x86-64. `scripts/build-release-native.sh` takes explicit source, revision,
+target and output arguments and requires the pinned Rust/Cargo versions.
+
+Release jobs use native `macos-15` and `macos-15-intel` hosts. Both run the exact
+candidate through archive checks and the isolated Homebrew lifecycle harness:
+clean install/formula test, same-candidate formula-revision upgrade, test again,
+and removal while preserving private state and the existing global executable.
+The harness qualifies packaging mechanics, not compatibility between different
+alphas. Rosetta and newer-host smoke do not establish minimum-platform evidence.
+
+Configure these public repository variables with reviewed immutable image digests:
+
+- `ENUMERAY_MANYLINUX_2_28_X86_64_IMAGE`:
+  `quay.io/pypa/manylinux_2_28_x86_64@sha256:DIGEST`;
+- `ENUMERAY_MANYLINUX_2_28_AARCH64_IMAGE`:
+  `quay.io/pypa/manylinux_2_28_aarch64@sha256:DIGEST`.
+
+The Linux workflow verifies the runner, host and Docker daemon CPU before using
+its native image. All four final platform reports and matching public source
+must pass before staging. Private service acceptance uses the exact extracted
+Linux executable, then signs authorization for that final manifest digest.
+Publication never rebuilds accepted binaries. Enable immutable releases first.
+
+## Homebrew configuration and delivery
+
+`channels.json` selects `raysofspace/homebrew-tap`, protected branch `main`.
+Configure public secret `ENUMERAY_HOMEBREW_TOKEN` with access only to that tap's
+contents and pull requests. The tap checks installation, formula tests and
+removal on both native macOS 15 architectures. Formula updates are reviewable
+PRs; a maintainer merges after checks pass. The single `enumeray` formula carries
+the alpha until a later qualified release updates it.
+
+Configure private secret `ENUMERAY_CLI_RELEASE_TOKEN` with public CLI repository
+contents-write permission for dispatch/candidate downloads and administration-read
+permission for immutable-release preflight. Keep it in the private service
+repository. Build jobs receive neither that token nor private source. Keep tap
+credentials separate. Do not use a broad personal CLI login token as a CI secret.
+
+The delivery verifier checks signatures, matching preparation/publication
+receipts, baseline policy, all native reports and public release state before
+channel generation. To inspect an already verified manifest:
 
 ```sh
 python3 scripts/generate-channels.py --manifest /path/to/release-manifest.json \
-  --output /tmp/enumeray-channel-delivery
-python3 scripts/publish-channels.py --delivery /tmp/enumeray-channel-delivery \
+  --output /tmp/enumeray-homebrew-delivery
+python3 scripts/publish-channels.py --delivery /tmp/enumeray-homebrew-delivery \
   --channel homebrew
 ```
 
-`channel-plan.json` records separate channel readiness and exact generated file
-digests. Identical generation is repeatable; conflicting existing package bytes
-are rejected. Use a fresh delivery directory when changing maintainer or channel
-configuration. This does not replace a published version or its immutable assets.
+To submit deliberately, add `--submit --status /tmp/homebrew-delivery-status.json`.
+The helper reuses identical `codex/enumeray-vVERSION` branches and PRs, including
+a lost create response; conflicting content fails without overwriting it. Open
+PRs report `pending-review`, merged PRs `delivered`, and closed unmerged PRs need
+maintainer action. It never merges PRs. Missing credentials report a configuration
+blocker. Delivery status remains outside immutable release assets.
 
-The Homebrew output contains one macOS formula with Apple Silicon/Intel archive
-URLs and SHA-256 hashes. Its local test exercises help, version reporting and
-credential-free journal initialization/inspection. It installs no service.
-
-The Conda output builds the immutable source archive with the pinned Rust
-toolchain and `Cargo.lock`, using ecosystem compilers/sysroots and
-`cargo auditable install`. It checks the archive's source identity and complete
-dependency notices, runs `cargo-bundle-licenses`, retains both notice bundles
-and the normal dependency tree,
-and includes source/compatibility metadata. It downloads no upstream executable.
-The recipe supports `linux-64`, `linux-aarch64`, `osx-64` and `osx-arm64`; runtimes
-must satisfy glibc 2.28+ or macOS 14+. A generated recipe still needs actual native
-package build/install/upgrade/removal qualification and conda-forge review.
-
-To build a generated recipe with the ecosystem builder:
-
-```sh
-rattler-build build --recipe /tmp/enumeray-channel-delivery/conda/recipe/recipe.yaml \
-  --target-platform osx-arm64 --channel conda-forge
-```
-
-Run the four targets on their corresponding native hosts. Keep package-manager
-installation qualification distinct from upstream archive qualification. Confirm
-that credentials, configuration and initialized journal identities survive an
-upgrade/removal and that no daemon starts. Retained active-work upgrades also
-require the matching service's recovery/restart rehearsal.
-
-The native macOS release builder also runs the Homebrew channel harness against
-the exact candidate archive before staging its release qualification report:
-
-```sh
-python3 scripts/qualify-homebrew.py --archive /path/to/enumeray-0.1.0-aarch64-apple-darwin.tar.gz \
-  --target aarch64-apple-darwin --version 0.1.0 --output /tmp/homebrew-qualification.json
-```
-
-This requires Homebrew and actual macOS 14 on the candidate's native CPU. It uses
-a unique temporary tap and keg-only formula with a local archive URL. It disables
-automatic updates, unrelated dependency upgrades, analytics and global cleanup;
-it never links the test executable over an existing `enumeray`. The harness runs
-clean installation, the maintained formula test, an upgrade from formula revision
-0 to 1 using the same candidate, another formula test and removal. It checks
-private state/journal identities and cleans its own tap/kegs after failure.
-The revision upgrade qualifies installation mechanics; actual released-version
-compatibility still needs the matching service's upgrade rehearsal. Reports
-record the host and whether the minimum environment was qualified. A rehearsal
-on macOS 26 or another newer host cannot establish macOS 14 support.
-
-## Configure channels
-
-`channels.json` defaults the Homebrew destination to `raysofspace/homebrew-tap`.
-The maintainer must establish that public tap and protect its main branch. A
-scoped GitHub App installation token needs contents and pull-request write
-access only to the tap. The release repository token alone cannot update another
-repository. Formula updates are reviewable pull requests; delivery is complete
-after the matching update is merged.
-
-For first conda-forge submission, explicitly configure:
-
-- `mode: "staged-recipes"`, upstream `conda-forge/staged-recipes` and destination
-  `recipes/enumeray`;
-- `fork_repository` naming the maintainer-owned fork of that upstream;
-- a nonempty `maintainers` list containing only consenting GitHub accounts.
-
-The checked-in maintainer list and fork are empty deliberately. Until configured,
-the Conda channel reports `blocked-configuration`; Homebrew generation proceeds.
-After acceptance, change the Conda configuration to `mode: "feedstock"`, upstream
-`conda-forge/enumeray-feedstock`, its maintainer-owned fork and directory `recipe`.
-Rerender that feedstock according to conda-forge policy before merging changes.
-Keep feedstock maintenance credentials separate from the tap token.
-
-## Release host and credential configuration
-
-The public release workflow needs the following repository variables before
-native delivery can run:
-
-- `ENUMERAY_MANYLINUX_2_28_X86_64_IMAGE` and
-  `ENUMERAY_MANYLINUX_2_28_AARCH64_IMAGE`: reviewed
-  `quay.io/pypa/manylinux_2_28_x86_64@sha256:DIGEST` and
-  `quay.io/pypa/manylinux_2_28_aarch64@sha256:DIGEST` image references. Tags alone
-  are rejected. Use a real reviewed full digest for each native CPU.
-- `ENUMERAY_MACOS14_X86_64_RUNNER` and `ENUMERAY_MACOS14_ARM64_RUNNER`: JSON
-  arrays of runner labels. Defaults are
-  `["self-hosted","macOS","X64","enumeray-macos14"]` and
-  `["self-hosted","macOS","ARM64","enumeray-macos14"]`. Provision actual
-  macOS 14, Homebrew and the corresponding CPU; labels alone do not qualify a host.
-
-Configure public repository secrets `ENUMERAY_HOMEBREW_TOKEN` and
-`ENUMERAY_CONDA_TOKEN` separately, with only their channel's required repository
-contents/pull-request permissions. `channels.json` selects destinations and
-consenting maintainers. Missing tokens or Conda setup produce a visible blocked
-channel status; they do not establish delivery.
-
-The private service workflow's `CLI_RELEASE_TOKEN` needs public CLI repository
-contents-write permission for dispatch/release coordination and administration-read
-permission for immutable-release preflight. Keep that token in the private service
-repository. Public build and channel jobs never receive it or private service
-source. This repository change does not provision runners, install Homebrew,
-activate persistent compatibility, qualify missing platforms or publish packages.
-
-## Submit and retry
-
-The workflow invokes one channel per job with only that channel's scoped
-`GH_TOKEN`. To submit a reviewed local plan deliberately:
-
-```sh
-python3 scripts/publish-channels.py --delivery /tmp/enumeray-channel-delivery \
-  --channel homebrew --submit --status /tmp/homebrew-delivery-status.json
-```
-
-The helper creates the deterministic `codex/enumeray-vVERSION` branch and a
-matching update PR. Existing identical branch/PR content is reused, including
-after a lost create response. Different content under that version fails rather
-than replacing it. A merged PR reports `delivered`; an open PR reports
-`pending-review`; a closed unmerged PR requires maintainer action. It never merges
-a PR, creates a repository/fork, force-updates a branch or overwrites release
-assets. Status files describe each attempt and are kept outside immutable release
-assets. A failing/pending Conda update never rolls back another delivered channel.
-
-For a broken release, retain its immutable evidence, stop further channel
-delivery and publish a qualified corrected version. Use the conda-forge broken
-package process where necessary; do not silently replace package bytes. Recover
-an installed daemon using its qualified release-pair/state recovery procedure.
-An older executable alone is not a safe rollback after incompatible state writes.
+For a broken release, retain its immutable evidence, stop further channel delivery
+and publish a qualified corrected version. Coordinate connector maintenance and
+matching runner replacement explicitly. Retain existing state and use the
+release-specific recovery procedure; replacing only an executable does not
+establish a safe state rollback.

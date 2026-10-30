@@ -10,11 +10,41 @@ import tarfile
 
 REPOSITORY = 'https://github.com/raysofspace/enumeray-cli'
 MINIMUM_PLATFORMS = {
-    'x86_64-apple-darwin': {'os': 'macos', 'version': '14.0'},
-    'aarch64-apple-darwin': {'os': 'macos', 'version': '14.0'},
+    'x86_64-apple-darwin': {'os': 'macos', 'version': '15.0'},
+    'aarch64-apple-darwin': {'os': 'macos', 'version': '15.0'},
     'x86_64-unknown-linux-gnu': {'os': 'linux', 'glibc': '2.28'},
     'aarch64-unknown-linux-gnu': {'os': 'linux', 'glibc': '2.28'},
 }
+
+# Canonical SemVer, excluding build metadata so one version names one asset set.
+_NUMBER = r'(?:0|[1-9][0-9]*)'
+_IDENTIFIER = r'(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+_VERSION = re.compile(_NUMBER + r'\.' + _NUMBER + r'\.' + _NUMBER
+                      + r'(?:-' + _IDENTIFIER + r'(?:\.' + _IDENTIFIER + r')*)?')
+
+
+def validate_version(version):
+    if not isinstance(version, str) or not _VERSION.fullmatch(version):
+        raise ValueError('Expected a canonical release version without build metadata')
+    return version
+
+
+def is_prerelease(version):
+    return '-' in validate_version(version)
+
+
+def validate_baseline(baseline, version):
+    prerelease = is_prerelease(version)
+    if (not isinstance(baseline, dict) or set(baseline) != {'id', 'sha256', 'status'}
+            or not isinstance(baseline['id'], str)
+            or not re.fullmatch(r'persistent-v[1-9][0-9]*', baseline['id'])
+            or not isinstance(baseline['sha256'], str)
+            or not re.fullmatch(r'[0-9a-f]{64}', baseline['sha256'])
+            or baseline['status'] not in ('candidate', 'released')):
+        raise ValueError('Expected an explicit candidate or released baseline identity')
+    if baseline['status'] == 'candidate' and not prerelease:
+        raise ValueError('Stable releases require an activated persistent baseline')
+    return baseline
 
 
 def sha256(path):

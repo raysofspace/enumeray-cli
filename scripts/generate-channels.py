@@ -7,19 +7,23 @@ release before invoking it. Publishing uses the separately scoped helper.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_spec = importlib.util.spec_from_file_location("release_artifacts", ROOT / "scripts/release_artifacts.py")
+artifacts_policy = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(artifacts_policy)
 PUBLIC_REPOSITORY = "raysofspace/enumeray-cli"
 TARGETS = {
     "x86_64-unknown-linux-gnu": {"minimum_glibc": "2.28"},
     "aarch64-unknown-linux-gnu": {"minimum_glibc": "2.28"},
-    "x86_64-apple-darwin": {"minimum_macos": "14.0"},
-    "aarch64-apple-darwin": {"minimum_macos": "14.0"},
+    "x86_64-apple-darwin": {"minimum_macos": "15.0"},
+    "aarch64-apple-darwin": {"minimum_macos": "15.0"},
 }
 
 
@@ -33,24 +37,17 @@ def encoded(value):
 
 def validate_manifest(manifest):
     """Reject ambiguous or noncanonical package identities before rendering code."""
-    version = manifest.get("version", "")
-    if (manifest.get("schema_version") != 1
-            or not isinstance(version, str)
-            or not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version)
-            or manifest.get("tag") != "v" + version
+    version = artifacts_policy.validate_version(manifest.get("version"))
+    if (manifest.get("schema_version") != 1 or manifest.get("tag") != "v" + version
             or manifest.get("public_repository") != PUBLIC_REPOSITORY):
-        raise ValueError("Expected a stable version and the canonical public release identity")
+        raise ValueError("Expected the canonical public release identity")
     for name, size in (("public_revision", 40), ("source_tree", 40),
                        ("lockfile_sha256", 64), ("builder_workflow_revision", 40)):
         if not re.fullmatch(r"[0-9a-f]{%s}" % size, str(manifest.get(name, ""))):
             raise ValueError("Invalid release identity field: " + name)
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", str(manifest.get("rust_toolchain", ""))):
         raise ValueError("The signed source identity must pin a numeric Rust toolchain")
-    baseline = manifest.get("baseline", {})
-    if (not isinstance(baseline, dict)
-            or not re.fullmatch(r"persistent-v[1-9][0-9]*", str(baseline.get("id", "")))
-            or not re.fullmatch(r"[0-9a-f]{64}", str(baseline.get("sha256", "")))):
-        raise ValueError("Missing released compatibility baseline identity")
+    artifacts_policy.validate_baseline(manifest.get("baseline"), version)
     files = {}
     for item in manifest.get("files", []):
         name = item.get("name", "")
@@ -76,27 +73,19 @@ def validate_manifest(manifest):
 
 
 def validate_config(config):
-    if config.get("schema_version") != 1:
-        raise ValueError("Unsupported channel configuration")
-    for channel in ("homebrew", "conda"):
-        item = config.get(channel, {})
-        for key in ("repository", "fork_repository"):
-            value = item.get(key)
-            if value is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", value):
-                raise ValueError("Invalid channel repository: " + channel)
-        branch = item.get("base_branch", "main")
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", branch) or ".." in branch:
-            raise ValueError("Invalid channel base branch: " + channel)
-    conda = config.get("conda", {})
-    directory = conda.get("recipe_directory", "recipe")
-    path = PurePosixPath(directory)
-    if path.is_absolute() or ".." in path.parts or not path.parts:
-        raise ValueError("Conda recipe directory must remain within its repository")
-    if conda.get("mode") not in ("staged-recipes", "feedstock"):
-        raise ValueError("Conda mode must be staged-recipes or feedstock")
-    for maintainer in conda.get("maintainers", []):
-        if not isinstance(maintainer, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", maintainer):
-            raise ValueError("Invalid consenting Conda recipe maintainer")
+    if (not isinstance(config, dict) or config.get("schema_version") != 1
+            or set(config) - {"schema_version", "homebrew"}):
+        raise ValueError("Only the Homebrew distribution channel is supported")
+    item = config.get("homebrew", {})
+    if not isinstance(item, dict) or set(item) - {"repository", "base_branch"}:
+        raise ValueError("Invalid Homebrew configuration")
+    repository = item.get("repository")
+    if repository is not None and (not isinstance(repository, str)
+            or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)):
+        raise ValueError("Invalid channel repository: homebrew")
+    branch = item.get("base_branch", "main")
+    if not isinstance(branch, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", branch) or ".." in branch:
+        raise ValueError("Invalid channel base branch: homebrew")
 
 
 def render(path, replacements):
@@ -108,82 +97,32 @@ def render(path, replacements):
     return contents.encode()
 
 
-def generate(manifest, config, channel="all", root=ROOT):
-    files, source_archive = validate_manifest(manifest)
+def generate(manifest, config, channel="homebrew", root=ROOT):
+    if channel != "homebrew":
+        raise ValueError("Only the Homebrew distribution channel is supported")
+    files, _ = validate_manifest(manifest)
     validate_config(config)
     url = "https://github.com/%s/releases/download/%s/" % (PUBLIC_REPOSITORY, manifest["tag"])
-    artifacts = {}
-    channels = {}
-    selected = ("homebrew", "conda") if channel == "all" else (channel,)
-    identity = {
-        "version": manifest["version"], "tag": manifest["tag"],
-        "public_repository": PUBLIC_REPOSITORY,
-        "public_revision": manifest["public_revision"],
-        "source_tree": manifest["source_tree"],
-        "lockfile_sha256": manifest["lockfile_sha256"],
-        "rust_toolchain": manifest["rust_toolchain"],
-        "baseline": manifest["baseline"],
-    }
-    for name in selected:
-        settings = config.get(name, {})
-        entry = {"state": "ready", "files": [], "repository": settings.get("repository"),
-                 "base_branch": settings.get("base_branch", "main"),
-                 "branch": "codex/enumeray-v" + manifest["version"]}
-        channels[name] = entry
-        if not settings.get("repository"):
-            entry.update(state="blocked-configuration", reason="Configure the channel repository")
-            continue
-        if name == "homebrew":
-            arm = files[manifest["targets"]["aarch64-apple-darwin"]["archive"]]
-            intel = files[manifest["targets"]["x86_64-apple-darwin"]["archive"]]
-            outputs = {"Formula/enumeray.rb": render(root / "distribution/homebrew/enumeray.rb.in", {
-                "VERSION": manifest["version"], "ARM_URL": url + arm["name"],
-                "ARM_SHA256": arm["sha256"], "INTEL_URL": url + intel["name"],
-                "INTEL_SHA256": intel["sha256"],
-            })}
-        else:
-            if not settings.get("maintainers"):
-                entry.update(state="blocked-configuration", reason="Configure consenting recipe maintainers")
-                continue
-            # The signer binds this compiler to the released source. The trusted
-            # delivery workflow's current checkout may use a different compiler.
-            rust_version = manifest["rust_toolchain"]
-            replacements = {
-                "VERSION": manifest["version"], "SOURCE_URL": url + source_archive["name"],
-                "SOURCE_SHA256": source_archive["sha256"], "RUST_VERSION": rust_version,
-                "LOCKFILE_SHA256": manifest["lockfile_sha256"],
-                "MAINTAINERS": "\n".join("    - " + login for login in settings["maintainers"]),
-            }
-            outputs = {
-                "recipe/recipe.yaml": render(root / "distribution/conda/recipe.yaml.in", replacements),
-                "recipe/build.sh": render(root / "distribution/conda/build.sh.in", replacements),
-                "recipe/conda_build_config.yaml": render(
-                    root / "distribution/conda/conda_build_config.yaml.in", replacements),
-                "recipe/source.json": encoded(identity),
-                "recipe/upstream-source.json": encoded({
-                    "repository": "https://github.com/" + PUBLIC_REPOSITORY,
-                    "revision": manifest["public_revision"], "tree": manifest["source_tree"],
-                    "lockfile_sha256": manifest["lockfile_sha256"], "clean": True,
-                }),
-                "recipe/compatibility.json": encoded({
-                    "package": "enumeray-cli", "binary": "enumeray", "version": manifest["version"],
-                    "api": "v1", "connector_protocol": 1, "wrapper_protocols": [1, 2],
-                    "capabilities": ["cli", "connector", "compute_runner"],
-                    "requires_database": False, "requires_openssh_for_ssh": True,
-                    "source": identity,
-                }),
-            }
-            entry["mode"] = settings["mode"]
-            entry["maintainers"] = settings["maintainers"]
-            entry["fork_repository"] = settings.get("fork_repository")
-            entry["recipe_directory"] = settings.get("recipe_directory", "recipe")
-        for relative, contents in sorted(outputs.items()):
-            output = name + "/" + relative
-            artifacts[output] = contents
-            destination = relative if name == "homebrew" else str(
-                PurePosixPath(entry["recipe_directory"]) / PurePosixPath(relative).relative_to("recipe"))
-            entry["files"].append({"path": output, "destination": destination, "sha256": digest(contents)})
-    return artifacts, {"schema_version": 1, "release": identity, "channels": channels}
+    identity = {key: manifest[key] for key in (
+        "version", "tag", "public_repository", "public_revision", "source_tree",
+        "lockfile_sha256", "rust_toolchain", "baseline")}
+    settings = config.get("homebrew", {})
+    entry = {"state": "ready", "files": [], "repository": settings.get("repository"),
+             "base_branch": settings.get("base_branch", "main"),
+             "branch": "codex/enumeray-v" + manifest["version"]}
+    plan = {"schema_version": 1, "release": identity, "channels": {"homebrew": entry}}
+    if not entry["repository"]:
+        entry.update(state="blocked-configuration", reason="Configure the channel repository")
+        return {}, plan
+    arm = files[manifest["targets"]["aarch64-apple-darwin"]["archive"]]
+    intel = files[manifest["targets"]["x86_64-apple-darwin"]["archive"]]
+    contents = render(root / "distribution/homebrew/enumeray.rb.in", {
+        "VERSION": manifest["version"], "ARM_URL": url + arm["name"], "ARM_SHA256": arm["sha256"],
+        "INTEL_URL": url + intel["name"], "INTEL_SHA256": intel["sha256"],
+    })
+    output = "homebrew/Formula/enumeray.rb"
+    entry["files"].append({"path": output, "destination": "Formula/enumeray.rb", "sha256": digest(contents)})
+    return {output: contents}, plan
 
 
 def write_delivery(output, artifacts, report):
@@ -211,7 +150,7 @@ def main():
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--config", type=Path, default=ROOT / "distribution/channels.json")
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--channel", choices=("homebrew", "conda", "all"), default="all")
+    parser.add_argument("--channel", choices=("homebrew",), default="homebrew")
     args = parser.parse_args()
     try:
         artifacts, report = generate(json.loads(args.manifest.read_text()),
