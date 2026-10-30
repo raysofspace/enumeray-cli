@@ -7,6 +7,7 @@ The release workflow supplies the signature, after this script creates checksums
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -62,6 +63,22 @@ def copy_examples(root, destination, revision=None):
         target = destination / source.relative_to(root / relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
+
+
+def bundle_example_guides(root, destination, guide_names, revision=None):
+    """Keep links relative to each relocated example, including top-level guides."""
+    sources = root / 'crates/cli/examples'
+    bundled = {**guide_names, (root / 'LICENSE').resolve(): 'LICENSE',
+               sources.resolve(): 'examples'}
+    for path in destination.rglob('*'):
+        relative = path.relative_to(destination)
+        bundled[(sources / relative).resolve()] = (Path('examples') / relative).as_posix()
+    for target in destination.rglob('*.md'):
+        source = sources / target.relative_to(destination)
+        relative_names = {name: Path(os.path.relpath(destination.parent / output, target.parent)).as_posix()
+                          for name, output in bundled.items()}
+        bundle_guide(source, target, root, relative_names, revision=revision)
+    return bundled
 
 
 def assert_source_unchanged(root, revision, original):
@@ -136,10 +153,12 @@ def main():
             (root / "crates/connector/README.md").resolve(): "CONNECTOR_GUIDE.md",
             (root / "crates/connector/EXTENDING.md").resolve(): "EXTENDING.md",
         }
+        copy_examples(root, contents / 'examples', source_identity['revision'] if args.release else None)
+        bundled_names = bundle_example_guides(root, contents / 'examples', guide_names,
+                                             revision=source_identity['revision'])
         for source, name in guide_names.items():
             if name not in ("AUTHOR_GUIDE.md", "ANALYSIS_GUIDE.md"):
-                bundle_guide(source, contents / name, root, guide_names, revision=source_identity['revision'])
-        copy_examples(root, contents / 'examples', source_identity['revision'] if args.release else None)
+                bundle_guide(source, contents / name, root, bundled_names, revision=source_identity['revision'])
         shutil.copy2(root / "crates" / "cli" / "AUTHOR_GUIDE.md", contents / "AUTHOR_GUIDE.md")
         shutil.copy2(root / "crates" / "cli" / "ANALYSIS_GUIDE.md", contents / "ANALYSIS_GUIDE.md")
         # Release jobs package native binaries. Generate complete projects

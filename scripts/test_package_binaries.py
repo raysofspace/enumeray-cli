@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +19,30 @@ spec.loader.exec_module(packaging)
 
 
 class BundleGuideTests(unittest.TestCase):
+    def test_nested_example_links_follow_the_relocated_archive_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            examples = root / 'crates/cli/examples'
+            examples.mkdir(parents=True)
+            (examples / 'nested').mkdir()
+            (examples / 'README.md').write_text('[connector](../../connector/README.md#single-user-development)\n'
+                                               '[nested](nested/README.md#usage)\n')
+            (examples / 'nested/README.md').write_text('[installation](../../INSTALL.md#upgrade-maintenance)\n'
+                                                      '[source](../../../../Cargo.toml)\n')
+            destination = Path(temporary) / 'archive/examples'
+            shutil.copytree(examples, destination)
+            guides = {(root / 'crates/connector/README.md').resolve(): 'CONNECTOR_GUIDE.md',
+                      (root / 'crates/cli/INSTALL.md').resolve(): 'INSTALL.md'}
+            bundled = packaging.bundle_example_guides(root, destination, guides, revision='a' * 40)
+            self.assertEqual((destination / 'README.md').read_text(),
+                             '[connector](../CONNECTOR_GUIDE.md#single-user-development)\n'
+                             '[nested](nested/README.md#usage)\n')
+            self.assertIn('[installation](../../INSTALL.md#upgrade-maintenance)',
+                          (destination / 'nested/README.md').read_text())
+            self.assertIn('/blob/' + 'a' * 40 + '/Cargo.toml',
+                          (destination / 'nested/README.md').read_text())
+            self.assertEqual(bundled[(examples / 'README.md').resolve()], 'examples/README.md')
+
     def test_bundled_links_stay_local_and_other_repository_links_keep_fragments(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

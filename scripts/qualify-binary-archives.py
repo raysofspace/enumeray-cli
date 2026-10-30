@@ -99,8 +99,10 @@ def main():
     executables = sorted(p.name for p in contents.iterdir() if p.is_file() and p.stat().st_mode & 0o111)
     if executables != ["enumeray"]:
         raise SystemExit("Expected exactly one installed executable")
-    check_guide_links(contents, ("INSTALL.md", "AUTHOR_GUIDE.md", "ANALYSIS_GUIDE.md",
-                                "CONNECTOR_GUIDE.md", "EXTENDING.md", "examples/README.md"))
+    guides = {"INSTALL.md", "AUTHOR_GUIDE.md", "ANALYSIS_GUIDE.md",
+              "CONNECTOR_GUIDE.md", "EXTENDING.md", "examples/README.md"}
+    guides.update(path.relative_to(contents).as_posix() for path in contents.rglob('*.md'))
+    check_guide_links(contents, sorted(guides))
     subprocess.run([str(binary), "--help"], cwd=fresh, env=environment,
                    check=True, stdout=subprocess.DEVNULL)
     for command in (["connector", "--help"], ["connector", "run", "--help"],
