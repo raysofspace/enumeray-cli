@@ -45,6 +45,9 @@ pub struct HostSetupSpec {
     pub executable_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable_sha256: Option<String>,
+    /// SSH execution hosts may need another native artifact (platform or CPU).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_executable_sha256: Option<String>,
     pub journal: String,
     pub token_file: String,
     pub credentials_file: Option<String>,

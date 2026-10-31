@@ -307,6 +307,7 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
         } else {
             Some(digest_bytes(fs::read(executable)?))
         },
+        execution_executable_sha256: None,
         journal: format!("{state}/journal"),
         token_file: format!("{state}/credentials/token"),
         credentials_file: (connection == "ssh").then(|| format!("{state}/ssh-credentials.json")),
@@ -316,6 +317,19 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
         shutdown_timeout_seconds: 30,
         install_service: false,
     };
+    if connection == "ssh" {
+        eprintln!(
+            "Approve the execution host's native Enumeray artifact. Different platforms or CPUs can require different bytes; its administrator supplies that local artifact with --executable-source."
+        );
+        host.execution_executable_sha256 = Some(ask(
+            "SSH execution executable SHA-256",
+            if host.connector_account.platform == host.execution_account.platform {
+                host.executable_sha256.as_deref().unwrap_or("")
+            } else {
+                ""
+            },
+        )?);
+    }
     let startup = ask("Startup: foreground or background", "foreground")?;
     host.install_service = startup == "background";
     let first_model = match ask("First model: demo, project or later", "demo")?.as_str() {

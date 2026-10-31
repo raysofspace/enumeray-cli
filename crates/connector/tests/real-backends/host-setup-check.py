@@ -82,6 +82,27 @@ for driver in ('process', 'slurm'):
         unit.write_bytes(before)
 print(json.dumps({'guided_host_apply':'passed','paths':4,'account_creation':True,'repeated_apply':True,'conflicts_preserved':True,'daemon_lifecycle':'unverified'}), flush=True)
 
+# An SSH execution host uses its own approved native artifact, independently of
+# the connector's platform/artifact. Only this Linux execution side is applied.
+mixed = copy.deepcopy(spec)
+mixed['context'].update(id='guided-mixed-artifact', connector_id='guided-mixed-artifact')
+mixed['context']['definition']['work_root'] = '/srv/guided-mixed-artifact'
+mixed['connector_account'].update(platform='macos', create=False)
+mixed['executable_source'] = '/reviewed/connector-macos/enumeray'
+mixed['executable_sha256'] = '0' * 64
+mixed['execution_executable_sha256'] = checksum
+mixed['install_service'] = False
+document = BASE / 'mixed-artifact.json'
+document.write_text(json.dumps(mixed))
+private = BASE / 'mixed-artifact-plan'
+invoke([EXE,'connector','configuration','generate','--file',str(document),'--directory',str(private)])
+source_input = BASE / 'mixed-artifact-input.json'
+source_input.write_text(json.dumps({'manifest_version':1,'host':mixed,'connector':{'id':'guided-mixed-artifact','label':'Mixed native artifacts','max_outstanding_assignments':1},'startup':'foreground'}))
+review = invoke([EXE,'--json','setup','--file',str(source_input),'--directory',str(BASE/'mixed-artifact-owner'),'--non-interactive'],success=False)
+approval = json.loads(review.stdout)['host_plan_sha256']
+invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval,'--executable-source',EXE])
+print(json.dumps({'execution_native_artifact':'passed','connector_platform':'macos','execution_platform':'linux'}),flush=True)
+
 # Source fixtures for matching-service guided candidate trials. The owner CLI and
 # connector use enumeray's OS account; model execution remains the distinct model user.
 plans = Path('/opt/enumeray/guided-host-plans')

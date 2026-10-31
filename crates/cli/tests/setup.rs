@@ -94,6 +94,39 @@ fn saved_local_inputs_cannot_change_with_the_resume_working_directory() {
     assert_eq!(json(&call())["status"], "review_required");
 }
 #[test]
+fn cross_platform_ssh_requires_and_freezes_its_native_artifact_approval() {
+    let root = tempfile::tempdir().unwrap();
+    let file = input(root.path(), "linux");
+    let mut document: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+    document["host"]["connector_account"]["platform"] = json!("macos");
+    document["host"]["connector_account"]["create"] = json!(false);
+    let execution_user = document["host"]["execution_account"]["name"].clone();
+    document["host"]["context"]["definition"]["connection"] = json!({"kind":"ssh","host":"127.0.0.1","port":2222,"user":execution_user,"credential_reference":"site-key","runner_path":"/opt/enumeray/bin/enumeray"});
+    document["host"]["credentials_file"] = json!("/var/lib/enumeray/ssh.json");
+    let directory = root.path().join("journey");
+    let call = || {
+        command(root.path())
+            .args(["setup", "--non-interactive", "--directory"])
+            .arg(&directory)
+            .arg("--file")
+            .arg(&file)
+            .output()
+            .unwrap()
+    };
+    fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
+    let rejected = call();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("execution executable SHA-256"));
+    document["host"]["execution_executable_sha256"] = json!("a".repeat(64));
+    fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
+    assert_eq!(json(&call())["status"], "review_required");
+    document["host"]["execution_executable_sha256"] = json!("b".repeat(64));
+    fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
+    let changed = call();
+    assert!(!changed.status.success());
+    assert!(String::from_utf8_lossy(&changed.stderr).contains("differs"));
+}
+#[test]
 fn wrong_approval_changed_input_and_tampered_evidence_are_refused() {
     let root = tempfile::tempdir().unwrap();
     let file = input(root.path(), "development");

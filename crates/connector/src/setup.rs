@@ -108,6 +108,20 @@ pub(crate) fn validate(spec: &HostSetupSpec) -> Result<()> {
             "executable source requires a reviewed absolute path and SHA-256",
         ));
     }
+    if spec.execution_executable_sha256.as_ref().is_some_and(|s| {
+        s.len() != 64
+            || !s
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+            || !matches!(spec.context.definition.connection, ConnectionConfig::Ssh(_))
+    }) || (matches!(spec.context.definition.connection, ConnectionConfig::Ssh(_))
+        && spec.connector_account.platform != spec.execution_account.platform
+        && spec.execution_executable_sha256.is_none())
+    {
+        return Err(failure(
+            "SSH hosts on different platforms require a reviewed execution executable SHA-256",
+        ));
+    }
     let context = &spec.context.definition;
     if matches!(context.connection, ConnectionConfig::Direct { .. })
         && spec.connector_account.platform != spec.execution_account.platform

@@ -55,6 +55,26 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                     ("Correction", "/correction"),
                 ],
             );
+            for pointer in ["/local_preflight/checks", "/preflight/report/checks"] {
+                let checks = value
+                    .pointer(pointer)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter(|check| check["required"] == true && check["outcome"] != "passed")
+                    .cloned()
+                    .collect::<Vec<_>>();
+                table(
+                    output,
+                    &checks,
+                    &[
+                        ("Check", "/check"),
+                        ("Outcome", "/outcome"),
+                        ("Role", "/responsible_role"),
+                        ("Correction", "/correction"),
+                    ],
+                );
+            }
         }
         Command::Connector(Connector::Context(
             ConnectorContext::Preflight { .. } | ConnectorContext::PreflightStatus { .. },

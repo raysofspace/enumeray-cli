@@ -446,7 +446,10 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             300,
         )?;
         if result.exit != 0 {
-            return Ok(result);
+            return Ok(preflight_completion(
+                summary(&directory, &plan, &progress, "host_blocked"),
+                result,
+            ));
         }
     }
     let diag = client
@@ -461,6 +464,13 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
         return trial::execute(args, options, &client, &directory, &plan, &mut progress);
     }
     complete(summary(&directory, &plan, &progress, "ready"), 0)
+}
+fn preflight_completion(mut overview: Value, result: Completion) -> Completion {
+    overview["preflight"] = result.value.unwrap_or(Value::Null);
+    Completion {
+        value: Some(overview),
+        exit: result.exit,
+    }
 }
 fn needs_new_preflight(status: &ContextPreflightStatus) -> bool {
     status
@@ -934,6 +944,30 @@ fn inspect(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blocked_preflight_preserves_parent_resume_and_displays_the_responsible_role() {
+        use clap::Parser;
+        let args = Args::parse_from(["enumeray", "setup", "--directory", "/setup"]);
+        for exit in [1, 5, 130] {
+            let completion = preflight_completion(
+                json!({"directory":"/setup","status":"host_blocked","commands":{"resume":["enumeray","setup","--directory","/setup"]}}),
+                Completion {
+                    value: Some(
+                        json!({"directory":"/setup/preflight-0000","report":{"checks":[{"check":"work_root","required":true,"outcome":"failed","responsible_role":"host_administrator","correction":"Prepare the private execution work directory."}]}}),
+                    ),
+                    exit,
+                },
+            );
+            assert_eq!(completion.exit, exit);
+            let value = completion.value.unwrap();
+            assert_eq!(value["directory"], "/setup");
+            assert_eq!(value["commands"]["resume"][3], "/setup");
+            let rendered = crate::output::render(&args, &value);
+            assert!(rendered.contains("host_administrator"));
+            assert!(rendered.contains("Prepare the private execution work directory."));
+        }
+    }
 
     #[test]
     fn corrected_hosts_get_a_fresh_check_without_reissuing_pending_attempts() {

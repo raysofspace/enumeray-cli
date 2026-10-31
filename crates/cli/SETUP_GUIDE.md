@@ -89,6 +89,12 @@ executable only when its bytes match the plan's approved SHA-256. Never transfer
 connector bearer credentials or private SSH keys to the model execution account.
 The site's SSH access and verified `known_hosts` entry remain explicit.
 
+SSH hosts with another OS or CPU can use a different native artifact. Review its
+`execution_executable_sha256` in the host specification and pass that artifact's
+local path with `--executable-source` on the execution host. The wizard asks for
+this separate digest; a different host platform requires it. Connector installation
+continues to use `executable_sha256`.
+
 ## Start and establish readiness
 
 As the configured connector OS account, use the saved runtime file printed by setup:

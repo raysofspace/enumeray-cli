@@ -541,6 +541,7 @@ fn install_binary(
     spec: &HostSetupSpec,
     destination: &str,
     override_source: Option<&Path>,
+    expected_sha256: Option<&str>,
 ) -> Result<()> {
     let source = override_source
         .or_else(|| spec.executable_source.as_deref().map(Path::new))
@@ -569,7 +570,7 @@ fn install_binary(
         .take(512 * 1024 * 1024 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| failure("cannot read reviewed executable source"))?;
-    if Some(format!("{:x}", Sha256::digest(&bytes))) != spec.executable_sha256 {
+    if Some(format!("{:x}", Sha256::digest(&bytes))).as_deref() != expected_sha256 {
         return Err(failure("executable source changed after review"));
     }
     owned_file(Path::new(destination), &bytes, 0, 0, 0o755, true)
@@ -741,7 +742,12 @@ fn apply(
         if let Some(p) = &spec.credentials_file {
             directory(Path::new(p).parent().unwrap(), u, g, 0o700, true, false)?;
         }
-        install_binary(spec, &spec.connector_executable, executable_source)?;
+        install_binary(
+            spec,
+            &spec.connector_executable,
+            executable_source,
+            spec.executable_sha256.as_deref(),
+        )?;
         if let Some(source) = enrollment {
             let document = read_enrollment(source, &spec.context.connector_id)?;
             let destination =
@@ -907,7 +913,14 @@ fn prepare_execution(
         }
     }
     if let ConnectionConfig::Ssh(ssh) = &spec.context.definition.connection {
-        install_binary(spec, &ssh.runner_path, executable_source)?;
+        install_binary(
+            spec,
+            &ssh.runner_path,
+            executable_source,
+            spec.execution_executable_sha256
+                .as_deref()
+                .or(spec.executable_sha256.as_deref()),
+        )?;
     }
     Ok(())
 }
