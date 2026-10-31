@@ -88,6 +88,8 @@ plans = Path('/opt/enumeray/guided-host-plans')
 releases = Path('/opt/enumeray/guided-releases')
 plans.mkdir(mode=0o755)
 releases.mkdir(mode=0o755)
+plans.chmod(0o755)
+releases.chmod(0o755)
 for driver in ('process', 'slurm'):
     for connection in ('direct', 'ssh'):
         identifier = f'journey-{driver}-{connection}'
