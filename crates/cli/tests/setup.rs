@@ -208,7 +208,8 @@ fn development_approval_never_implies_execution_consent() {
 }
 #[test]
 fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
-    let root = tempfile::tempdir().unwrap();
+    // CI's configured temporary parent may itself be private to root.
+    let root = tempfile::tempdir_in("/tmp").unwrap();
     let file = input(root.path(), "linux");
     let root_runner = fs::metadata(root.path()).unwrap().uid() == 0;
     let executable = if root_runner {
