@@ -2,7 +2,10 @@
 use serde_json::{Value, json};
 use std::{
     fs,
-    os::unix::fs::PermissionsExt,
+    os::unix::{
+        fs::{MetadataExt, PermissionsExt, chown},
+        process::CommandExt,
+    },
     path::Path,
     process::{Command, Output},
 };
@@ -207,8 +210,33 @@ fn development_approval_never_implies_execution_consent() {
 fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
     let root = tempfile::tempdir().unwrap();
     let file = input(root.path(), "linux");
+    let root_runner = fs::metadata(root.path()).unwrap().uid() == 0;
+    let executable = if root_runner {
+        // Root is allowed to apply an approved managed plan. Exercise the
+        // unprivileged boundary even in root-run CI, without preparing its host.
+        // Copy the binary because Cargo's target directory may be root-private.
+        let executable = root.path().join("enumeray");
+        fs::copy(env!("CARGO_BIN_EXE_enumeray"), &executable).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        for path in [root.path(), file.as_path()] {
+            chown(path, Some(65534), Some(65534)).unwrap();
+        }
+        executable
+    } else {
+        env!("CARGO_BIN_EXE_enumeray").into()
+    };
+    let user_command = || {
+        let mut c = Command::new(&executable);
+        c.args(["--json", "--config"])
+            .arg(root.path())
+            .env("ENUMERAY_TOKEN", SECRET);
+        if root_runner {
+            c.uid(65534).gid(65534);
+        }
+        c
+    };
     let directory = root.path().join("setup");
-    let first = command(root.path())
+    let first = user_command()
         .args(["setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--file")
@@ -217,25 +245,32 @@ fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
         .unwrap();
     let first = json(&first);
     let plan = directory.join("host-plan.json");
-    let apply = || {
-        command(root.path())
+    let apply = |approval: &str| {
+        user_command()
             .args(["setup", "apply-host", "--plan"])
             .arg(&plan)
             .args(["--side", "connector", "--approve"])
-            .arg(first["host_plan_sha256"].as_str().unwrap())
+            .arg(approval)
             .output()
             .unwrap()
     };
-    let denied = apply();
+    let approval = first["host_plan_sha256"].as_str().unwrap();
+    let unapproved = apply("unapproved");
+    assert!(!unapproved.status.success());
+    let stderr = String::from_utf8_lossy(&unapproved.stderr);
+    assert!(stderr.contains("digest was not approved"), "{stderr}");
+    let denied = apply(approval);
     assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("administrator"));
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert!(stderr.contains("administrator"), "{stderr}");
     let mut content: Value = serde_json::from_slice(&fs::read(&plan).unwrap()).unwrap();
     content["files"][0]["content"] = json!("arbitrary unreviewed command");
     fs::write(&plan, serde_json::to_vec(&content).unwrap()).unwrap();
-    let tampered = apply();
+    let tampered = apply(approval);
     assert!(!tampered.status.success());
-    assert!(String::from_utf8_lossy(&tampered.stderr).contains("plan changed"));
-    assert!(!String::from_utf8_lossy(&tampered.stderr).contains(SECRET));
+    let stderr = String::from_utf8_lossy(&tampered.stderr);
+    assert!(stderr.contains("plan changed"), "{stderr}");
+    assert!(!stderr.contains(SECRET));
 }
 #[test]
 fn symlinked_checkpoints_and_mode_switches_preserve_existing_files() {
