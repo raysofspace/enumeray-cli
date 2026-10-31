@@ -8,6 +8,7 @@ mod config;
 mod manifest;
 mod observation;
 mod output;
+mod preflight;
 mod release;
 mod session;
 mod starter;

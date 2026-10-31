@@ -90,6 +90,27 @@ impl From<Error> for Failure {
 }
 
 pub(crate) fn execute(args: &Args) -> Result<Completion, Failure> {
+    if let Command::Connector(crate::args::Connector::Context(
+        crate::args::ConnectorContext::Preflight {
+            connector,
+            context,
+            directory,
+            interval,
+            deadline,
+        },
+    )) = &args.command
+    {
+        let path = args
+            .config
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(config::default_path)?;
+        let profiles = config::load(&path)?;
+        let client = config::client(args, &profiles)?;
+        return crate::preflight::execute(
+            &client, connector, context, directory, *interval, *deadline,
+        );
+    }
     if let Command::Analysis(crate::args::Analysis::Import {
         prepared,
         directory,

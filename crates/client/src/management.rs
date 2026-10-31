@@ -12,6 +12,39 @@ impl EnumerayClient {
     }
 }
 impl ManagementClient<'_> {
+    pub fn context_preflight(
+        &self,
+        connector: &str,
+        context: &str,
+    ) -> Result<enumeray_contracts::setup::ContextPreflightStatus, Error> {
+        self.client.request::<_, serde_json::Value>(
+            Method::GET,
+            &resource_path(&["connectors", connector, "contexts", context, "preflight"])?,
+            None,
+            None,
+        )
+    }
+    pub fn request_preflight(
+        &self,
+        connector: &str,
+        context: &str,
+        request_id: uuid::Uuid,
+        request: &enumeray_contracts::setup::PreflightRequest,
+    ) -> Result<enumeray_contracts::setup::ContextPreflightStatus, Error> {
+        self.client.request(
+            Method::PUT,
+            &resource_path(&[
+                "connectors",
+                connector,
+                "contexts",
+                context,
+                "preflight",
+                &request_id.to_string(),
+            ])?,
+            Some(request),
+            None,
+        )
+    }
     pub fn revoke_publication(
         &self,
         model_id: &str,

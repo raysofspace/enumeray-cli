@@ -19,7 +19,16 @@ a restricted launcher or SSH. Its process-based Slurm containment is a test
 configuration; sites must qualify their actual isolation, shared filesystem and
 scheduler configuration before admitting real work.
 
+The image supplies `systemd-analyze` and `visudo` to validate generated Linux
+service and runner rules with their native parsers. Native macOS host-plan tests
+require `plutil` and `visudo`, registered in the public verification catalogue.
+Parser checks do not rehearse service start/stop/restart; managed Linux and macOS
+service lifecycle qualification requires disposable native hosts.
+
 The driver matrix covers process/direct, process/SSH, Slurm/direct and Slurm/SSH.
+Each path first probes host prerequisites without a model descriptor or scientific
+entrypoint. Slurm preflight only reads tools, queue and accounting; compute-node
+visibility and allocation execution remain separately unverified in its report.
 It checks scalar and file wrappers, generated author projects, exact output
 bytes, credential isolation, interrupted transfers, journal recovery, rejected or
 ambiguous submissions, retained scheduler identity, cancellation and replay

@@ -9,4 +9,5 @@ pub mod media;
 pub mod models;
 pub mod numeric;
 pub mod runs;
+pub mod setup;
 pub mod transfers;

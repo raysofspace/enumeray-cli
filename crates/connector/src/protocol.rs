@@ -23,6 +23,7 @@ pub(crate) struct Request {
 )]
 pub(crate) enum Operation {
     Identity(Option<()>),
+    Preflight(crate::preflight::RunnerRequest),
     Validate(crate::compute::ValidationRequest),
     Prepare(crate::compute::ComputeJob),
     Start(Option<()>),

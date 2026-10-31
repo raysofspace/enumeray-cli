@@ -13,6 +13,30 @@ assert_launcher_denied() {
 assert_launcher_denied auth whoami
 assert_launcher_denied connector run --help
 sudo -u enumeray sudo -n -u model -- /usr/local/bin/enumeray compute-runner --help >/dev/null
+# Native parser checks only; this container does not qualify a systemd lifecycle.
+python3 - <<'PY'
+import json
+import subprocess
+from pathlib import Path
+spec = json.loads(Path('/opt/enumeray/examples/host-setup-linux.json').read_text())
+spec['context']['id'] = 'template-fixture'
+spec['context']['connector_id'] = 'template-fixture'
+for key, name in [('connector_account', 'enumeray'), ('execution_account', 'model')]:
+    spec[key].update(name=name, group=name, home='/home/' + name, create=False)
+spec['connector_executable'] = '/usr/local/bin/enumeray'
+spec['context']['definition']['connection']['launcher'] = ['/usr/bin/sudo', '-n', '-u', 'model', '--', '/usr/local/bin/enumeray']
+spec['context']['definition']['work_root'] = '/srv/enumeray-jobs'
+spec['journal'] = '/var/lib/enumeray/template-journal'
+spec['token_file'] = '/var/lib/enumeray/template-token'
+source = Path('/var/lib/enumeray/template-setup.json')
+source.write_text(json.dumps(spec))
+source.chmod(0o644)
+plan = '/var/lib/enumeray/native-template-plan'
+subprocess.run(['sudo', '-u', 'enumeray', '/usr/local/bin/enumeray', 'connector', 'configuration', 'generate', '--file', str(source), '--directory', plan], check=True)
+subprocess.run(['systemd-analyze', 'verify', '--man=no', plan + '/enumeray-template-fixture.service'], check=True)
+subprocess.run(['visudo', '-cf', plan + '/enumeray-runner.sudoers'], check=True)
+print('Native systemd and sudoers parser checks passed; managed service lifecycle remains unverified.', flush=True)
+PY
 mkdir -p /run/sshd /run/munge /run/mysqld
 chown munge:munge /run/munge
 chmod 0755 /run/munge /run/mysqld

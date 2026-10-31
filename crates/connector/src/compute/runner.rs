@@ -19,6 +19,7 @@ pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
     let _payload = if !matches!(
         &operation,
         Operation::Identity(_)
+            | Operation::Preflight(_)
             | Operation::Validate(_)
             | Operation::Prepare(_)
             | Operation::CleanupRun(_)
@@ -30,6 +31,7 @@ pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
     };
     match operation {
         Operation::Identity(_) => Ok(json!({"status":"ready", "execution_uid":execution_uid()?})),
+        Operation::Preflight(request) => crate::preflight::runner(directory, request),
         Operation::ProtectInstallations(request) => {
             if request.references.len() > 128 {
                 return Err(failure(

@@ -563,6 +563,8 @@ pub struct ConnectorDiagnostics {
     #[serde(flatten)]
     pub snapshot: ConnectorLifecycleStatus,
     pub unfinished_assignments: i64,
+    #[serde(default)]
+    pub preflight: crate::setup::PreflightSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -770,7 +772,8 @@ pub enum SubmissionUnavailableReason {
 
 /// The service documents execution configuration explicitly, including retained legacy contexts.
 #[cfg(feature = "openapi")]
-fn execution_context_schema() -> utoipa::openapi::Ref {
+#[doc(hidden)]
+pub fn execution_context_schema() -> utoipa::openapi::Ref {
     utoipa::openapi::Ref::from_schema_name("ExecutionContextDefinition")
 }
 

@@ -278,6 +278,19 @@ pub enum Auth {
 
 #[derive(Subcommand)]
 pub enum ConnectorContext {
+    /// Request/resume a publication-independent host check using a saved identity.
+    Preflight {
+        connector: String,
+        context: String,
+        #[arg(long)]
+        directory: PathBuf,
+        #[arg(long,default_value_t=2,value_parser=clap::value_parser!(u64).range(1..=60))]
+        interval: u64,
+        #[arg(long,default_value_t=300,value_parser=clap::value_parser!(u64).range(1..=3600))]
+        deadline: u64,
+    },
+    /// Read the latest host-check attempt/report without initiating a check.
+    PreflightStatus { connector: String, context: String },
     /// List execution contexts visible under this connector.
     List {
         #[command(flatten)]

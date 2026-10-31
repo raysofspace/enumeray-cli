@@ -7,6 +7,46 @@ use serde_json::Value;
 
 pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
     match &args.command {
+        Command::Connector(Connector::Context(
+            ConnectorContext::Preflight { .. } | ConnectorContext::PreflightStatus { .. },
+        )) => {
+            output.push_str("Host preflight\n");
+            present_fields(
+                output,
+                value,
+                &[
+                    ("Context", "/context_id"),
+                    ("Ready host prerequisites", "/ready"),
+                    ("Evidence validity", "/validity"),
+                    ("Reason", "/reason"),
+                    ("Attempt", "/attempt/request_id"),
+                    ("State", "/attempt/state"),
+                    ("Directory", "/directory"),
+                    ("Probe identity", "/report/probe_id"),
+                    ("Status", "/status"),
+                ],
+            );
+            table(
+                output,
+                value
+                    .pointer("/report/checks")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                &[
+                    ("Check", "/check"),
+                    ("Outcome", "/outcome"),
+                    ("Cause", "/code"),
+                    ("Responsible role", "/responsible_role"),
+                    ("Correction", "/correction"),
+                ],
+            );
+            scientific(
+                output,
+                "Qualification limits",
+                value.pointer("/report/limitations"),
+            );
+        }
         Command::Model(Model::Release(_)) => {
             output.push_str("Release\n");
             fields(

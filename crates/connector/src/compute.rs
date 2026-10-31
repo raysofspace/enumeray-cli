@@ -18,6 +18,31 @@ use std::{
 };
 use uuid::Uuid;
 
+/// Host-only view. Retained installation serialization remains unchanged.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ComputeTarget {
+    pub execution_mode: ExecutionMode,
+    pub connection: ConnectionConfig,
+    pub work_root: String,
+    pub driver: DriverConfig,
+    pub identity_file: Option<PathBuf>,
+}
+impl ComputeTarget {
+    pub(crate) fn ssh(&self) -> Option<&enumeray_contracts::execution::SshTarget> {
+        match &self.connection {
+            ConnectionConfig::Ssh(target) => Some(target),
+            _ => None,
+        }
+    }
+    pub(crate) fn launcher(&self) -> &[String] {
+        match &self.connection {
+            ConnectionConfig::Direct { launcher } => launcher,
+            _ => &[],
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComputeInstallation {
@@ -38,6 +63,15 @@ pub struct ComputeInstallation {
 }
 
 impl ComputeInstallation {
+    pub(crate) fn target(&self) -> ComputeTarget {
+        ComputeTarget {
+            execution_mode: self.execution_mode,
+            connection: self.connection.clone(),
+            work_root: self.work_root.clone(),
+            driver: self.driver.clone(),
+            identity_file: self.identity_file.clone(),
+        }
+    }
     fn validate_environment(&self) -> Result<()> {
         self.driver
             .validate_environment(&self.descriptor.environment)
@@ -1291,6 +1325,42 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             remote.slurm_script =
                 (driver == "slurm").then(|| "/opt/enumeray/scalar-model-v1/model.sbatch".into());
             let context = serde_json::from_value(json!({"driver":remote.driver,"connection":remote.connection,"installation_roots":["/opt/enumeray"],"work_root":remote.work_root,"max_outstanding_assignments":1})).unwrap();
+            // Host diagnostics need no installed descriptor, publication or assignment.
+            let probe_id = Uuid::new_v4();
+            let mut probe = json!({"probe_id":probe_id,"definition":context,
+                "connector_executable":(access=="direct").then_some("/usr/local/bin/enumeray"),
+                "connector_paths":if access=="direct" {vec!["/home/enumeray/.ssh/id_ed25519"]} else {vec![]},"phase":"inspect"});
+            let inspected = crate::connections::invoke_target(
+                &remote.target(),
+                "preflight",
+                &remote.work_root,
+                Some(&serde_json::to_vec(&probe).unwrap()),
+            )
+            .unwrap();
+            assert_eq!(
+                inspected["preflight"]["probe_created"], true,
+                "{driver}/{access}: {inspected}"
+            );
+            assert!(
+                inspected["preflight"]["checks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|c| c["outcome"] == "passed"),
+                "{driver}/{access}: {inspected}"
+            );
+            probe["phase"] = json!("cleanup");
+            probe["expected_probe_identity"] = inspected["preflight"]["probe_identity"].clone();
+            assert_eq!(
+                crate::connections::invoke_target(
+                    &remote.target(),
+                    "preflight",
+                    &remote.work_root,
+                    Some(&serde_json::to_vec(&probe).unwrap())
+                )
+                .unwrap()["cleaned"],
+                true
+            );
             let mut descriptor: enumeray_contracts::execution::InstallationDescriptor = serde_json::from_value(json!({"provider_binding_id":"real-test","installation":remote.installation.installation,"release_path":"/opt/enumeray/scalar-model-v1","entrypoint":["wrapper.py","execute"],"slurm_script":(driver == "slurm").then_some("model.sbatch"),"environment":{}})).unwrap();
             remote.installation.file_digests =
                 validate_context(&remote, &context, &descriptor, false).unwrap();

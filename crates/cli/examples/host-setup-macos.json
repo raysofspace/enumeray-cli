@@ -1,0 +1,67 @@
+{
+  "manifest_version": 1,
+  "api_base_url": "https://enumeray.example.org",
+  "context": {
+    "id": "lab-cpu",
+    "connector_id": "lab-connector",
+    "definition": {
+      "driver": {
+        "kind": "process",
+        "scratch": {
+          "max_bytes": 1073741824,
+          "max_entries": 10000,
+          "max_depth": 32,
+          "scan_interval_ms": 1000,
+          "cache": "per_run",
+          "symlinks": "forbid"
+        }
+      },
+      "installation_roots": [
+        "/opt/enumeray/models"
+      ],
+      "work_root": "/Library/Application Support/Enumeray/work",
+      "max_outstanding_assignments": 4,
+      "connection": {
+        "kind": "direct",
+        "launcher": [
+          "/usr/bin/sudo",
+          "-n",
+          "-u",
+          "researcher",
+          "--",
+          "/opt/enumeray/bin/enumeray"
+        ]
+      }
+    },
+    "metadata": {
+      "location": "Research lab",
+      "disclosure": "Research-owned machines."
+    }
+  },
+  "connector_account": {
+    "platform": "macos",
+    "name": "enumeray-connect",
+    "group": "enumeray-connect",
+    "home": "/Library/Application Support/Enumeray/connector",
+    "create": true,
+    "uid": 450,
+    "gid": 450
+  },
+  "execution_account": {
+    "platform": "macos",
+    "name": "researcher",
+    "group": "staff",
+    "home": "/Users/researcher",
+    "create": false,
+    "uid": null,
+    "gid": null
+  },
+  "connector_executable": "/opt/enumeray/bin/enumeray",
+  "journal": "/Library/Application Support/Enumeray/connector/journal",
+  "token_file": "/Library/Application Support/Enumeray/connector/credentials/token",
+  "credentials_file": null,
+  "max_workers": 4,
+  "max_transfer_workers": 2,
+  "max_pending_assignments": 64,
+  "shutdown_timeout_seconds": 30
+}

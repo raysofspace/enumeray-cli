@@ -23,6 +23,12 @@ pub(crate) fn resource(
     json_output: bool,
 ) -> Result<Value, Error> {
     match command {
+        Connector::Context(ConnectorContext::Preflight { .. }) => {
+            unreachable!("preflight workflow owns completion status")
+        }
+        Connector::Context(ConnectorContext::PreflightStatus { connector, context }) => Ok(
+            serde_json::to_value(client.management().context_preflight(connector, context)?)?,
+        ),
         Connector::Grant(ConnectorGrant::Available { page }) => {
             typed_paged_get::<Collection<AvailableGrant>>(client, &["compute-grants"], page)
         }
