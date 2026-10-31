@@ -123,6 +123,8 @@ for driver in ('process', 'slurm'):
         review=invoke([EXE,'--json','setup','--file',str(setup_input),'--directory',str(BASE/(identifier+'-owner')),'--non-interactive'],success=False)
         approval=json.loads(review.stdout)['host_plan_sha256']
         invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','connector','--approve',approval])
+        if connection == 'ssh':
+            invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval])
         project=releases/identifier
         invoke([EXE,'model','init','guided-model-'+driver+'-'+connection,'--directory',str(project),'--driver',driver])
         if driver=='slurm':
