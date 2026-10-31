@@ -4,6 +4,40 @@ This public workspace is the canonical source for the unified executable,
 client, connector and contracts. Update source here; service integrations consume
 a pinned revision. User and connector workflows start in the [README](README.md).
 
+## Feature development
+
+1. Inspect the workspace, preserve existing work and choose the actual target
+   branch/ref, normally `origin/main`. Fetch that target and create a
+   `codex/<feature>` branch. Use a separate workspace for each concurrent feature;
+   never silently replace a missing comparison ref.
+2. Change the canonical public sources, add focused regressions and update the
+   owning guides and fixtures. Regenerate affected derived documentation in the
+   consuming repository. Service implementation and integration coverage belong
+   in the service repository.
+3. Preview and run affected profiles under [build and local checks](#build-and-local-checks),
+   including required backend fixtures. Register new suites and ignored tests in
+   the catalogue and validate it after changing suite structure. Keep large-scale
+   qualification explicitly selected.
+4. Commit and push public changes before service commits that reference them.
+   For a coordinated feature, link the related PRs and merge the public PR first.
+   The service then pins the final merged public SHA, accounting for squash or
+   rebase merges, and verifies the final pair before its PR merges. A public-only
+   feature can be adopted by the service later through a verified pin update.
+5. After the relevant PRs merge, preserve remaining work, switch to local `main`
+   and fast-forward it with `git pull --ff-only origin main`. Delete only confirmed
+   merged feature branches locally and remotely; squash merges can make Git's
+   local merged-branch check inconclusive. Archive temporary managed worktrees
+   after preserving their work and inspect the checkout for leftovers.
+
+When developing this repository as a service submodule, follow the service's
+workflow as well. After synchronizing both local `main` branches, run
+`git submodule update --init --recursive` from the parent repository. Leave the
+public working checkout at its recorded pin, even when public `main` has newer
+commits; a detached HEAD is normal. Adopting a newer public revision requires
+another verified service pin update. Ordinary development and pin updates do not
+qualify new release artifacts; publication requires separate qualification of the
+selected service/public revisions and exact final artifacts.
+
 ## Build and local checks
 
 Use the pinned [Rust toolchain](rust-toolchain.toml). Python 3.9+ is needed for
