@@ -565,6 +565,12 @@ pub struct ConnectorDiagnostics {
     pub unfinished_assignments: i64,
     #[serde(default)]
     pub preflight: crate::setup::PreflightSummary,
+    #[serde(default)]
+    pub contact: Option<crate::setup::ConnectorContact>,
+    #[serde(default)]
+    pub session: Option<crate::setup::ConnectorSessionStatus>,
+    #[serde(default)]
+    pub setup: Option<crate::setup::ContextSetupReadiness>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

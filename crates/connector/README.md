@@ -69,6 +69,7 @@ request checks remotely:
 enumeray connector context preflight lab-connector lab-cpu --directory check-operation
 enumeray connector context preflight-status lab-connector lab-cpu
 enumeray connector diagnostics lab-connector
+enumeray connector diagnostics lab-connector --context lab-cpu
 ```
 
 Requests need `me:read`, `connectors:read` and `connectors:manage`; read-only status
@@ -80,6 +81,20 @@ check. One outstanding attempt per context expires after fifteen minutes.
 Reports identify failed/unverified checks, stable causes, corrections and responsible
 roles. Current readiness requires recent contact, the current credential/session
 and a report no older than five minutes. Historical passes stay visible when stale.
+Context diagnostics separates **configured** (active registration and enrollment),
+**connected** (recent contact using the current credential) and **ready for setup**
+(acknowledged configuration, active context, an open session and current passing
+required host checks, without maintenance or withdrawn authority). It needs no
+publication or model installation. A preflight host pass alone does not override
+these operational controls or establish grants or scientific validity.
+
+Diagnostics reads stored evidence and exits 0 when retrieval succeeds. It never
+requests a check or repairs a host. Missing evidence appears as unknown, and old
+reports remain visibly historical. Follow the listed correction and responsible
+role; use `connector context preflight` with a new private operation directory for
+a fresh check, or resume the existing directory after an interruption. Contact
+freshness does not expire session ownership or prove a process stopped.
+
 Local reports cannot be imported as authenticated connector evidence. Remote checks
 work during maintenance without changing publication validation or admission.
 

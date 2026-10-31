@@ -748,6 +748,31 @@ impl ManagementClient<'_> {
         self.client
             .request::<ConnectorDiagnostics, serde_json::Value>(Method::GET, &path, None, None)
     }
+    pub fn connector_context_diagnostics(
+        &self,
+        connector_id: &str,
+        context_id: &str,
+    ) -> Result<ConnectorDiagnostics, Error> {
+        let path = resource_path(&["connectors", connector_id, "diagnostics"])?;
+        let mut url = reqwest::Url::parse(&format!("https://enumeray.invalid{path}"))
+            .expect("encoded resource path");
+        url.query_pairs_mut().append_pair("context_id", context_id);
+        let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
+        let result: ConnectorDiagnostics =
+            self.client
+                .request::<_, serde_json::Value>(Method::GET, &path, None, None)?;
+        if result.snapshot.connector_id != connector_id
+            || result
+                .setup
+                .as_ref()
+                .is_some_and(|setup| setup.context_id != context_id)
+        {
+            return Err(Error::Invalid(
+                "Connector diagnostics returned a different resource.".into(),
+            ));
+        }
+        Ok(result)
+    }
     pub fn new_connector_enrollment(
         &self,
         connector_id: &str,

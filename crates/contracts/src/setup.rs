@@ -349,6 +349,49 @@ pub struct PreflightSummary {
     pub stale_or_unavailable: i64,
 }
 
+/// Recent authenticated contact is independent of process-session ownership.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConnectorContact {
+    pub assessed_at: String,
+    pub last_contact_at: Option<String>,
+    pub age_seconds: Option<i64>,
+    pub freshness: ReportValidity,
+    pub credential_current: bool,
+}
+
+/// An open session has no time-based expiry and does not prove a process is alive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConnectorSessionStatus {
+    pub open: bool,
+    pub acquired_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct SetupIssue {
+    pub code: String,
+    pub check: Option<String>,
+    pub outcome: CheckOutcome,
+    pub responsible_role: ResponsibleRole,
+    pub correction: String,
+}
+
+/// Setup prerequisites, never publication, grant or scientific qualification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ContextSetupReadiness {
+    pub context_id: String,
+    pub lifecycle_state: crate::management::ContextLifecycleState,
+    pub archived: bool,
+    pub configured: bool,
+    pub connected: bool,
+    pub ready: bool,
+    pub preflight: ContextPreflightStatus,
+    pub issues: Vec<SetupIssue>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2991,6 +2991,105 @@ fn connector_ownership_mutations_send_the_exact_resource_and_ownership_generatio
 }
 
 #[test]
+fn connector_setup_diagnostics_is_one_read_and_labels_historical_evidence() {
+    for json_output in [false, true] {
+        let mut body = connector_status(false, false);
+        body["unfinished_assignments"] = json!(0);
+        body["preflight"] =
+            json!({"pending":0,"current_ready":0,"current_blocked":0,"stale_or_unavailable":1});
+        body["contact"] = json!({"assessed_at":"2026-10-31T12:00:00Z","last_contact_at":"2026-10-31T11:59:59Z","age_seconds":1,"freshness":"current","credential_current":true});
+        body["session"] = json!({"open":true,"acquired_at":"2026-10-31T11:00:00Z"});
+        let request = uuid::Uuid::new_v4();
+        let context = "cpu+/?=";
+        body["setup"] = json!({"context_id":context,"lifecycle_state":"active","archived":false,"configured":true,"connected":true,"ready":false,
+            "preflight":{"connector_id":"worker","context_id":context,"definition_hash":"a".repeat(64),"ownership_generation":1,"attempt":null,"validity":"stale","reason":"report_age_contact_credential_or_session_changed","ready":false,
+            "report":{"manifest_version":1,"request_id":request,"connector_id":"worker","context_id":context,"definition_hash":"a".repeat(64),"execution_mode":"managed","observed_at":"2026-10-31T10:00:00Z","source":"connector","execution_uid":"501","checks":[{"check":"runner","required":true,"outcome":"failed","code":"runner_executable_missing","responsible_role":"site_operator","correction":"Install matching binaries."}],"limitations":["Host checks do not qualify scientific models."]}},
+            "issues":[{"code":"preflight_observation_stale","check":null,"outcome":"unknown","responsible_role":"connector_owner","correction":"Request a fresh explicit preflight check."}]});
+        let api = PolicyServer::new(vec![(200, body)]);
+        let directory = tempfile::tempdir().unwrap();
+        let mut command = human_cli(&directory.path().join("missing.json"));
+        if json_output {
+            command.arg("--json");
+        }
+        let output = command
+            .args([
+                "--api",
+                &api.origin,
+                "connector",
+                "diagnostics",
+                "worker",
+                "--context",
+                context,
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = api.finish();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].starts_with(
+            "GET /api/v1/connectors/worker/diagnostics?context_id=cpu%2B%2F%3F%3D HTTP/1.1\r\n"
+        ));
+        if json_output {
+            let actual: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(actual["setup"]["context_id"], context);
+            assert_eq!(actual["setup"]["ready"], false);
+            assert_eq!(actual["setup"]["issues"][0]["outcome"], "unknown");
+            assert_eq!(
+                actual["setup"]["preflight"]["report"]["checks"][0]["outcome"],
+                "failed"
+            );
+        } else {
+            let text = String::from_utf8(output.stdout).unwrap();
+            for phrase in [
+                "Configured",
+                "Connected",
+                "Ready for setup",
+                "Historical host checks",
+                "not current evidence",
+                "connector_owner",
+                "Request a fresh explicit preflight check.",
+                "Diagnostics is read-only",
+            ] {
+                assert!(text.contains(phrase), "missing {phrase}: {text}");
+            }
+        }
+    }
+}
+
+#[test]
+fn connector_setup_diagnostics_treats_missing_server_evidence_as_unavailable() {
+    let mut body = connector_status(false, false);
+    body["unfinished_assignments"] = json!(0);
+    let api = PolicyServer::new(vec![(200, body)]);
+    let directory = tempfile::tempdir().unwrap();
+    let output = human_cli(&directory.path().join("missing.json"))
+        .args([
+            "--api",
+            &api.origin,
+            "connector",
+            "diagnostics",
+            "worker",
+            "--context",
+            "cpu",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("Missing evidence does not establish readiness"));
+    assert!(text.contains("Context setup readiness: unavailable"));
+    assert_eq!(api.finish().len(), 1);
+}
+
+#[test]
 fn remote_preflight_reconciles_lost_replies_with_its_saved_request_and_refuses_account_changes() {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     let directory = tempfile::tempdir().unwrap();

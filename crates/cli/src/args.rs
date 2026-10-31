@@ -583,6 +583,9 @@ pub enum Connector {
     },
     Diagnostics {
         id: String,
+        /// Explain setup readiness for one context, without requesting checks.
+        #[arg(long)]
+        context: Option<String>,
     },
     /// Register and manage this connector's execution contexts.
     #[command(subcommand)]

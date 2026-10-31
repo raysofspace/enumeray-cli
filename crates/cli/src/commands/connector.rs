@@ -136,9 +136,12 @@ pub(crate) fn connector(
                 Change::Maintenance(request.draining),
             )
         }
-        Connector::Diagnostics { id } => {
-            typed_get::<ConnectorDiagnostics>(client, &["connectors", id, "diagnostics"])
-        }
+        Connector::Diagnostics { id, context } => Ok(serde_json::to_value(match context {
+            Some(context) => client
+                .management()
+                .connector_context_diagnostics(id, context)?,
+            None => client.management().connector_diagnostics(id)?,
+        })?),
         _ => super::connector_resource::resource(client, command, json_output),
     }
 }
