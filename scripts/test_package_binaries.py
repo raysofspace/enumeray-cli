@@ -80,7 +80,7 @@ class UnifiedPackageTests(unittest.TestCase):
         api = root
         (api / 'scripts').mkdir(parents=True, exist_ok=True)
         (api / 'LICENSE').write_text('Apache License, Version 2.0\n')
-        for name in ('INSTALL.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+        for name in ('INSTALL.md', 'SETUP_GUIDE.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
             path = api / 'crates/cli' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Standalone guide\n')
@@ -125,7 +125,7 @@ class UnifiedPackageTests(unittest.TestCase):
                 self.assertTrue(compatibility['requires_openssh_for_ssh'])
                 self.assertEqual(compatibility['source']['repository'], packaging.artifacts.REPOSITORY)
                 for guide in ('LICENSE', 'THIRD_PARTY_NOTICES.json', 'INSTALL.md', 'CONNECTOR_GUIDE.md',
-                              'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+                              'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md', 'SETUP_GUIDE.md'):
                     self.assertTrue(tar.getmember(prefix + '/' + guide).isfile())
 
     def test_repeated_packaging_normalizes_mtimes_ownership_and_gzip_header(self):

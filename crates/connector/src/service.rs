@@ -169,6 +169,26 @@ pub fn run(options: Options) -> Result<Value> {
         options.completed_retention_seconds,
     );
     let mut next_cleanup = Instant::now();
+    let preflight_worker = crate::preflight_worker::Worker::start(
+        client.clone(),
+        journal.directory.clone(),
+        crate::preflight::HostEnvironment {
+            account: String::new(),
+            executable: std::env::current_exe()
+                .map_err(|_| failure("cannot inspect connector executable"))?
+                .to_string_lossy()
+                .into_owned(),
+            journal: journal.directory.to_string_lossy().into_owned(),
+            token_file: options.token_file.to_string_lossy().into_owned(),
+            credentials_file: options
+                .credentials_file
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
+            allow_development_execution: options.allow_development_execution,
+            service_file: None,
+        },
+    );
+    let mut next_preflight = Instant::now();
     let mut next_claim = Instant::now();
     let mut next_delivery = Instant::now();
     let mut delivery_failure = None;
@@ -210,6 +230,13 @@ pub fn run(options: Options) -> Result<Value> {
                 OwnershipPhase::Reconciling(session) | OwnershipPhase::Ready(session) => session,
                 OwnershipPhase::Acquiring => unreachable!("registered ownership"),
             };
+            if deadline.is_none()
+                && matches!(ownership, OwnershipPhase::Ready(_))
+                && Instant::now() >= next_preflight
+            {
+                preflight_worker.schedule(session);
+                next_preflight = Instant::now() + poll;
+            }
             if matches!(ownership, OwnershipPhase::Reconciling(_)) {
                 client.reconcile_inventory(&mut journal)?;
                 // Recovery fenced the old session. Never replay its pending claim.

@@ -995,7 +995,7 @@ fn private_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .and_then(|()| file.sync_all())
         .map_err(|_| failure("cannot persist private connector file"))
 }
-fn atomic_write(directory: &Path, name: &str, bytes: &[u8]) -> Result<()> {
+pub(crate) fn atomic_write(directory: &Path, name: &str, bytes: &[u8]) -> Result<()> {
     let temporary = directory.join(format!(".{}.tmp", Uuid::new_v4()));
     private_write(&temporary, bytes)?;
     fs::rename(&temporary, directory.join(name))

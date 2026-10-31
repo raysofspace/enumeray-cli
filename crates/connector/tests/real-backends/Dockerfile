@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 
 FROM debian:bookworm-slim
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    slurm-wlm slurmdbd mariadb-server munge openssh-server openssh-client python3 procps sudo ca-certificates \
+    slurm-wlm slurmdbd mariadb-server munge openssh-server openssh-client python3 procps sudo ca-certificates systemd \
  && rm -rf /var/lib/apt/lists/* \
  && useradd -m -u 10001 enumeray && useradd -m -u 10002 model \
  && usermod --shell /bin/sh model && passwd -d model \
@@ -49,7 +49,9 @@ COPY crates/connector/tests/real-backends/model.sbatch /opt/enumeray/file-model-
 COPY crates/connector/tests/real-backends/rejected.sbatch /opt/enumeray/file-model-v1/rejected.sbatch
 COPY crates/connector/tests/real-backends/worker-preparation-failure.sbatch /opt/enumeray/file-model-v1/worker-preparation-failure.sbatch
 COPY examples/artifact-input.json examples/artifact-output.json /opt/enumeray/examples/
+COPY crates/cli/examples/host-setup-linux.json /opt/enumeray/examples/host-setup-linux.json
 COPY crates/connector/tests/real-backends/start.sh /usr/local/bin/acceptance-start
+COPY crates/connector/tests/real-backends/host-setup-check.py /usr/local/bin/host-setup-check.py
 COPY crates/connector/tests/real-backends/wait-ready.sh /usr/local/bin/acceptance-wait-ready
 COPY crates/connector/tests/real-backends/slurm.conf /etc/slurm/slurm.conf
 RUN chmod 0755 /usr/local/bin/acceptance-start /opt/enumeray/scalar-model-v1/wrapper.py /opt/enumeray/file-model-v1/wrapper.py \

@@ -13,6 +13,7 @@ pub(crate) use access::access;
 pub(crate) use artifact::artifact;
 pub(crate) use auth::auth;
 pub(crate) use connector::connector;
+pub(crate) use connector::valid_enrollment;
 
 pub(crate) use model::model;
 pub(crate) use run::run;

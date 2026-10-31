@@ -110,7 +110,7 @@ def main(argv=None):
             return 0
         for name in selected:
             check = catalogue['checks'][name]
-            for tool in check.get('tools', []):
+            for tool in check.get('tools', []) + check.get('platform_tools', {}).get(sys.platform, []):
                 if not shutil.which(tool):
                     raise ValueError('Missing prerequisite: ' + tool)
             result = 0

@@ -612,7 +612,7 @@ impl Drop for Active {
         }
     }
 }
-fn kill_group(id: u32) {
+pub(crate) fn kill_group(id: u32) {
     #[cfg(unix)]
     {
         let _ = Command::new("/bin/kill")

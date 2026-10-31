@@ -1,0 +1,63 @@
+{
+  "manifest_version": 1,
+  "api_base_url": "https://enumeray.example.org",
+  "context": {
+    "id": "lab-cpu",
+    "connector_id": "lab-connector",
+    "definition": {
+      "driver": {
+        "kind": "process",
+        "scratch": {
+          "max_bytes": 1073741824,
+          "max_entries": 10000,
+          "max_depth": 32,
+          "scan_interval_ms": 1000,
+          "cache": "per_run",
+          "symlinks": "forbid"
+        }
+      },
+      "installation_roots": [
+        "/Users/researcher/enumeray-development/models"
+      ],
+      "work_root": "/Users/researcher/enumeray-development/work",
+      "max_outstanding_assignments": 1,
+      "connection": {
+        "kind": "direct",
+        "launcher": [
+          "/Users/researcher/.local/bin/enumeray"
+        ]
+      },
+      "execution_mode": "development"
+    },
+    "metadata": {
+      "location": "Research lab",
+      "disclosure": "Trusted development: model code runs as the connector OS user and can access its credentials and files."
+    }
+  },
+  "connector_account": {
+    "platform": "macos",
+    "name": "researcher",
+    "group": "staff",
+    "home": "/Users/researcher",
+    "create": false,
+    "uid": null,
+    "gid": null
+  },
+  "execution_account": {
+    "platform": "macos",
+    "name": "researcher",
+    "group": "staff",
+    "home": "/Users/researcher",
+    "create": false,
+    "uid": null,
+    "gid": null
+  },
+  "connector_executable": "/Users/researcher/.local/bin/enumeray",
+  "journal": "/Users/researcher/enumeray-development/connector/journal",
+  "token_file": "/Users/researcher/enumeray-development/connector/credentials/token",
+  "credentials_file": null,
+  "max_workers": 1,
+  "max_transfer_workers": 2,
+  "max_pending_assignments": 64,
+  "shutdown_timeout_seconds": 30
+}

@@ -41,6 +41,7 @@ fn execute_value(args: &Args) -> Result<Value, Error> {
     let profiles = config::load(&config_path)?;
     let client = config::client(args, &profiles)?;
     match &args.command {
+        Command::Setup(_) => unreachable!("setup dispatch"),
         Command::Auth(_) => unreachable!(),
         Command::Runtime(_) => unreachable!("runtime dispatch precedes user profile access"),
         Command::Service(command) => commands::service(&client, command),
@@ -89,7 +90,42 @@ impl From<Error> for Failure {
     }
 }
 
+impl From<std::io::Error> for Failure {
+    fn from(error: std::io::Error) -> Self {
+        Error::from(error).into()
+    }
+}
+impl From<serde_json::Error> for Failure {
+    fn from(error: serde_json::Error) -> Self {
+        Error::from(error).into()
+    }
+}
+
 pub(crate) fn execute(args: &Args) -> Result<Completion, Failure> {
+    if let Command::Setup(command) = &args.command {
+        return crate::setup::execute(args, command);
+    }
+    if let Command::Connector(crate::args::Connector::Context(
+        crate::args::ConnectorContext::Preflight {
+            connector,
+            context,
+            directory,
+            interval,
+            deadline,
+        },
+    )) = &args.command
+    {
+        let path = args
+            .config
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(config::default_path)?;
+        let profiles = config::load(&path)?;
+        let client = config::client(args, &profiles)?;
+        return crate::preflight::execute(
+            &client, connector, context, directory, *interval, *deadline,
+        );
+    }
     if let Command::Analysis(crate::args::Analysis::Import {
         prepared,
         directory,

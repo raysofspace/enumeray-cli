@@ -37,6 +37,10 @@ struct Job {
 }
 #[derive(Default)]
 struct Peer {
+    preflight_work: Option<Value>,
+    preflight_report: Option<Value>,
+    preflight_lost_reply: bool,
+    relative_host_paths: bool,
     installation_root: Option<PathBuf>,
     assignment_descriptor: Option<Value>,
     configuration_unavailable: bool,
@@ -760,6 +764,28 @@ fn receipt(job: &Job, report: &Value) -> Value {
 }
 async fn handle(State(state): State<Arc<Mutex<Peer>>>, request: Request) -> Response {
     let path = request.uri().path().to_owned();
+    if path == "/connector/v1/preflights" {
+        let peer = state.lock().unwrap();
+        let work = if peer.preflight_report.is_none() {
+            peer.preflight_work.clone().into_iter().collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
+        return Json(json!(work)).into_response();
+    }
+    if path.starts_with("/connector/v1/preflights/") && path.ends_with("/report") {
+        let body: Value =
+            serde_json::from_slice(&to_bytes(request.into_body(), 256 * 1024).await.unwrap())
+                .unwrap();
+        let mut peer = state.lock().unwrap();
+        assert_eq!(body["report"]["source"], "connector");
+        peer.preflight_report = Some(body["report"].clone());
+        if peer.preflight_lost_reply {
+            peer.preflight_lost_reply = false;
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        return Json(json!({"accepted":true})).into_response();
+    }
     let cursor = request.uri().query().and_then(|query| {
         url::form_urlencoded::parse(query.as_bytes())
             .find(|(key, _)| key == "cursor")
@@ -1181,6 +1207,10 @@ fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development
     api.state.lock().unwrap().installation_root = Some(scratch.0.clone());
     let stderr = fs::File::create(scratch.0.join("service.log")).unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_enumeray"));
+    let relative = api.state.lock().unwrap().relative_host_paths;
+    if relative {
+        command.current_dir(&scratch.0);
+    }
     command
         .arg("--config")
         .arg(scratch.0.join("installation-fixture.json"))
@@ -1198,9 +1228,17 @@ fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development
             CONNECTOR,
             "--journal",
         ])
-        .arg(scratch.journal())
+        .arg(if relative {
+            PathBuf::from("installation")
+        } else {
+            scratch.journal()
+        })
         .arg("--token-file")
-        .arg(scratch.0.join("token"))
+        .arg(if relative {
+            PathBuf::from("token")
+        } else {
+            scratch.0.join("token")
+        })
         .args([
             "--cleanup-interval-seconds",
             "1",
@@ -2783,6 +2821,148 @@ fn regular_user() -> bool {
         );
     }
     regular
+}
+
+#[tokio::test]
+async fn host_preflight_is_independent_of_publication_configuration_and_lost_report_replies() {
+    if !regular_user() {
+        return;
+    }
+    let scratch = Scratch::new();
+    install(&scratch, 0.0);
+    use_real_identity(&scratch, true);
+    let gate = gate_runner(&scratch, "preflight");
+    fs::create_dir(scratch.0.join("compute")).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(scratch.0.join("compute"), fs::Permissions::from_mode(0o700)).unwrap();
+    let desired = support::desired_configuration(&scratch.0);
+    let api = Api::start(0, true).await;
+    {
+        let mut peer = api.state.lock().unwrap();
+        peer.configuration_unavailable = true;
+        peer.relative_host_paths = true;
+        peer.preflight_lost_reply = true;
+        peer.preflight_work = Some(
+            json!({"request_id":Uuid::new_v4(),"connector_id":CONNECTOR,"context_id":desired["contexts"][0]["id"],"definition":desired["contexts"][0]["definition"],"ownership_generation":1}),
+        );
+    }
+    let child = start_with_policy(&scratch, &api, 2, true);
+    transfer_started(&scratch).await;
+    let before = api.state.lock().unwrap().heartbeat;
+    api.until(|peer| peer.heartbeat > before).await;
+    assert!(api.state.lock().unwrap().preflight_report.is_none());
+    fs::remove_file(gate).unwrap();
+    api.until(|peer| peer.preflight_report.is_some()).await;
+    {
+        let peer = api.state.lock().unwrap();
+        let report = peer.preflight_report.as_ref().unwrap();
+        assert!(
+            report["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["required"] == true)
+                .all(|c| c["outcome"] == "passed"),
+            "{report}"
+        );
+        assert_eq!(peer.configuration_acks, 0);
+        assert!(!peer.preflight_lost_reply);
+    }
+    assert!(scratch.journal().join("preflight-report.json").exists());
+    let next = Uuid::new_v4();
+    {
+        let mut peer = api.state.lock().unwrap();
+        peer.preflight_report = None;
+        peer.preflight_work.as_mut().unwrap()["request_id"] = json!(next);
+    }
+    api.until(|peer| {
+        peer.preflight_report
+            .as_ref()
+            .is_some_and(|report| report["request_id"] == next.to_string())
+    })
+    .await;
+    let saved: Value =
+        serde_json::from_slice(&fs::read(scratch.journal().join("preflight-report.json")).unwrap())
+            .unwrap();
+    assert_eq!(saved["report"]["request_id"], next.to_string());
+    assert_eq!(stop(child).await["drained"], true);
+    assert!(!scratch.0.join("launches").exists());
+}
+
+#[tokio::test]
+async fn slow_preflight_allows_model_cancellation_delivery_and_safe_restart() {
+    if !regular_user() {
+        return;
+    }
+    let scratch = Scratch::new();
+    install_gated(&scratch);
+    use_real_identity(&scratch, true);
+    let gate = gate_runner_at(&scratch, "preflight", true);
+    fs::create_dir(scratch.0.join("compute")).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(scratch.0.join("compute"), fs::Permissions::from_mode(0o700)).unwrap();
+    let desired = support::desired_configuration(&scratch.0);
+    let api = Api::start(1, true).await;
+    let request = Uuid::new_v4();
+    api.state.lock().unwrap().preflight_work = Some(
+        json!({"request_id":request,"connector_id":CONNECTOR,"context_id":desired["contexts"][0]["id"],"definition":desired["contexts"][0]["definition"],"ownership_generation":1}),
+    );
+    let child = start_with_policy(&scratch, &api, 2, true);
+    transfer_started(&scratch).await;
+    api.until(|peer| {
+        peer.jobs.values().any(|job| {
+            scratch
+                .0
+                .join(format!(
+                    "wrapper-started-{}",
+                    job.assignment["attempt_id"].as_str().unwrap()
+                ))
+                .exists()
+        })
+    })
+    .await;
+    api.state.lock().unwrap().cancel_requested = true;
+    archived(&scratch, 1).await;
+    {
+        let peer = api.state.lock().unwrap();
+        assert!(gate.exists());
+        assert!(peer.preflight_report.is_none());
+        assert_eq!(
+            peer.jobs.values().next().unwrap().result.as_ref().unwrap()["receipt"]["outcome"],
+            "cancelled"
+        );
+    }
+    assert_eq!(stop(child).await["drained"], true);
+    let retained_probe = scratch
+        .0
+        .join("compute")
+        .join(format!(".enumeray-preflight-{request}"));
+    assert!(retained_probe.join("sentinel").exists());
+    fs::remove_file(gate).unwrap();
+    let child = start_with_policy(&scratch, &api, 3, true);
+    api.until(|peer| peer.preflight_report.is_some()).await;
+    assert_eq!(
+        api.state.lock().unwrap().preflight_report.as_ref().unwrap()["request_id"],
+        request.to_string()
+    );
+    let report = api.state.lock().unwrap().preflight_report.clone().unwrap();
+    assert!(
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["code"] == "probe_cleanup_incomplete"),
+        "{report}"
+    );
+    assert!(retained_probe.join("sentinel").exists());
+    assert_eq!(stop(child).await["drained"], true);
+    assert_eq!(
+        fs::read_to_string(scratch.0.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
 }
 
 #[tokio::test]

@@ -8,7 +8,7 @@ pub(crate) use launch::read_script as read_batch_file;
 use std::process::Command;
 
 /// Inherited SBATCH_*, SLURM_CLUSTERS and query-format settings cannot redirect a run.
-fn scheduler_command(program: &str) -> Command {
+pub(crate) fn scheduler_command(program: &str) -> Command {
     let mut command = Command::new(program);
     command.env_clear();
     if program == "sacct" {

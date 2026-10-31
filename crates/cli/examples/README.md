@@ -100,3 +100,5 @@ model again. For a deliberately selected input set, use a collection manifest
 instead of a directory binding. Independent artifact/collection utilities remain
 available for reusable data; accepted-run IDs remain useful for authorized
 investigation and attachment.
+
+Host preparation specifications: [Linux managed](host-setup-linux.json), [macOS managed](host-setup-macos.json) and [development](host-setup-development.json). Edit accounts, paths, IDs and limits before generating a plan. Generation applies no host changes.

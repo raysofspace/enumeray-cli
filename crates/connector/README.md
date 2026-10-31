@@ -12,6 +12,106 @@ Choose driver and access independently: `process` or `slurm`, combined with
 `direct` or `ssh`. See [configuration and extension guide](EXTENDING.md) for the
 four context templates, deployment choices and module contracts.
 
+For an installation-to-first-trial journey, start with
+[guided connector setup](../cli/SETUP_GUIDE.md). It saves selections and progress,
+applies reviewed host preparation explicitly and reuses the operations below.
+
+## Prepare configuration and check host prerequisites
+
+Start from [Linux managed](../cli/examples/host-setup-linux.json),
+[macOS managed](../cli/examples/host-setup-macos.json), or
+[single-user development](../cli/examples/host-setup-development.json). Edit the
+identifiers, accounts, absolute site paths and limits. macOS numeric IDs are
+examples; the administrator must check name and UID/GID collisions first.
+
+```sh
+enumeray connector configuration generate --file host-setup.json --directory host-plan
+```
+
+No login is required. The new private directory contains `plan.json`, `context.json`,
+restricted launcher/native service templates and `REVIEW.md`. Existing destinations
+are refused. Generation never creates accounts, installs software, enrolls a
+connector or starts a service. Each typed action names its host, destination,
+responsible role and prerequisites. Review these before applying host changes.
+
+The version-1 specification contains `context` (the existing context spec),
+`connector_account` and `execution_account` (platform, name, group, home, creation
+choice and optional numeric IDs), `connector_executable`, `api_base_url`, `journal`,
+`token_file`, optional `credentials_file`, `max_workers`, `max_transfer_workers`,
+`max_pending_assignments` and `shutdown_timeout_seconds`. Platforms are `linux` or
+`macos`. Managed direct contexts use the reviewed `sudo -n -u EXECUTION_ACCOUNT --
+ABSOLUTE_ENUMERAY` launcher. SSH needs its named execution account and a private
+credential-reference map. Existing accounts can be reused.
+
+Managed executables and ancestors must be site-controlled. A model user's writable
+Homebrew prefix can undermine connector credential isolation; install the selected
+matching executable at the reviewed protected path. Linux plans supply systemd
+units, macOS plans supply LaunchDaemons, and development plans supply optional user
+services. Private permissions, manual recovery and shutdown grace remain explicit.
+
+After approved preparation, make the plan privately readable by the connector OS
+account and run as that account:
+
+```sh
+enumeray connector preflight --plan host-plan/plan.json
+# Explicit consent is required for trusted same-user development:
+enumeray connector preflight --plan host-plan/plan.json --allow-development-execution
+```
+
+Local checks need no profile, API access, running connector or publication. They
+check identities, private paths, runner compatibility, effective root access,
+SSH/SFTP and scheduler prerequisites. They are bounded, launch no scientific code
+and submit no Slurm jobs. Temporary probes stay under the approved work root and
+clean only their own files. The attempt has a 120-second deadline, at most 128
+checks and a 256 KiB report. `probe_id` identifies any private probe whose cleanup
+could not be confirmed. Missing roots/accounts are reported, never repaired.
+
+Once the context is registered and the connector runs, its owner/co-admin can
+request checks remotely:
+
+```sh
+enumeray connector context preflight lab-connector lab-cpu --directory check-operation
+enumeray connector context preflight-status lab-connector lab-cpu
+enumeray connector diagnostics lab-connector
+enumeray connector diagnostics lab-connector --context lab-cpu
+```
+
+Requests need `me:read`, `connectors:read` and `connectors:manage`; read-only status
+needs `connectors:read`. Compute grants alone do not grant these operations. The
+private operation directory binds one request to its API, account and context.
+Repeat it after interruption or an uncertain reply; use a new directory for a fresh
+check. One outstanding attempt per context expires after fifteen minutes.
+
+Reports identify failed/unverified checks, stable causes, corrections and responsible
+roles. Current readiness requires recent contact, the current credential/session
+and a report no older than five minutes. Historical passes stay visible when stale.
+Context diagnostics separates **configured** (active registration and enrollment),
+**connected** (recent contact using the current credential) and **ready for setup**
+(acknowledged configuration, active context, an open session and current passing
+required host checks, without maintenance or withdrawn authority). It needs no
+publication or model installation. A preflight host pass alone does not override
+these operational controls or establish grants or scientific validity.
+
+Diagnostics reads stored evidence and exits 0 when retrieval succeeds. It never
+requests a check or repairs a host. Missing evidence appears as unknown, and old
+reports remain visibly historical. Follow the listed correction and responsible
+role; use `connector context preflight` with a new private operation directory for
+a fresh check, or resume the existing directory after an interruption. Contact
+freshness does not expire session ownership or prove a process stopped.
+
+Local reports cannot be imported as authenticated connector evidence. Remote checks
+work during maintenance without changing publication validation or admission.
+
+Reports stay on stdout: exit 0 means required host prerequisites passed; 1 means
+blocked or unverified. Remote deadline exit 5 and Ctrl+C exit 130 retain the same
+operation. Read-only status exits 0 when retrieval succeeds. Service installation
+is a separate observation; foreground operation is supported.
+
+Slurm checks tools, monitoring/accounting and submission-host/shared paths, while
+leaving compute-node visibility and allocation execution explicitly unverified.
+Scientific installation, candidate trials and site qualification remain separate.
+A host report cannot activate a model.
+
 ## Single-user development
 
 Use development execution only for trusted models on a personal macOS or Linux
@@ -84,8 +184,8 @@ enumeray connector run --journal "$HOME/enumeray-development/connector/journal" 
 
 Use `exclusive-local` only on one unshared, uncloned local state volume; otherwise
 use manual recovery and explicitly confirm the old process stopped. Startup emits
-the reduced-isolation warning. A registered context is configuration, not a
-readiness check: installation validation follows publication registration.
+the reduced-isolation warning. A registered context stores configuration. Check host prerequisites before
+publication; validation of an installed model still follows publication registration.
 
 Back in the first terminal, create and locally test the sample, then install one
 immutable release under the approved root:

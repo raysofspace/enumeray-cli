@@ -83,6 +83,10 @@ impl LoginAttempt {
                     if !address.ip().is_loopback() {
                         continue;
                     }
+                    // Accepted sockets inherit nonblocking mode on macOS. The
+                    // callback parser needs bounded blocking reads for headers
+                    // that arrive after the connection itself.
+                    stream.set_nonblocking(false)?;
                     stream.set_read_timeout(Some(Duration::from_secs(3)))?;
                     stream.set_write_timeout(Some(Duration::from_secs(3)))?;
                     let code = match callback(&mut stream, &self.state) {
@@ -423,17 +427,20 @@ mod tests {
                 400
             );
             std::thread::sleep(Duration::from_millis(40));
+            // Connecting can precede the browser sending its request. In
+            // particular, accepted macOS sockets inherit the listener's mode.
+            let callback_url = Url::parse(&redirect).unwrap();
+            let mut callback =
+                TcpStream::connect(("127.0.0.1", callback_url.port().unwrap())).unwrap();
+            callback
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            std::thread::sleep(Duration::from_millis(120));
             let accepted_callback_sent = SystemTime::now();
-            assert_eq!(
-                client
-                    .get(format!(
-                        "{redirect}?state={state}&code=accepted&session_state=session&iss=provider"
-                    ))
-                    .send()
-                    .unwrap()
-                    .status(),
-                200
-            );
+            write!(callback, "GET /callback?state={state}&code=accepted&session_state=session&iss=provider HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+            let mut response = String::new();
+            callback.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
             accepted_callback_sent
         });
         let (tokens, exchange_started) = attempt

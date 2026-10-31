@@ -13,6 +13,7 @@ mod drivers;
 #[path = "runtime/execution.rs"]
 mod execution;
 mod execution_policy;
+mod host_setup;
 #[path = "runtime/journal.rs"]
 mod journal;
 mod launch;
@@ -24,10 +25,13 @@ mod logs;
 mod multipart;
 #[path = "runtime/numeric.rs"]
 mod numeric;
+mod preflight;
+mod preflight_worker;
 mod protocol;
 #[path = "runtime/records.rs"]
 mod records;
 mod service;
+mod setup;
 mod spool;
 #[path = "runtime/state.rs"]
 mod state;
@@ -39,10 +43,52 @@ use clap::Subcommand;
 use serde_json::json;
 
 pub use control::EnrollOptions;
+pub use host_setup::stage_setup_file;
+pub use host_setup::{apply_host_configuration, configuration_digest, prepare_development};
 pub use service::Options as RunOptions;
+
+/// Build the same reviewable plan used by the credential-free generation command.
+/// This pure entry point applies no accounts, files, services or enrollments.
+pub fn host_configuration_plan(
+    spec: enumeray_contracts::setup::HostSetupSpec,
+) -> std::result::Result<enumeray_contracts::setup::HostConfigurationPlan, String> {
+    setup::render(spec).map_err(|error| error.to_string())
+}
 
 #[derive(Subcommand)]
 pub enum HostCommand {
+    /// Start the connector using its saved host configuration, without a user profile.
+    Start {
+        #[arg(long)]
+        configuration: PathBuf,
+        #[arg(
+            long,
+            required_unless_present = "background",
+            conflicts_with = "background"
+        )]
+        foreground: bool,
+        #[arg(long)]
+        background: bool,
+        /// Explicit manual journal recovery assertion; never inferred from a stale heartbeat.
+        #[arg(long)]
+        confirm_prior_process_stopped: bool,
+    },
+    /// Inspect local journal and native service evidence; performs no probes or repairs.
+    Status {
+        #[arg(long)]
+        configuration: PathBuf,
+    },
+    /// Generate private, reviewable host configuration without applying it.
+    #[command(subcommand)]
+    Configuration(ConfigurationCommand),
+    /// Check host prerequisites locally, without profiles or model publications.
+    Preflight {
+        #[arg(long)]
+        plan: PathBuf,
+        /// Explicit consent for trusted same-user process/direct checks.
+        #[arg(long)]
+        allow_development_execution: bool,
+    },
     /// Enroll using a single-use credential, retaining identity across retries.
     Enroll(EnrollOptions),
     /// Continuously claim and execute assignments over HTTP.
@@ -129,9 +175,22 @@ pub enum HostCommand {
     },
 }
 
+#[derive(Subcommand)]
+pub enum ConfigurationCommand {
+    /// Render a version-1 host setup specification into a new private directory.
+    Generate {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        directory: PathBuf,
+    },
+}
+
 /// Credential-free compute actions and private subprocess entry points.
 #[derive(Subcommand)]
 pub enum RuntimeCommand {
+    #[command(hide = true)]
+    PreflightWorker,
     #[command(hide = true)]
     TransferWorker,
     #[command(hide = true)]
@@ -141,7 +200,7 @@ pub enum RuntimeCommand {
     },
     /// Credential-free runner on an SSH host or Slurm submission host.
     ComputeRunner {
-        #[arg(value_parser = ["identity", "prepare", "start", "status", "request-cancel", "validate", "protect-installations", "write-input", "write-collection", "read-collection", "transfer-probe", "read-output", "allocation-status", "read-logs", "build-log-archive", "read-log-archive", "cleanup-log-archive", "cleanup-run"])]
+        #[arg(value_parser = ["identity", "preflight", "prepare", "start", "status", "request-cancel", "validate", "protect-installations", "write-input", "write-collection", "read-collection", "transfer-probe", "read-output", "allocation-status", "read-logs", "build-log-archive", "read-log-archive", "cleanup-log-archive", "cleanup-run"])]
         action: String,
         #[arg(long)]
         directory: PathBuf,
@@ -210,6 +269,21 @@ fn failure(message: impl Into<String>) -> ConnectorError {
 
 /// Run a host command without consulting user CLI profiles or credentials.
 pub fn execute_host(command: HostCommand) -> ExitCode {
+    if let HostCommand::Preflight {
+        plan,
+        allow_development_execution,
+    } = command
+    {
+        return match preflight::local(&plan, allow_development_execution) {
+            Ok(output) => {
+                let ready = output["ready"] == true;
+                let interrupted = output["interrupted"] == true;
+                println!("{output}");
+                ExitCode::from(if interrupted { 130 } else { u8::from(!ready) })
+            }
+            Err(error) => finish(Err(error), false),
+        };
+    }
     let service = matches!(command, HostCommand::Run(_));
     finish(run_host(command), service)
 }
@@ -238,6 +312,17 @@ fn finish(result: Result<serde_json::Value>, service: bool) -> ExitCode {
 
 fn run_host(command: HostCommand) -> Result<serde_json::Value> {
     match command {
+        HostCommand::Start {
+            configuration,
+            foreground,
+            background: _,
+            confirm_prior_process_stopped,
+        } => host_setup::start(&configuration, foreground, confirm_prior_process_stopped),
+        HostCommand::Status { configuration } => host_setup::status(&configuration),
+        HostCommand::Configuration(ConfigurationCommand::Generate { file, directory }) => {
+            setup::generate(&file, &directory)
+        }
+        HostCommand::Preflight { .. } => unreachable!("preflight completion owns its exit status"),
         HostCommand::Run(options) => service::run(options),
         HostCommand::Cleanup {
             journal: directory,
@@ -393,6 +478,7 @@ fn run_host(command: HostCommand) -> Result<serde_json::Value> {
 
 fn run_runtime(command: RuntimeCommand) -> Result<serde_json::Value> {
     match command {
+        RuntimeCommand::PreflightWorker => preflight::worker(),
         RuntimeCommand::TransferWorker => transfers::worker(),
         RuntimeCommand::ComputeRunner { action, directory } => {
             use std::io::Read;

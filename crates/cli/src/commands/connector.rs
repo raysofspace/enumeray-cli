@@ -136,15 +136,18 @@ pub(crate) fn connector(
                 Change::Maintenance(request.draining),
             )
         }
-        Connector::Diagnostics { id } => {
-            typed_get::<ConnectorDiagnostics>(client, &["connectors", id, "diagnostics"])
-        }
+        Connector::Diagnostics { id, context } => Ok(serde_json::to_value(match context {
+            Some(context) => client
+                .management()
+                .connector_context_diagnostics(id, context)?,
+            None => client.management().connector_diagnostics(id)?,
+        })?),
         _ => super::connector_resource::resource(client, command, json_output),
     }
 }
 
 // Shared secret-bearing contracts reject unknown fields before a private file is saved.
-fn valid_enrollment(document: &ConnectorEnrollment, connector: &str) -> bool {
+pub(crate) fn valid_enrollment(document: &ConnectorEnrollment, connector: &str) -> bool {
     !document.id.is_nil()
         && document.connector_id == connector
         && document.enrollment_token.len() == 43

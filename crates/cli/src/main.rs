@@ -8,8 +8,10 @@ mod config;
 mod manifest;
 mod observation;
 mod output;
+mod preflight;
 mod release;
 mod session;
+mod setup;
 mod starter;
 mod transfers;
 
@@ -32,6 +34,7 @@ fn main() -> std::process::ExitCode {
                     .ignore_errors(true)
                     .try_get_matches()
                     .is_ok_and(|matches| match matches.subcommand() {
+                        Some(("setup", child)) => child.subcommand_name() == Some("apply-host"),
                         Some(("connector", child)) => child
                             .subcommand_name()
                             .is_none_or(enumeray_connector::HostCommand::has_subcommand),

@@ -52,6 +52,47 @@
       "payload": {
         "references": []
       }
+    },
+    {
+      "version": 1,
+      "action": "preflight",
+      "payload": {
+        "probe_id": "00000000-0000-4000-8000-000000000068",
+        "definition": {
+          "driver": {
+            "kind": "process",
+            "scratch": {
+              "max_bytes": 1073741824,
+              "max_entries": 10000,
+              "max_depth": 32,
+              "scan_interval_ms": 1000,
+              "cache": "per_run",
+              "symlinks": "forbid"
+            }
+          },
+          "installation_roots": [
+            "/opt/enumeray/models"
+          ],
+          "work_root": "/var/lib/enumeray-model-work",
+          "max_outstanding_assignments": 4,
+          "connection": {
+            "kind": "direct",
+            "launcher": [
+              "/usr/bin/sudo",
+              "-n",
+              "-u",
+              "model-runner",
+              "--",
+              "/usr/local/bin/enumeray"
+            ]
+          }
+        },
+        "connector_executable": "/usr/local/bin/enumeray",
+        "connector_paths": [
+          "/var/lib/enumeray-connect/credentials/token"
+        ],
+        "phase": "inspect"
+      }
     }
   ],
   "responses": [

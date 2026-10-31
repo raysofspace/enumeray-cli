@@ -1,5 +1,5 @@
 //! Access to a credential-free runner; no scheduler branching belongs here.
-use crate::compute::ComputeInstallation;
+use crate::compute::{ComputeInstallation, ComputeTarget};
 use crate::{ErrorKind, Result, failure, journal};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use enumeray_contracts::execution::{ConnectionConfig, SshTarget};
@@ -484,7 +484,17 @@ fn safe_absolute(s: &str) -> bool {
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
 }
+#[cfg(test)]
 pub(crate) fn ssh_command(binding: &ComputeInstallation) -> Result<Command> {
+    ssh_target_command(&binding.target())
+}
+pub(crate) fn ssh_target_command(binding: &ComputeTarget) -> Result<Command> {
+    ssh_target_options(binding, false)
+}
+pub(crate) fn sftp_target_command(binding: &ComputeTarget) -> Result<Command> {
+    ssh_target_options(binding, true)
+}
+fn ssh_target_options(binding: &ComputeTarget, subsystem: bool) -> Result<Command> {
     let ssh = binding.ssh().ok_or_else(|| failure("missing SSH target"))?;
     let budgets = enumeray_contracts::transfers::TransferBudgets::from_env().map_err(failure)?;
     let mut command = Command::new("ssh");
@@ -508,8 +518,14 @@ pub(crate) fn ssh_command(binding: &ComputeInstallation) -> Result<Command> {
                 .identity_file
                 .as_ref()
                 .ok_or_else(|| failure("SSH identity is unavailable"))?,
-        )
-        .arg(format!("{}@{}", ssh.user, ssh.host));
+        );
+    if subsystem {
+        command.arg("-s");
+    }
+    command.arg(format!("{}@{}", ssh.user, ssh.host));
+    if subsystem {
+        command.arg("sftp");
+    }
     Ok(command)
 }
 
@@ -519,13 +535,46 @@ fn invoke(
     directory: &str,
     input: Option<&[u8]>,
 ) -> Result<Value> {
+    invoke_target(&binding.target(), action, directory, input)
+}
+
+pub(crate) fn invoke_target(
+    binding: &ComputeTarget,
+    action: &str,
+    directory: &str,
+    input: Option<&[u8]>,
+) -> Result<Value> {
+    invoke_target_budget(binding, action, directory, input, Duration::MAX)
+}
+
+pub(crate) fn invoke_preflight(
+    binding: &ComputeTarget,
+    input: &[u8],
+    remaining: Duration,
+) -> Result<Value> {
+    invoke_target_budget(
+        binding,
+        "preflight",
+        &binding.work_root,
+        Some(input),
+        remaining,
+    )
+}
+
+fn invoke_target_budget(
+    binding: &ComputeTarget,
+    action: &str,
+    directory: &str,
+    input: Option<&[u8]>,
+    remaining: Duration,
+) -> Result<Value> {
     let envelope = crate::protocol::Request::new(action, input)?;
     let request =
         serde_json::to_vec(&envelope).map_err(|_| failure("cannot encode runner request"))?;
     let mut command = match &binding.connection {
         ConnectionConfig::Direct { .. } => launcher_command(binding, action, directory)?,
         ConnectionConfig::Ssh(ssh) => {
-            let mut command = ssh_command(binding)?;
+            let mut command = ssh_target_command(binding)?;
             command.arg(format!(
                 "{} compute-runner {} --directory {}",
                 quote(&ssh.runner_path),
@@ -543,7 +592,22 @@ fn invoke(
         }
         _ => Duration::from_secs(30),
     };
-    let output = run_command(&mut command, Some(&request), budget)?;
+    let output = if action == "preflight" {
+        run_command_progress(
+            &mut command,
+            Some(&request),
+            budget.min(remaining),
+            false,
+            None,
+            enumeray_contracts::setup::MAX_REPORT_BYTES,
+        )?
+    } else {
+        run_command(&mut command, Some(&request), budget.min(remaining))?
+    };
+    if action == "preflight" && output.stdout().len() > enumeray_contracts::setup::MAX_REPORT_BYTES
+    {
+        return Err(failure("preflight runner response exceeds its bound"));
+    }
     if !output.successful() {
         return Err(
             failure("runner transport failed; preserve the original launch")
@@ -554,11 +618,7 @@ fn invoke(
         .map_err(|error| error.with_command(output.diagnostics()))
 }
 
-fn launcher_command(
-    binding: &ComputeInstallation,
-    action: &str,
-    directory: &str,
-) -> Result<Command> {
+fn launcher_command(binding: &ComputeTarget, action: &str, directory: &str) -> Result<Command> {
     let executable = binding
         .launcher()
         .first()
@@ -655,6 +715,8 @@ fn transfer(
         Some(batch.as_bytes()),
         remaining.min(budgets.overall),
         true,
+        None,
+        4 * 1024 * 1024,
     )?;
     if !evidence.successful() {
         return Err(failure("SFTP transfer interrupted").with_kind(ErrorKind::Retry));
@@ -803,7 +865,25 @@ pub(crate) fn run_command(
     input: Option<&[u8]>,
     timeout: Duration,
 ) -> Result<CommandEvidence> {
-    run_command_progress(command, input, timeout, false)
+    run_command_progress(command, input, timeout, false, None, 4 * 1024 * 1024)
+}
+
+pub(crate) fn run_cancellable(
+    command: &mut Command,
+    input: Option<&[u8]>,
+    timeout: Duration,
+    stop: &std::sync::atomic::AtomicBool,
+) -> Result<CommandEvidence> {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+    run_command_progress(
+        command,
+        input,
+        timeout,
+        false,
+        Some(stop),
+        enumeray_contracts::setup::MAX_REPORT_BYTES,
+    )
 }
 
 fn run_command_progress(
@@ -811,6 +891,8 @@ fn run_command_progress(
     input: Option<&[u8]>,
     timeout: Duration,
     sftp_progress: bool,
+    stop: Option<&std::sync::atomic::AtomicBool>,
+    stdout_limit: usize,
 ) -> Result<CommandEvidence> {
     use std::sync::{
         Arc, Mutex,
@@ -905,7 +987,7 @@ fn run_command_progress(
         let reader = tokio::spawn(capture(
             out,
             stdout.clone(),
-            4 * 1024 * 1024,
+            stdout_limit,
             false,
             wire.clone(),
         ));
@@ -952,6 +1034,7 @@ fn run_command_progress(
             }
             if std::time::Instant::now() >= deadline
                 || sftp_progress && progressed.elapsed() >= stall
+                || stop.is_some_and(|s| s.load(Ordering::Acquire))
             {
                 break CommandState::TimedOut;
             }
@@ -965,6 +1048,9 @@ fn run_command_progress(
         Err(_) => (CommandState::ObservationFailed, false),
     };
     if !matches!(state, CommandState::Exited { .. }) {
+        if stop.is_some() {
+            crate::transfers::kill_group(child.id());
+        }
         let _ = child.kill();
         std::thread::spawn(move || {
             let _ = child.wait();

@@ -7,6 +7,115 @@ use serde_json::Value;
 
 pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
     match &args.command {
+        Command::Setup(_) => {
+            output.push_str("Connector setup\n");
+            present_fields(
+                output,
+                value,
+                &[
+                    ("Status", "/status"),
+                    ("Setup directory", "/directory"),
+                    ("Connector", "/connector_id"),
+                    ("Context", "/context_id"),
+                    ("Startup", "/startup"),
+                    ("Configuration", "/configuration"),
+                    ("Setup approval", "/plan_sha256"),
+                    ("Host approval", "/host_plan_sha256"),
+                    ("Configured", "/diagnostics/setup/configured"),
+                    ("Connected", "/diagnostics/setup/connected"),
+                    ("Ready", "/diagnostics/setup/ready"),
+                    ("Next action", "/next_action"),
+                    ("Correction", "/correction"),
+                    ("Destination", "/destination"),
+                ],
+            );
+            if let Some(commands) = value["commands"].as_object() {
+                for (label, command) in commands {
+                    if let Some(parts) = command.as_array() {
+                        let quoted = parts
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(|part| format!("'{}'", part.replace('\'', "'\\''")))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        field(output, label, Some(&Value::String(quoted)));
+                    }
+                }
+            }
+            table(
+                output,
+                value
+                    .pointer("/diagnostics/setup/issues")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                &[
+                    ("Cause", "/code"),
+                    ("Role", "/responsible_role"),
+                    ("Correction", "/correction"),
+                ],
+            );
+            for pointer in ["/local_preflight/checks", "/preflight/report/checks"] {
+                let checks = value
+                    .pointer(pointer)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter(|check| check["required"] == true && check["outcome"] != "passed")
+                    .cloned()
+                    .collect::<Vec<_>>();
+                table(
+                    output,
+                    &checks,
+                    &[
+                        ("Check", "/check"),
+                        ("Outcome", "/outcome"),
+                        ("Role", "/responsible_role"),
+                        ("Correction", "/correction"),
+                    ],
+                );
+            }
+        }
+        Command::Connector(Connector::Context(
+            ConnectorContext::Preflight { .. } | ConnectorContext::PreflightStatus { .. },
+        )) => {
+            output.push_str("Host preflight\n");
+            present_fields(
+                output,
+                value,
+                &[
+                    ("Context", "/context_id"),
+                    ("Ready host prerequisites", "/ready"),
+                    ("Evidence validity", "/validity"),
+                    ("Reason", "/reason"),
+                    ("Attempt", "/attempt/request_id"),
+                    ("State", "/attempt/state"),
+                    ("Directory", "/directory"),
+                    ("Probe identity", "/report/probe_id"),
+                    ("Status", "/status"),
+                ],
+            );
+            table(
+                output,
+                value
+                    .pointer("/report/checks")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                &[
+                    ("Check", "/check"),
+                    ("Outcome", "/outcome"),
+                    ("Cause", "/code"),
+                    ("Responsible role", "/responsible_role"),
+                    ("Correction", "/correction"),
+                ],
+            );
+            scientific(
+                output,
+                "Qualification limits",
+                value.pointer("/report/limitations"),
+            );
+        }
         Command::Model(Model::Release(_)) => {
             output.push_str("Release\n");
             fields(
@@ -350,10 +459,13 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 output.push_str("This is the ownership generation; execution configuration uses a separate generation.\n");
             }
         }
+        Command::Connector(Connector::Diagnostics { id, context }) => {
+            connector(output, value);
+            setup_diagnostics(output, args, value, id, context.as_deref());
+        }
         Command::Connector(
             Connector::Get { .. }
             | Connector::Configure { .. }
-            | Connector::Diagnostics { .. }
             | Connector::WaitMaintenance { .. }
             | Connector::Update { .. },
         ) => connector(output, value),
@@ -1006,6 +1118,122 @@ fn connector(output: &mut String, value: &Value) {
             ),
         ],
     );
+}
+
+fn setup_diagnostics(
+    output: &mut String,
+    args: &Args,
+    value: &Value,
+    id: &str,
+    context: Option<&str>,
+) {
+    output.push_str("Contact and session evidence\n");
+    if value["contact"].is_null() || value["session"].is_null() {
+        output.push_str("Contact/session evidence: unavailable from this service. Missing evidence does not establish readiness.\n");
+    } else {
+        fields(
+            output,
+            value,
+            &[
+                ("Assessed at", "/contact/assessed_at"),
+                ("Last authenticated contact", "/contact/last_contact_at"),
+                ("Contact age (seconds)", "/contact/age_seconds"),
+                ("Contact freshness", "/contact/freshness"),
+                ("Contact credential current", "/contact/credential_current"),
+                ("Session open", "/session/open"),
+                ("Session acquired at", "/session/acquired_at"),
+            ],
+        );
+    }
+    output.push_str("An open session has no timed expiry. Contact alone does not prove the owning process or backend is running or stopped.\n");
+    fields(
+        output,
+        value,
+        &[
+            ("Pending preflight requests", "/preflight/pending"),
+            ("Current host passes", "/preflight/current_ready"),
+            ("Current host blockers", "/preflight/current_blocked"),
+            (
+                "Stale or unavailable host evidence",
+                "/preflight/stale_or_unavailable",
+            ),
+        ],
+    );
+    let Some(_) = context else {
+        next(output, args, &["connector", "context", "list", id]);
+        next(
+            output,
+            args,
+            &["connector", "diagnostics", id, "--context", "CONTEXT_ID"],
+        );
+        return;
+    };
+    let setup = &value["setup"];
+    if setup.is_null() {
+        output.push_str("Context setup readiness: unavailable from this service; use a matching service with context diagnostics support.\n");
+        return;
+    }
+    output.push_str("Context setup readiness\n");
+    fields(
+        output,
+        setup,
+        &[
+            ("Context", "/context_id"),
+            ("Lifecycle", "/lifecycle_state"),
+            ("Archived", "/archived"),
+            ("Configured", "/configured"),
+            ("Connected", "/connected"),
+            ("Ready for setup", "/ready"),
+            ("Host prerequisites passed", "/preflight/ready"),
+            ("Preflight evidence validity", "/preflight/validity"),
+            (
+                "Preflight observation time",
+                "/preflight/report/observed_at",
+            ),
+            ("Preflight attempt", "/preflight/attempt/request_id"),
+            ("Preflight state", "/preflight/attempt/state"),
+        ],
+    );
+    table(
+        output,
+        setup["issues"].as_array().map(Vec::as_slice).unwrap_or(&[]),
+        &[
+            ("Cause", "/code"),
+            ("Check", "/check"),
+            ("Evidence", "/outcome"),
+            ("Responsible role", "/responsible_role"),
+            ("Correction", "/correction"),
+        ],
+    );
+    if setup
+        .pointer("/preflight/report")
+        .is_some_and(Value::is_object)
+    {
+        if setup.pointer("/preflight/validity").and_then(Value::as_str) != Some("current") {
+            output.push_str("Historical host checks: these outcomes are not current evidence.\n");
+        } else {
+            output.push_str("Current host checks\n");
+        }
+        table(
+            output,
+            setup
+                .pointer("/preflight/report/checks")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]),
+            &[
+                ("Check", "/check"),
+                ("Outcome", "/outcome"),
+                ("Cause", "/code"),
+            ],
+        );
+        scientific(
+            output,
+            "Qualification limits",
+            setup.pointer("/preflight/report/limitations"),
+        );
+    }
+    output.push_str("Diagnostics is read-only. Request fresh checks explicitly with connector context preflight. Setup readiness does not establish grants, installed model readiness or scientific validity.\n");
 }
 
 fn run(output: &mut String, args: &Args, value: &Value, id: &str) {

@@ -217,6 +217,7 @@ unresolved and never authorizes another start.
 
 | Runner action | Purpose and boundary |
 | --- | --- |
+| `preflight` | Check host identities, roots and scheduler prerequisites without an installation descriptor; only private bounded probes are created, and no model or Slurm job is launched |
 | `validate` | Check installed descriptor/files, execution identity and driver readiness before accepting configuration |
 | `identity` | Read the runner UID without reading credentials or touching job state; rechecked before direct submission |
 | `protect-installations` | Persist known canonical installation overlap pins on the original compute host before readiness |
