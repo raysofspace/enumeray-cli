@@ -6,9 +6,17 @@ a pinned revision. User and connector workflows start in the [README](README.md)
 
 ## Feature development
 
+Feature branches and PRs are the default. An explicit user request to work on
+`main` selects the [main workflow](#explicit-work-on-main) instead. In the PR flow,
+commits and pushes may proceed within the task's scope without separate
+confirmation. In the explicit `main` flow, do not commit or push until the user
+explicitly authorizes those actions. Editing and verification can proceed, with
+changes left uncommitted for review. Choosing `main` alone does not authorize
+commits or pushes; respect any separate limits on committing and pushing.
+
 1. Inspect the workspace, preserve existing work and choose the actual target
-   branch/ref, normally `origin/main`. Fetch that target and create a
-   `codex/<feature>` branch. Use a separate workspace for each concurrent feature;
+   branch/ref, normally `origin/main`. For the default flow, fetch it and create a
+   `feature/<name>` branch. Use a separate workspace for each concurrent feature;
    never silently replace a missing comparison ref.
 2. Change the canonical public sources, add focused regressions and update the
    owning guides and fixtures. Regenerate affected derived documentation in the
@@ -18,25 +26,51 @@ a pinned revision. User and connector workflows start in the [README](README.md)
    including required backend fixtures. Register new suites and ignored tests in
    the catalogue and validate it after changing suite structure. Keep large-scale
    qualification explicitly selected.
-4. Commit and push public changes before service commits that reference them.
-   For a coordinated feature, link the related PRs and merge the public PR first.
+4. In the PR flow, commit public changes before the service records their SHA
+   and push public changes before the service push. For a coordinated feature in
+   the default flow, link the related PRs and merge the public PR first.
    The service then pins the final merged public SHA, accounting for squash or
    rebase merges, and verifies the final pair before its PR merges. A public-only
    feature can be adopted by the service later through a verified pin update.
-5. After the relevant PRs merge, preserve remaining work, switch to local `main`
-   and fast-forward it with `git pull --ff-only origin main`. Delete only confirmed
-   merged feature branches locally and remotely; squash merges can make Git's
-   local merged-branch check inconclusive. Archive temporary managed worktrees
-   after preserving their work and inspect the checkout for leftovers.
+5. After the relevant PRs merge or authorized direct pushes finish, preserve
+   remaining work, switch to local `main` and fast-forward it with
+   `git pull --ff-only origin main`. After each PR merge, remove its feature branch
+   both locally and remotely, after confirming it has no later unmerged work.
+   Squash merges can make Git's local merged-branch check inconclusive; confirm
+   the merged PR and its final head before deleting the branch. Skip branch/PR
+   cleanup in the explicit `main` flow unless separately requested. Archive
+   temporary managed worktrees after preserving their work and inspect the
+   checkout for leftovers.
 
 When developing this repository as a service submodule, follow the service's
 workflow as well. After synchronizing both local `main` branches, run
 `git submodule update --init --recursive` from the parent repository. Leave the
 public working checkout at its recorded pin, even when public `main` has newer
 commits; a detached HEAD is normal. Adopting a newer public revision requires
-another verified service pin update. Ordinary development and pin updates do not
-qualify new release artifacts; publication requires separate qualification of the
-selected service/public revisions and exact final artifacts.
+another verified service pin update through the selected workflow. Ordinary
+development and pin updates do not qualify new release artifacts; publication
+requires separate qualification of the selected service/public revisions and exact
+final artifacts.
+
+### Explicit work on main
+
+When the user explicitly requests this flow, use the existing checkout, preserve
+local work and synchronize before editing:
+
+```sh
+git switch main
+git pull --ff-only origin main
+```
+
+Do not create feature branches, PRs or new worktrees for that task. Record the
+starting SHA before the first task commit; retain the corresponding service base
+for service verification even after a push advances its `origin/main`. Run the
+same affected profiles, regressions and integration checks as in the PR flow.
+Leave changes uncommitted until the user authorizes committing. Once authorized,
+commit directly on `main`; if pushing is authorized, push public `main` before the
+service pushes a verified pin to that exact public commit. Use normal pushes. If
+direct pushes are blocked, report the constraint without creating a PR or
+force-pushing `main`.
 
 ## Build and local checks
 
