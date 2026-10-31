@@ -57,6 +57,9 @@ pub struct ContextCreate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrantCreate {
+    /// Optional durable creation identity. Replays never replace a revoked grant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Uuid>,
     pub context_id: String,
     pub user_id: Uuid,
     #[serde(default = "queue_limit")]

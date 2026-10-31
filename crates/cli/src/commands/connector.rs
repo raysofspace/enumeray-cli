@@ -147,7 +147,7 @@ pub(crate) fn connector(
 }
 
 // Shared secret-bearing contracts reject unknown fields before a private file is saved.
-fn valid_enrollment(document: &ConnectorEnrollment, connector: &str) -> bool {
+pub(crate) fn valid_enrollment(document: &ConnectorEnrollment, connector: &str) -> bool {
     !document.id.is_nil()
         && document.connector_id == connector
         && document.enrollment_token.len() == 43

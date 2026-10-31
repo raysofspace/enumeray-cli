@@ -27,6 +27,8 @@ pub struct Args {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Guide or resume connector setup and a first model candidate trial.
+    Setup(Setup),
     #[command(flatten)]
     Runtime(enumeray_connector::RuntimeCommand),
     #[command(subcommand)]
@@ -58,6 +60,73 @@ pub enum Command {
         file: Option<PathBuf>,
         #[arg(long)]
         idempotency_key: Option<String>,
+    },
+}
+
+#[derive(clap::Args)]
+pub struct Setup {
+    /// Private setup checkpoint. Repeating this directory resumes the same operation.
+    #[arg(long)]
+    pub directory: Option<PathBuf>,
+    #[arg(long, value_enum)]
+    pub mode: Option<SetupMode>,
+    /// Version-1 setup input containing host, connector and first-model selections.
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+    /// Require complete input and explicit approvals; never prompt.
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// Approve the exact saved plan SHA-256 shown by setup.
+    #[arg(long)]
+    pub approve: Option<String>,
+    /// Acknowledge that trusted model code can access this OS user's files and credentials.
+    #[arg(long)]
+    pub allow_development_execution: bool,
+    /// Explicitly submit/resume the saved first-model candidate trial.
+    #[arg(long)]
+    pub submit_trial: bool,
+    /// Confirm site-specific Slurm batch/runtime preparation before freezing a generated starter.
+    #[arg(long)]
+    pub confirm_model_preparation: bool,
+    /// Deliberately issue a new enrollment document when no usable secret was retained.
+    #[arg(long)]
+    pub replace_enrollment: bool,
+    /// Import an explicitly issued enrollment after recovering an uncertain secret response.
+    #[arg(long)]
+    pub enrollment_file: Option<PathBuf>,
+    /// Explicitly adopt matching existing registration, host and model records.
+    #[arg(long)]
+    pub adopt_existing: bool,
+    #[command(subcommand)]
+    pub command: Option<SetupCommand>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum SetupMode {
+    Development,
+    Managed,
+}
+
+#[derive(Subcommand)]
+pub enum SetupCommand {
+    /// Inspect saved progress and authenticated readiness without requesting checks.
+    Status {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    /// Apply reviewed managed changes locally as an administrator; never loads a user profile.
+    ApplyHost {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long, value_parser=["connector","execution"])]
+        side: String,
+        #[arg(long)]
+        approve: String,
+        #[arg(long)]
+        enrollment_file: Option<PathBuf>,
+        /// Local copy of the reviewed executable on this host; its approved SHA-256 must match.
+        #[arg(long)]
+        executable_source: Option<PathBuf>,
     },
 }
 

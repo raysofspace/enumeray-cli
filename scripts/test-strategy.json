@@ -120,7 +120,9 @@
           "--test",
           "unified",
           "--test",
-          "host_preflight"
+          "host_preflight",
+          "--test",
+          "setup"
         ]
       ],
       "tools": [
@@ -329,6 +331,7 @@
     "crates/cli/tests/release.rs": "client-cli",
     "crates/cli/tests/unified.rs": "client-cli",
     "crates/cli/tests/host_preflight.rs": "client-cli",
+    "crates/cli/tests/setup.rs": "client-cli",
     "crates/cli/tests/observation.rs": "client-cli",
     "crates/cli/tests/commands.rs": "client-cli",
     "crates/cli/tests/connector_runner.rs": "connector-native",

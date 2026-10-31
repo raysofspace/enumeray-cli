@@ -7,6 +7,55 @@ use serde_json::Value;
 
 pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
     match &args.command {
+        Command::Setup(_) => {
+            output.push_str("Connector setup\n");
+            present_fields(
+                output,
+                value,
+                &[
+                    ("Status", "/status"),
+                    ("Setup directory", "/directory"),
+                    ("Connector", "/connector_id"),
+                    ("Context", "/context_id"),
+                    ("Startup", "/startup"),
+                    ("Configuration", "/configuration"),
+                    ("Setup approval", "/plan_sha256"),
+                    ("Host approval", "/host_plan_sha256"),
+                    ("Configured", "/diagnostics/setup/configured"),
+                    ("Connected", "/diagnostics/setup/connected"),
+                    ("Ready", "/diagnostics/setup/ready"),
+                    ("Next action", "/next_action"),
+                    ("Correction", "/correction"),
+                    ("Destination", "/destination"),
+                ],
+            );
+            if let Some(commands) = value["commands"].as_object() {
+                for (label, command) in commands {
+                    if let Some(parts) = command.as_array() {
+                        let quoted = parts
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(|part| format!("'{}'", part.replace('\'', "'\\''")))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        field(output, label, Some(&Value::String(quoted)));
+                    }
+                }
+            }
+            table(
+                output,
+                value
+                    .pointer("/diagnostics/setup/issues")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+                &[
+                    ("Cause", "/code"),
+                    ("Role", "/responsible_role"),
+                    ("Correction", "/correction"),
+                ],
+            );
+        }
         Command::Connector(Connector::Context(
             ConnectorContext::Preflight { .. } | ConnectorContext::PreflightStatus { .. },
         )) => {

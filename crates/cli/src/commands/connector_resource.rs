@@ -190,6 +190,7 @@ pub(crate) fn resource(
             Method::POST,
             &["connectors", id, "grants"],
             &GrantCreate {
+                id: None,
                 context_id: context.clone(),
                 user_id: *user,
                 max_queued_runs: *max_queued_runs,

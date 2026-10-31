@@ -40,6 +40,11 @@ pub struct HostSetupSpec {
     pub connector_account: HostAccount,
     pub execution_account: HostAccount,
     pub connector_executable: String,
+    /// Reviewed local source for an atomic managed installation, never downloaded by setup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable_sha256: Option<String>,
     pub journal: String,
     pub token_file: String,
     pub credentials_file: Option<String>,
@@ -47,6 +52,19 @@ pub struct HostSetupSpec {
     pub max_transfer_workers: u32,
     pub max_pending_assignments: u32,
     pub shutdown_timeout_seconds: u64,
+    /// Explicit approval to install native background service configuration.
+    #[serde(default)]
+    pub install_service: bool,
+}
+
+/// Host runtime configuration contains references to private credentials, never their values.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectorRuntimeConfiguration {
+    pub manifest_version: u32,
+    pub spec: HostSetupSpec,
+    pub plan_sha256: String,
+    pub allow_development_execution: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,7 +104,7 @@ pub enum HostPrerequisiteKind {
     TrustedHostKey,
     Enrollment,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostSide {
     Connector,

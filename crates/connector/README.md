@@ -12,6 +12,10 @@ Choose driver and access independently: `process` or `slurm`, combined with
 `direct` or `ssh`. See [configuration and extension guide](EXTENDING.md) for the
 four context templates, deployment choices and module contracts.
 
+For an installation-to-first-trial journey, start with
+[guided connector setup](../cli/SETUP_GUIDE.md). It saves selections and progress,
+applies reviewed host preparation explicitly and reuses the operations below.
+
 ## Prepare configuration and check host prerequisites
 
 Start from [Linux managed](../cli/examples/host-setup-linux.json),

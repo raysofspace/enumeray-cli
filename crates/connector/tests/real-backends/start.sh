@@ -3,6 +3,7 @@
 set -eu
 . /usr/local/bin/acceptance-wait-ready
 umask 077
+python3 /usr/local/bin/host-setup-check.py
 # One installed executable must not broaden the delegated launcher boundary.
 assert_launcher_denied() {
   if sudo -u enumeray sudo -n -u model -- /usr/local/bin/enumeray "$@" >/dev/null 2>&1; then

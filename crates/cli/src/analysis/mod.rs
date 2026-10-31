@@ -71,6 +71,37 @@ pub(crate) fn execute(
     client: &EnumerayClient,
     command: &Analysis,
 ) -> Result<Completion, Failure> {
+    execute_inner(args, client, command, None)
+}
+
+/// A parent workflow must retain the original retry identity even if a directory
+/// is replaced with another otherwise-valid analysis for the same candidate.
+pub(crate) fn execute_bound(
+    args: &Args,
+    client: &EnumerayClient,
+    command: &Analysis,
+    key: &str,
+) -> Result<Completion, Failure> {
+    execute_inner(args, client, command, Some(key))
+}
+
+pub(crate) fn local_run_key(client: &EnumerayClient, path: &Path) -> Result<String, Error> {
+    let user = client.me()?.user_id;
+    let directory = Directory::open(path)?;
+    let _snapshot = directory.state_lock()?;
+    let saved = directory.load(client.base_url(), user)?;
+    saved
+        .local()
+        .map(|s| s.run_key.clone())
+        .ok_or_else(|| invalid("Guided trials require their original locally prepared analysis."))
+}
+
+fn execute_inner(
+    args: &Args,
+    client: &EnumerayClient,
+    command: &Analysis,
+    expected_key: Option<&str>,
+) -> Result<Completion, Failure> {
     if let Analysis::Init {
         model,
         candidate,
@@ -120,6 +151,15 @@ pub(crate) fn execute(
         command,
         Analysis::Wait { .. } | Analysis::Logs { follow: true, .. }
     ) {
+        if let Some(key) = expected_key {
+            let path = match command {
+                Analysis::Wait { directory, .. } | Analysis::Logs { directory, .. } => directory,
+                _ => unreachable!(),
+            };
+            if local_run_key(client, path)? != key {
+                return Err(invalid("Saved analysis retry identity differs from its parent workflow; no replacement execution was authorized.").into());
+            }
+        }
         return observation::analysis(args, client);
     }
     let directory = match command {
@@ -154,6 +194,9 @@ pub(crate) fn execute(
         let _snapshot = directory.state_lock()?;
         directory.load(client.base_url(), user_id)?
     };
+    if expected_key.is_some_and(|key| saved.local().is_none_or(|s| s.run_key != key)) {
+        return Err(invalid("Saved analysis retry identity differs from its parent workflow; no replacement execution was authorized.").into());
+    }
     if matches!(command, Analysis::Status { .. } | Analysis::Collect { .. })
         && let AnalysisState::Recovery(recovered) = &mut saved
         && recovered.run_id().is_some()

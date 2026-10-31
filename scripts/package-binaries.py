@@ -148,6 +148,7 @@ def main():
         artifacts.write_json(contents / 'THIRD_PARTY_NOTICES.json', notices)
         guide_names = {
             (root / "crates/cli/INSTALL.md").resolve(): "INSTALL.md",
+            (root / "crates/cli/SETUP_GUIDE.md").resolve(): "SETUP_GUIDE.md",
             (root / "crates/cli/AUTHOR_GUIDE.md").resolve(): "AUTHOR_GUIDE.md",
             (root / "crates/cli/ANALYSIS_GUIDE.md").resolve(): "ANALYSIS_GUIDE.md",
             (root / "crates/connector/README.md").resolve(): "CONNECTOR_GUIDE.md",

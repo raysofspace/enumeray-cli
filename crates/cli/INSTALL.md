@@ -13,6 +13,9 @@ Package availability follows the matching service's release qualification.
 Until a qualified release is published, build from source below. Direct downloads
 and the project Homebrew tap are the supported distribution channels.
 
+After installation, use [guided connector setup](SETUP_GUIDE.md) to select a mode,
+prepare the host, establish readiness and trial a first model with saved progress.
+
 **Alpha: 0.1.0-alpha.1.** Commands and APIs may change. Alpha updates may require
 a separate fresh installation; no in-place upgrade compatibility is promised.
 Read the target release's instructions before upgrading. Keep valuable existing

@@ -13,6 +13,7 @@ mod drivers;
 #[path = "runtime/execution.rs"]
 mod execution;
 mod execution_policy;
+mod host_setup;
 #[path = "runtime/journal.rs"]
 mod journal;
 mod launch;
@@ -42,6 +43,8 @@ use clap::Subcommand;
 use serde_json::json;
 
 pub use control::EnrollOptions;
+pub use host_setup::stage_setup_file;
+pub use host_setup::{apply_host_configuration, configuration_digest, prepare_development};
 pub use service::Options as RunOptions;
 
 /// Build the same reviewable plan used by the credential-free generation command.
@@ -54,6 +57,27 @@ pub fn host_configuration_plan(
 
 #[derive(Subcommand)]
 pub enum HostCommand {
+    /// Start the connector using its saved host configuration, without a user profile.
+    Start {
+        #[arg(long)]
+        configuration: PathBuf,
+        #[arg(
+            long,
+            required_unless_present = "background",
+            conflicts_with = "background"
+        )]
+        foreground: bool,
+        #[arg(long)]
+        background: bool,
+        /// Explicit manual journal recovery assertion; never inferred from a stale heartbeat.
+        #[arg(long)]
+        confirm_prior_process_stopped: bool,
+    },
+    /// Inspect local journal and native service evidence; performs no probes or repairs.
+    Status {
+        #[arg(long)]
+        configuration: PathBuf,
+    },
     /// Generate private, reviewable host configuration without applying it.
     #[command(subcommand)]
     Configuration(ConfigurationCommand),
@@ -288,6 +312,13 @@ fn finish(result: Result<serde_json::Value>, service: bool) -> ExitCode {
 
 fn run_host(command: HostCommand) -> Result<serde_json::Value> {
     match command {
+        HostCommand::Start {
+            configuration,
+            foreground,
+            background: _,
+            confirm_prior_process_stopped,
+        } => host_setup::start(&configuration, foreground, confirm_prior_process_stopped),
+        HostCommand::Status { configuration } => host_setup::status(&configuration),
         HostCommand::Configuration(ConfigurationCommand::Generate { file, directory }) => {
             setup::generate(&file, &directory)
         }

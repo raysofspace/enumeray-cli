@@ -51,6 +51,7 @@ COPY crates/connector/tests/real-backends/worker-preparation-failure.sbatch /opt
 COPY examples/artifact-input.json examples/artifact-output.json /opt/enumeray/examples/
 COPY crates/cli/examples/host-setup-linux.json /opt/enumeray/examples/host-setup-linux.json
 COPY crates/connector/tests/real-backends/start.sh /usr/local/bin/acceptance-start
+COPY crates/connector/tests/real-backends/host-setup-check.py /usr/local/bin/host-setup-check.py
 COPY crates/connector/tests/real-backends/wait-ready.sh /usr/local/bin/acceptance-wait-ready
 COPY crates/connector/tests/real-backends/slurm.conf /etc/slurm/slurm.conf
 RUN chmod 0755 /usr/local/bin/acceptance-start /opt/enumeray/scalar-model-v1/wrapper.py /opt/enumeray/file-model-v1/wrapper.py \

@@ -26,6 +26,9 @@ fn account_name(s: &str) -> bool {
         && s.len() <= 64
         && s != "root"
         && s.bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_lowercase() || b == b'_')
+        && s.bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-".contains(&b))
 }
 pub(crate) fn validate(spec: &HostSetupSpec) -> Result<()> {
@@ -88,6 +91,22 @@ pub(crate) fn validate(spec: &HostSetupSpec) -> Result<()> {
     }
     if spec.credentials_file.as_ref().is_some_and(|p| !absolute(p)) {
         return Err(failure("invalid credentials file path"));
+    }
+    if spec
+        .executable_source
+        .as_ref()
+        .is_some_and(|p| !absolute(p))
+        || spec.executable_source.is_some() != spec.executable_sha256.is_some()
+        || spec.executable_sha256.as_ref().is_some_and(|s| {
+            s.len() != 64
+                || !s
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        })
+    {
+        return Err(failure(
+            "executable source requires a reviewed absolute path and SHA-256",
+        ));
     }
     let context = &spec.context.definition;
     if matches!(context.connection, ConnectionConfig::Direct { .. })
