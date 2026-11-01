@@ -3,11 +3,39 @@
 
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use super::{ContractError, InputError, SchemaKind, ScientificDefinition, contract};
+
+/// Closed public stored-file reference, never a path or transfer capability.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactReference {
+    #[serde(deserialize_with = "canonical_reference_id")]
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            pattern = "^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+    )]
+    pub artifact_id: Uuid,
+}
+
+pub(crate) fn canonical_reference_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Uuid, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    let id = Uuid::parse_str(&text).map_err(serde::de::Error::custom)?;
+    if id.is_nil() || id.to_string() != text {
+        return Err(serde::de::Error::custom(
+            "expected a non-nil canonical UUID",
+        ));
+    }
+    Ok(id)
+}
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

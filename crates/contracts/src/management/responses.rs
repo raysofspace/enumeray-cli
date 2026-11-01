@@ -285,7 +285,7 @@ pub struct PublicationSummary {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PublicationDetail {
     pub trial_availability: Availability,
-    pub trial_evidence: Value,
+    pub trial_evidence: PublicationTrialEvidence,
     pub id: String,
     pub admission_open: bool,
     #[cfg_attr(feature = "openapi", schema(required = true))]
@@ -313,7 +313,8 @@ pub struct PublicationDetail {
     pub configuration_retention: PublicationConfigurationRetention,
     pub rollback_availability: PublicationRollbackAvailability,
     #[cfg_attr(feature = "openapi", schema(required = true))]
-    pub validation_evidence: Option<Value>,
+    #[serde(deserialize_with = "present_evidence")]
+    pub validation_evidence: Option<PublicationValidationEvidence>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -328,6 +329,82 @@ pub struct PublicationDetail {
     )]
     #[cfg_attr(feature = "openapi", schema(required = true, value_type = PublicationReleaseAuthority))]
     pub activation_availability: Option<PublicationReleaseAuthority>,
+}
+
+/// Bounded management evidence; scientific results remain on authorized run routes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PublicationTrialEvidence {
+    pub counts: PublicationTrialCounts,
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[serde(deserialize_with = "present_evidence")]
+    pub latest_run: Option<PublicationTrialRun>,
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    #[serde(deserialize_with = "present_evidence")]
+    pub latest_succeeded_run: Option<PublicationTrialRun>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PublicationTrialCounts {
+    pub queued: u64,
+    pub running: u64,
+    pub succeeded: u64,
+    pub failed: u64,
+    pub cancelled: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PublicationTrialRun {
+    pub run_id: Uuid,
+    pub publication_id: String,
+    pub purpose: PublicationTrialPurpose,
+    pub state: crate::runs::RunState,
+    #[cfg_attr(feature = "openapi", schema(format = DateTime))]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum PublicationTrialPurpose {
+    CandidateTrial,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PublicationValidationEvidence {
+    pub authority: PublicationValidationAuthority,
+    #[cfg_attr(feature = "openapi", schema(schema_with = verified_digests_schema))]
+    pub verified_digests: std::collections::BTreeMap<String, String>,
+    #[cfg_attr(feature = "openapi", schema(format = DateTime))]
+    pub observed_at: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum PublicationValidationAuthority {
+    ConnectorObserved,
+}
+
+// Unknown evidence is explicit null. A missing decision field is a malformed
+// projection, not evidence that no trial/installation observation exists.
+fn present_evidence<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)
+}
+
+#[cfg(feature = "openapi")]
+fn verified_digests_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    serde_json::from_value(serde_json::json!({
+        "type":"object", "additionalProperties":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+    }))
+    .expect("observed installation digest schema")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -737,6 +814,18 @@ pub struct PublicationRevocationReceipt {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn trial_evidence_requires_complete_counts_and_explicit_absence() {
+        let value = json!({"counts":{"queued":0,"running":0,"succeeded":0,"failed":0,"cancelled":0},"latest_run":null,"latest_succeeded_run":null});
+        assert!(serde_json::from_value::<PublicationTrialEvidence>(value.clone()).is_ok());
+        let mut missing = value.clone();
+        missing.as_object_mut().unwrap().remove("latest_run");
+        assert!(serde_json::from_value::<PublicationTrialEvidence>(missing).is_err());
+        let mut negative = value;
+        negative["counts"]["queued"] = json!(-1);
+        assert!(serde_json::from_value::<PublicationTrialEvidence>(negative).is_err());
+        assert!(serde_json::from_value::<PublicationValidationEvidence>(json!({"authority":"scientifically_validated","verified_digests":{},"observed_at":"2026-11-02T10:00:00Z"})).is_err());
+    }
     #[test]
     fn exact_retry_receipts_preserve_omitted_generation() {
         for value in [

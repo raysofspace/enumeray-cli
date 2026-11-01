@@ -2,7 +2,7 @@
 use crate::{EnumerayClient, Error, resource_path};
 use enumeray_contracts::collections::*;
 use reqwest::Method;
-use serde_json::{Value, json};
+use serde_json::json;
 use uuid::Uuid;
 impl EnumerayClient {
     pub fn collection(&self, id: Uuid) -> Result<CollectionView, Error> {
@@ -31,7 +31,7 @@ impl EnumerayClient {
         id: Uuid,
         start: u32,
         members: &[MemberSpec],
-    ) -> Result<Value, Error> {
+    ) -> Result<CollectionPageReceipt, Error> {
         self.request(
             Method::PUT,
             &resource_path(&[
@@ -44,7 +44,7 @@ impl EnumerayClient {
             None,
         )
     }
-    pub fn freeze_collection(&self, id: Uuid) -> Result<Value, Error> {
+    pub fn freeze_collection(&self, id: Uuid) -> Result<CollectionFreezeReceipt, Error> {
         self.request(
             Method::PUT,
             &resource_path(&["collections", &id.to_string(), "freeze"])?,
@@ -57,7 +57,7 @@ impl EnumerayClient {
         id: Uuid,
         index: u32,
         artifact: Uuid,
-    ) -> Result<Value, Error> {
+    ) -> Result<CollectionBindingReceipt, Error> {
         self.request(
             Method::PUT,
             &resource_path(&[

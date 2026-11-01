@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "algorithm": "enumeray-collection-v1",
+  "vectors": [
+    {
+      "name": "empty-requested",
+      "input": "empty-requested.input.json",
+      "bytes": "empty-requested.bytes.json",
+      "sealed": false,
+      "sha256_base64": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU=",
+      "size_bytes": 2
+    },
+    {
+      "name": "mixed-requested",
+      "input": "mixed-requested.input.json",
+      "bytes": "mixed-requested.bytes.json",
+      "sealed": false,
+      "sha256_base64": "XYFudCG41vE4tiY6D2veIjMqcN5THfJoH6o93HjUZdo=",
+      "size_bytes": 506
+    },
+    {
+      "name": "empty-sealed",
+      "input": "empty-sealed.input.json",
+      "bytes": "empty-sealed.bytes.json",
+      "sealed": true,
+      "sha256_base64": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU=",
+      "size_bytes": 2
+    },
+    {
+      "name": "mixed-sealed",
+      "input": "mixed-sealed.input.json",
+      "bytes": "mixed-sealed.bytes.json",
+      "sealed": true,
+      "sha256_base64": "cn42fB0y1jmn1y/QNZLunGbbUx7rXAZzjLn7QPMTfdc=",
+      "size_bytes": 666
+    }
+  ]
+}

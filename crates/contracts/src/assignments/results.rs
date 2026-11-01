@@ -54,8 +54,10 @@ pub struct ResultRequest {
     pub outputs: Value,
     /// Declared file names mapped to {artifact_id}, matching outputs exactly.
     /// Each artifact must be verified, ready and produced by this assignment.
+    #[cfg_attr(feature = "openapi", schema(value_type = BTreeMap<String, crate::models::files::ArtifactReference>))]
     pub files: Value,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[cfg_attr(feature = "openapi", schema(value_type = BTreeMap<String, crate::collections::CollectionReference>))]
     pub collections: BTreeMap<String, Value>,
     pub optional_output_failures: BTreeMap<String, ResultFailure>,
     #[serde(default, deserialize_with = "failure")]
@@ -181,8 +183,10 @@ pub struct ResultReceipt {
 pub struct RunResult {
     pub receipt: ResultReceipt,
     pub outputs: Value,
+    #[cfg_attr(feature = "openapi", schema(value_type = BTreeMap<String, crate::models::files::ArtifactReference>))]
     pub files: Value,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[cfg_attr(feature = "openapi", schema(value_type = BTreeMap<String, crate::collections::CollectionReference>))]
     pub collections: BTreeMap<String, Value>,
     pub optional_output_failures: BTreeMap<String, ResultFailure>,
     pub failure: Option<ResultFailure>,

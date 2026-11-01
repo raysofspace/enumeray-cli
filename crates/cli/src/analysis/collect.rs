@@ -6,7 +6,10 @@ use super::{
 };
 use crate::{config, transfers};
 use enumeray_client::{EnumerayClient, Error, resource_path};
-use enumeray_contracts::models;
+use enumeray_contracts::{
+    automation::{AnalysisCollectionSummary, CollectedFile, SchemaVersion},
+    models,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs::File};
@@ -259,9 +262,7 @@ pub(super) fn collect(
     }
     if !all_collections || plan.outputs.values().any(|o| !o.verified) {
         directory.write("state/collection.json", &plan)?;
-        let mut value = json!({"directory":directory.root,"run_id":plan.run_id,"complete":false,"collections":collection_outputs});
-        add_identity(saved, &mut value);
-        return Ok(value);
+        return collection_summary(directory, saved, &plan, collection_outputs, false);
     }
     let bundle = json!({"schema_version":1,"complete":true,"run_id":plan.run_id,"publication_id":plan.publication_id,
         "scientific_state":plan.inspection["state"],"inspection":"results/inspection.json","provenance":"results/provenance.json",
@@ -284,9 +285,57 @@ pub(super) fn collect(
     directory.evidence("bundle.json", &bundle)?;
     plan.complete = true;
     directory.write("state/collection.json", &plan)?;
-    let mut value = json!({"directory":directory.root,"bundle":directory.root.join("bundle.json"),"complete":true,"run_id":plan.run_id,"scientific_state":plan.inspection["state"],"outputs":bundle["outputs"]});
-    add_identity(saved, &mut value);
-    Ok(value)
+    collection_summary(directory, saved, &plan, collection_outputs, true)
+}
+
+fn collection_summary(
+    directory: &Directory,
+    saved: &AnalysisState,
+    plan: &Plan,
+    collections: BTreeMap<String, Value>,
+    complete: bool,
+) -> Result<Value, Error> {
+    let outputs = plan
+        .outputs
+        .iter()
+        .filter(|(_, output)| output.verified)
+        .map(|(name, output)| {
+            Ok((
+                name.clone(),
+                CollectedFile {
+                    artifact_id: output.artifact_id,
+                    logical_name: output.logical_name.clone(),
+                    media_type: output.media_type.clone(),
+                    version_id: output.version_id.clone(),
+                    size_bytes: output.size_bytes,
+                    checksum: serde_json::from_value(output.checksum.clone())?,
+                    path: format!("results/files/{}", output.artifact_id),
+                },
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, Error>>()?;
+    let summary = AnalysisCollectionSummary {
+        schema_version: SchemaVersion,
+        directory: directory.root.to_string_lossy().into_owned(),
+        identity: serde_json::from_value(saved.identity())?,
+        run_id: canonical_id(&plan.run_id)?,
+        complete,
+        bundle: complete.then(|| {
+            directory
+                .root
+                .join("bundle.json")
+                .to_string_lossy()
+                .into_owned()
+        }),
+        scientific_state: serde_json::from_value(plan.inspection["state"].clone())?,
+        outputs,
+        collections: collections
+            .into_iter()
+            .map(|(name, collection)| Ok((name, serde_json::from_value(collection)?)))
+            .collect::<Result<_, Error>>()?,
+    };
+    summary.validate().map_err(invalid)?;
+    Ok(serde_json::to_value(summary)?)
 }
 
 fn outputs(saved: &AnalysisState, plan: &Plan) -> Result<BTreeMap<String, Output>, Error> {

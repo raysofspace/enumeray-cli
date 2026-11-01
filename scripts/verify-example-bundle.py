@@ -16,7 +16,9 @@ import tempfile
 
 PROJECTS = ('examples/scalar_model', 'examples/collections',
             'starter-kit/python-json', 'starter-kit/python-files',
-            'starter-kit/executable-json', 'starter-kit/executable-files')
+            'starter-kit/executable-json', 'starter-kit/executable-files',
+            'examples/http-contract')
+HTTP_PROJECT = 'examples/http-contract'
 
 
 def verify_manifest(root):
@@ -50,6 +52,10 @@ def verify_manifest(root):
     if actual != expected:
         raise ValueError('Example tree differs from its manifest')
     for project in PROJECTS:
+        if project == HTTP_PROJECT:
+            if not (root / project / 'collection-identity.py').is_file() or not (root / project / 'digest-vectors/vectors.json').is_file():
+                raise ValueError('Missing executable HTTP identity vectors: ' + project)
+            continue
         if not any((root / project).glob('test_*.py')):
             raise ValueError('Missing executable tests: ' + project)
     return manifest
@@ -65,6 +71,13 @@ def verify_examples(root):
         for name in PROJECTS:
             project = fresh / name
             shutil.copytree(root / name, project)
+            if name == HTTP_PROJECT:
+                result = subprocess.run([sys.executable, '-B', 'collection-identity.py',
+                                         '--verify-vectors', 'digest-vectors'], cwd=project,
+                                        env=environment, check=True, capture_output=True, text=True)
+                if json.loads(result.stdout).get('verified_vectors') != 4:
+                    raise ValueError('HTTP identity verification must exercise all four published vectors')
+                continue
             subprocess.run([sys.executable, '-B', '-m', 'unittest', 'discover', '-s', '.',
                             '-p', 'test_*.py'], cwd=project, env=environment, check=True)
     return {'format_version': 1, 'source': manifest['source'],

@@ -367,7 +367,9 @@
     "scripts/test_example_bundle.py": "python",
     "crates/cli/starter-kit/test_protocol.py": "client-cli",
     "examples/scalar_model/test_protocol.py": "python",
-    "examples/collections/test_protocol.py": "python"
+    "examples/collections/test_protocol.py": "python",
+    "scripts/test_collection_identity.py": "python",
+    "scripts/test_http_workflows.py": "python"
   },
   "ignored": {
     "crates/connector/src/compute.rs::real_ssh_and_slurm": {

@@ -2661,7 +2661,7 @@ fn expired_history_cursor_requires_explicit_recovery_without_another_request() {
             if json_output {
                 assert_eq!(
                     serde_json::from_slice::<Value>(&output.stderr).unwrap(),
-                    json!({"status":410,"error":failure,"retry_after":null})
+                    json!({"schema_version":1,"status":410,"error":failure,"retry_after":null})
                 );
             } else {
                 let stderr = String::from_utf8(output.stderr).unwrap();
@@ -2687,7 +2687,8 @@ fn publication_review_shows_trial_evidence_and_inspection_commands() {
     publication["admission_updated_at"] = Value::Null;
     publication["validation_evidence"] = Value::Null;
     publication["trial_availability"] = json!({"available":true,"unavailable_reason":null});
-    publication["trial_evidence"] = json!({"counts":{"queued":0,"running":0,"succeeded":1,"failed":0,"cancelled":0},"latest_run":{"run_id":id,"state":"succeeded"},"latest_succeeded_run":{"run_id":id}});
+    let trial = json!({"run_id":id,"publication_id":"candidate","purpose":"candidate_trial","state":"succeeded","created_at":"2026-10-17T00:00:00Z"});
+    publication["trial_evidence"] = json!({"counts":{"queued":0,"running":0,"succeeded":1,"failed":0,"cancelled":0},"latest_run":trial,"latest_succeeded_run":trial});
     let (origin, worker) = server(publication);
     let output = human_cli(&directory.path().join("missing.json"))
         .args([

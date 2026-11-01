@@ -12,6 +12,10 @@ homepage.workspace = true
 default = []
 openapi = ["dep:utoipa"]
 
+[[example]]
+name = "export_automation"
+required-features = ["openapi"]
+
 [dependencies]
 base64 = { workspace = true }
 sha2 = { workspace = true }

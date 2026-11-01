@@ -254,9 +254,7 @@ pub(crate) fn resume(client: &EnumerayClient, state: &Path) -> Result<Value, Err
         start = end;
     }
     let frozen = client.freeze_collection(id)?;
-    if frozen["collection_id"] != id.to_string()
-        || frozen["manifest_sha256"] != saved.request.manifest_sha256
-    {
+    if frozen.collection_id != id || frozen.manifest_sha256 != saved.request.manifest_sha256 {
         return Err(invalid(
             "Collection freeze conflicts with the saved operation.",
         ));

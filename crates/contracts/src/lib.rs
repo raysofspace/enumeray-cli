@@ -1,6 +1,7 @@
 //! Shared wire contracts and pure validation for the API and connector.
 
 pub mod assignments;
+pub mod automation;
 pub mod collections;
 pub mod execution;
 pub mod logs;

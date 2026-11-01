@@ -1,0 +1,129 @@
+{
+  "files": {
+    "analysis/inputs.json": {
+      "value": 2
+    },
+    "initialized.json": {
+      "cancellation": null,
+      "collection": null,
+      "context_id": "context-one",
+      "directory": "/private/enumeray-example/analysis",
+      "disclosure": "Model and compute administrators can read submitted data.",
+      "execution_location": "Research compute",
+      "grant_id": null,
+      "input_collections": [],
+      "input_files": [],
+      "installation": null,
+      "installation_status": "published",
+      "model_id": "model",
+      "next_action": "Edit inputs.json as needed, review the destination/disclosure, then explicitly authorize execution with analysis submit DIR.",
+      "publication_delegation_id": null,
+      "publication_id": "release-one",
+      "purpose": "standard",
+      "receipt": null,
+      "run": null,
+      "run_id": null,
+      "schema_version": 1,
+      "stage": "editable"
+    },
+    "model.json": {
+      "access_mode": "open",
+      "can_manage": false,
+      "can_run": true,
+      "current_publication": {
+        "available": true,
+        "context_id": "context-one",
+        "definition": {
+          "contract_version": 1,
+          "dataset_identities": [],
+          "examples": [
+            {
+              "inputs": {
+                "value": 2
+              },
+              "name": "example"
+            }
+          ],
+          "input_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "type": "object"
+          },
+          "model_identity": "enumeray-test:scalar-double:1",
+          "output_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "doubled": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "doubled"
+            ],
+            "type": "object"
+          },
+          "runtime_identity": "enumeray-test:scalar-runtime:1",
+          "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+          "wrapper_protocol_version": 1
+        },
+        "disclosure": "Model and compute administrators can read submitted data.",
+        "execution_location": "Research compute",
+        "id": "release-one",
+        "installation_revoked_at": null,
+        "publication_id": "release-one",
+        "revoked_at": null,
+        "status": "published",
+        "submission_availability": {
+          "admission_open": true,
+          "execution_destination": {
+            "context_id": "context-one",
+            "disclosure": "Model and compute administrators can read submitted data.",
+            "execution_location": "Research compute"
+          },
+          "has_approved_execution_path": true,
+          "unavailable_reason": null
+        }
+      },
+      "current_publication_id": "release-one",
+      "description": "A reproducible scalar or file fixture.",
+      "generation": 1,
+      "model_id": "model",
+      "name": "Example model",
+      "owner_id": "22222222-2222-4222-8222-222222222222",
+      "visibility": "listed"
+    },
+    "reviewed-analysis.json": {
+      "cancellation": null,
+      "collection": null,
+      "context_id": "context-one",
+      "directory": "/private/enumeray-example/analysis",
+      "disclosure": "Model and compute administrators can read submitted data.",
+      "execution_location": "Research compute",
+      "grant_id": null,
+      "input_collections": [],
+      "input_files": [],
+      "installation": null,
+      "installation_status": "published",
+      "model_id": "model",
+      "next_action": "Edit inputs.json as needed, review the destination/disclosure, then explicitly authorize execution with analysis submit DIR.",
+      "publication_delegation_id": null,
+      "publication_id": "release-one",
+      "purpose": "standard",
+      "receipt": null,
+      "run": null,
+      "run_id": null,
+      "schema_version": 1,
+      "stage": "editable"
+    }
+  },
+  "schema_version": 1
+}

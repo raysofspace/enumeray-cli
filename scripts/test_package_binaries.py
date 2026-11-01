@@ -80,7 +80,7 @@ class UnifiedPackageTests(unittest.TestCase):
         api = root
         (api / 'scripts').mkdir(parents=True, exist_ok=True)
         (api / 'LICENSE').write_text('Apache License, Version 2.0\n')
-        for name in ('INSTALL.md', 'SETUP_GUIDE.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md'):
+        for name in ('INSTALL.md', 'SETUP_GUIDE.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md', 'CLI_AUTOMATION.md'):
             path = api / 'crates/cli' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Standalone guide\n')
@@ -92,6 +92,9 @@ class UnifiedPackageTests(unittest.TestCase):
         for example in ('scalar_model', 'collections'):
             (api / 'examples' / example).mkdir(parents=True, exist_ok=True)
             (api / 'examples' / example / 'test_fixture.py').write_text('import unittest\n')
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/http-contract',
+                        api / 'examples/http-contract', dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         (api / 'scripts/verify-example-bundle.py').write_text('Standalone verifier\n')
         target_directory = target_directory or api / 'target'
         binary = target_directory / 'test-target/release/enumeray'
@@ -132,6 +135,8 @@ class UnifiedPackageTests(unittest.TestCase):
                 for guide in ('LICENSE', 'THIRD_PARTY_NOTICES.json', 'INSTALL.md', 'CONNECTOR_GUIDE.md',
                               'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md', 'SETUP_GUIDE.md'):
                     self.assertTrue(tar.getmember(prefix + '/' + guide).isfile())
+                for name in ('raw-http.py', 'collection-identity.py', 'digest-vectors/vectors.json', 'files/nested/café.txt'):
+                    self.assertTrue(tar.getmember(prefix + '/examples/http-contract/' + name).isfile())
 
     def test_repeated_packaging_normalizes_mtimes_ownership_and_gzip_header(self):
         with tempfile.TemporaryDirectory() as temporary:

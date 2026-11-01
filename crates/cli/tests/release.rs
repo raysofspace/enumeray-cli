@@ -1,4 +1,5 @@
 //! Saved releases across real process/HTTP boundaries, including uncertain replies.
+mod automation_support;
 use enumeray_contracts::{
     execution::{InstallationIdentity, InstallationSpec},
     models::ScientificDefinition,
@@ -21,6 +22,153 @@ use std::{
 
 const USER: &str = "22222222-2222-4222-8222-222222222222";
 const GRANT: &str = "33333333-3333-4333-8333-333333333333";
+
+#[test]
+fn automation_release_transcripts_cover_prepared_ready_reviewed_and_blocked() {
+    use enumeray_contracts::automation::ReleaseSummary;
+    let root = tempfile::tempdir().unwrap();
+    let server = Server::new();
+    server.init(root.path());
+    let candidate = server.candidate(root.path());
+    let operation = serde_json::from_slice::<Value>(
+        &fs::read(root.path().join("release/release.json")).unwrap(),
+    )
+    .unwrap()["operation_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    for (name, args) in [
+        (
+            "release-prepared.json",
+            vec!["model", "release", "status", "release"],
+        ),
+        (
+            "release-ready.json",
+            vec!["model", "release", "resume", "release"],
+        ),
+        (
+            "release-reviewed.json",
+            vec!["model", "release", "review", "release"],
+        ),
+    ] {
+        let output = server
+            .command(root.path(), true)
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let transcript = automation_support::specimen(
+            root.path(),
+            &server.origin,
+            name,
+            Some("release-summary"),
+            &args,
+            &output,
+            &[
+                (&candidate, "pub-example-candidate"),
+                (&operation, "11111111-1111-4111-8111-111111111111"),
+            ],
+        );
+        serde_json::from_value::<ReleaseSummary>(transcript["stdout"].clone())
+            .unwrap()
+            .validate()
+            .unwrap();
+    }
+    {
+        let mut fixture = server.fixture.lock().unwrap();
+        fixture.publications.get_mut(&candidate).unwrap()["status"] = json!("failed");
+        fixture.publications.get_mut(&candidate).unwrap()["validation_message"] =
+            json!("Installed wrapper failed validation.");
+    }
+    let args = ["model", "release", "status", "release"];
+    let output = server
+        .command(root.path(), true)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let transcript = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "release-blocked.json",
+        Some("release-summary"),
+        &args,
+        &output,
+        &[
+            (&candidate, "pub-example-candidate"),
+            (&operation, "11111111-1111-4111-8111-111111111111"),
+        ],
+    );
+    let summary: ReleaseSummary = serde_json::from_value(transcript["stdout"].clone()).unwrap();
+    summary.validate().unwrap();
+    assert!(!summary.blockers.is_empty());
+    assert!(server.fixture.lock().unwrap().activations.is_empty());
+}
+
+#[test]
+fn release_source_modes_discover_personal_grants_only_when_registering_fresh_candidates() {
+    for mode in ["--file", "--rollback-from", "--candidate"] {
+        let root = tempfile::tempdir().unwrap();
+        let server = Server::new();
+        fs::write(root.path().join("candidate.json"), source().to_string()).unwrap();
+        let prior = "retained-candidate";
+        if mode != "--file" {
+            let mut publication = publication(&manifest(prior)["spec"]);
+            if mode == "--candidate" {
+                publication["release_authority"] = json!({"available":true,"unavailable_reason":null,"can_delegate":false,"grant_holder_user_id":USER,"publication_delegation_id":"77777777-7777-4777-8777-777777777777"});
+            }
+            server
+                .fixture
+                .lock()
+                .unwrap()
+                .publications
+                .insert(prior.into(), publication);
+        }
+        server.call(
+            root.path(),
+            &[
+                "model",
+                "release",
+                "init",
+                "example",
+                mode,
+                if mode == "--file" {
+                    "candidate.json"
+                } else {
+                    prior
+                },
+                "--directory",
+                "release",
+            ],
+            0,
+        );
+        assert!(
+            server
+                .fixture
+                .lock()
+                .unwrap()
+                .requests
+                .iter()
+                .all(|r| !r.contains("compute-grants")),
+            "initialization must not discover grants: {mode}"
+        );
+        server.call(root.path(), &["model", "release", "resume", "release"], 0);
+        let fixture = server.fixture.lock().unwrap();
+        assert_eq!(
+            fixture
+                .requests
+                .iter()
+                .any(|r| r.contains("compute-grants")),
+            mode != "--candidate",
+            "{mode}"
+        );
+        assert_eq!(fixture.registrations.is_empty(), mode == "--candidate");
+    }
+}
 
 fn source() -> Value {
     let mut value: Value =
@@ -50,7 +198,7 @@ fn publication(spec: &Value) -> Value {
         "disclosure":"Research administrators process scientific data.","generation":1,"admission_open":false,"admission_updated_at":null,"created_at":"2026-10-17T00:00:00Z","published_at":null,"validation_evidence":null,"configuration_retention":{"state":"retained","requested_at":null,"retired_at":null,"retirement_blocked":false,"blockers":{"queued_runs":0,"running_runs":0,"pending_delivery_assignments":0,"pending_log_archives":0,"pending_assignment_uploads":0}},
         "rollback_availability":{"available":true,"unavailable_reason":null,"requires_revalidation":true},
         "trial_availability":{"available":false,"unavailable_reason":"insufficient_scope"},
-        "trial_evidence":{"counts":{"succeeded":0},"latest_run":null,"latest_succeeded_run":null}})
+        "trial_evidence":{"counts":{"queued":0,"running":0,"succeeded":0,"failed":0,"cancelled":0},"latest_run":null,"latest_succeeded_run":null}})
 }
 
 fn decimal_spellings(value: &mut Value, exponential: bool) {
@@ -943,14 +1091,14 @@ fn trial_outcomes_and_missing_trial_scope_are_advisory_and_grants_are_paginated(
         server.fixture.lock().unwrap().paginated = true;
         server.ready(root.path());
         if let Some(state) = state {
+            let candidate = server.candidate(root.path());
             server
                 .fixture
                 .lock()
                 .unwrap()
                 .publications
-                .get_mut(&server.candidate(root.path()))
-                .unwrap()["trial_evidence"]["latest_run"] =
-                json!({"run_id":"trial-one","state":state});
+                .get_mut(&candidate)
+                .unwrap()["trial_evidence"]["latest_run"] = json!({"run_id":"44444444-4444-4444-8444-444444444444","publication_id":candidate,"purpose":"candidate_trial","state":state,"created_at":"2026-10-17T00:00:00Z"});
         }
         let reviewed = server.call(root.path(), &["model", "release", "review", "release"], 0);
         assert_eq!(
@@ -1007,7 +1155,7 @@ fn release_trial_guidance_pins_candidate_and_does_not_refresh_activation_review(
         .unwrap()
         .publications
         .get_mut(&candidate)
-        .unwrap()["trial_evidence"] = json!({"counts":{"failed":1,"cancelled":1,"succeeded":1},"latest_run":{"run_id":"later-trial","state":"failed"},"latest_succeeded_run":{"run_id":"success-trial","state":"succeeded"}});
+        .unwrap()["trial_evidence"] = json!({"counts":{"queued":0,"running":0,"failed":1,"cancelled":1,"succeeded":1},"latest_run":{"run_id":"44444444-4444-4444-8444-444444444444","publication_id":candidate,"purpose":"candidate_trial","state":"failed","created_at":"2026-10-17T00:02:00Z"},"latest_succeeded_run":{"run_id":"55555555-5555-4555-8555-555555555555","publication_id":candidate,"purpose":"candidate_trial","state":"succeeded","created_at":"2026-10-17T00:00:00Z"}});
     let later = server.call(root.path(), &["model", "release", "status", "release"], 0);
     assert_eq!(later["guard_changed"], false);
     assert_eq!(later["stage"], "reviewed");

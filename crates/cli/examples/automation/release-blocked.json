@@ -1,0 +1,189 @@
+{
+  "arguments": [
+    "model",
+    "release",
+    "status",
+    "release"
+  ],
+  "command": [
+    "enumeray",
+    "--json"
+  ],
+  "contract": "release-summary",
+  "exit_code": 0,
+  "schema_version": 1,
+  "stderr": "",
+  "stdout": {
+    "activation_receipt": null,
+    "activation_uncertain": false,
+    "blockers": [
+      "installation_validation_failed"
+    ],
+    "candidate_is_current": false,
+    "candidate_status": "failed",
+    "comparison": {
+      "candidate": {
+        "context_id": "context",
+        "definition": {
+          "contract_version": 1,
+          "dataset_identities": [],
+          "examples": [
+            {
+              "inputs": {
+                "value": 2
+              },
+              "name": "double-two",
+              "outputs": {
+                "doubled": 4
+              }
+            }
+          ],
+          "input_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "type": "object"
+          },
+          "model_identity": "enumeray-test:scalar-double:1",
+          "output_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "doubled": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "doubled"
+            ],
+            "type": "object"
+          },
+          "runtime_identity": "enumeray-test:scalar-runtime:1",
+          "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+          "wrapper_protocol_version": 1
+        },
+        "descriptor": {
+          "entrypoint": [
+            "run-model"
+          ],
+          "environment": {},
+          "installation": {
+            "dataset_identities": [],
+            "model_identity": "enumeray-test:scalar-double:1",
+            "runtime_identity": "enumeray-test:scalar-runtime:1",
+            "wrapper_identity": "enumeray-test:scalar-double-wrapper:1",
+            "wrapper_protocol_version": 1
+          },
+          "provider_binding_id": "installation-key",
+          "release_path": "/opt/enumeray/models/scalar-double/r1"
+        },
+        "disclosure": "Research administrators process scientific data.",
+        "execution_location": "Research compute",
+        "grant_id": "33333333-3333-4333-8333-333333333333",
+        "id": "pub-example-candidate",
+        "model_id": "example"
+      },
+      "current": null,
+      "observed_current": null
+    },
+    "current_publication_id": null,
+    "delegation_attempts": [],
+    "directory": "/private/enumeray-example/release",
+    "disclosure": "Research administrators process scientific data.",
+    "execution_location": "Research compute",
+    "expected_current_publication_id": null,
+    "guard_changed": false,
+    "model_generation": 1,
+    "model_id": "example",
+    "next_action": "Ask the connector owner to resolve the validation message, then resume. Changed science or installation settings require a fresh candidate.",
+    "next_command": "enumeray --profile default --config profiles.json --api https://enumeray.example.org/ --timeout 60 model release status /private/enumeray-example/release",
+    "operation_id": "11111111-1111-4111-8111-111111111111",
+    "publication_id": "pub-example-candidate",
+    "registration_uncertain": false,
+    "release_authority": null,
+    "rollback_source": {
+      "examples": [
+        {
+          "inputs": {
+            "value": 2
+          },
+          "name": "double-two",
+          "outputs": {
+            "doubled": 4
+          }
+        }
+      ],
+      "execution": {
+        "context_id": "context",
+        "entrypoint": [
+          "run-model"
+        ],
+        "environment": {},
+        "release_path": "/opt/enumeray/models/scalar-double/r1"
+      },
+      "identities": {
+        "model": "enumeray-test:scalar-double:1",
+        "runtime": "enumeray-test:scalar-runtime:1",
+        "wrapper": "enumeray-test:scalar-double-wrapper:1"
+      },
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "model": {
+        "description": "Doubles a finite scalar value.",
+        "id": "example",
+        "name": "Scalar double"
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "doubled": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "doubled"
+        ],
+        "type": "object"
+      },
+      "publication_version": 1
+    },
+    "schema_version": 1,
+    "stage": "blocked",
+    "trial_availability": {
+      "available": false,
+      "unavailable_reason": "insufficient_scope"
+    },
+    "trial_evidence": {
+      "counts": {
+        "cancelled": 0,
+        "failed": 0,
+        "queued": 0,
+        "running": 0,
+        "succeeded": 0
+      },
+      "latest_run": null,
+      "latest_succeeded_run": null
+    },
+    "trial_init_command": null,
+    "validation_message": "Installed wrapper failed validation."
+  }
+}

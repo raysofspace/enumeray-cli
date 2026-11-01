@@ -1,0 +1,16 @@
+{
+  "arguments": [
+    "analysis",
+    "collect",
+    "missing"
+  ],
+  "command": [
+    "enumeray",
+    "--json"
+  ],
+  "contract": "runtime-error",
+  "exit_code": 1,
+  "schema_version": 1,
+  "stderr": "{\"schema_version\":1,\"status\":null,\"error\":{\"code\":\"client_error\",\"message\":\"I/O failed: No such file or directory (os error 2)\"},\"retry_after\":null}\n",
+  "stdout": null
+}
