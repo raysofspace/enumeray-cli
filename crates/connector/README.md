@@ -219,6 +219,7 @@ failure before continuing. Both the context mode and host option are required;
 a managed context still rejects a same-user direct runner.
 
 ```sh
+PUBLICATION_ID='REPLACE_WITH_FULL_CANDIDATE_ID_FROM_RELEASE_STATUS'
 cat > inputs.json <<'JSON'
 {"value":21}
 JSON

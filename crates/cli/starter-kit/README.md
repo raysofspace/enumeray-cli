@@ -5,7 +5,7 @@ checkout, Rust toolchain, API credentials, database or Python package installati
 for local tests. Run from this directory:
 
 ```sh
-python3 -m unittest discover -s . -p 'test_starter.py'
+python3 -m unittest discover -s . -p 'test_*.py'
 ```
 
 Tests create fresh workspaces, stage fixture files, invoke `wrapper.py`, and compare
@@ -15,6 +15,14 @@ examples and fixtures in `publication.json`. The wrapper reads its model ID and 
 from that file and accepts the publication ID supplied in each request.
 Executable starters use `demo_solver.py`; replace its fixed argv and native-format
 mapping in `implementation.py` with your installed solver interface.
+
+Invalid envelopes, staged mappings and prior output evidence exit 2 before
+scientific work. Scientific failures publish a safe failed result and exit 1;
+success exits 0. Files and native adapters reserve `.model-workspace` exclusively
+before science. Keep that directory and partial outputs after interruption; run
+deliberately new work in a fresh workspace. This local fence and atomic,
+no-replacement publication preserve evidence; connector journals own execution
+recovery. A complete result may remain after a directory-sync error: preserve it.
 
 ## Install and register a candidate
 

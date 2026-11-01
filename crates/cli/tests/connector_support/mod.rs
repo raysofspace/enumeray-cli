@@ -154,6 +154,11 @@ pub fn install_scalar(scratch: &Scratch) {
         );
     fs::write(&wrapper, code).unwrap();
     fs::write(
+        scratch.0.join("protocol.py"),
+        include_bytes!("../../../../examples/scalar_model/protocol.py"),
+    )
+    .unwrap();
+    fs::write(
         scratch.0.join("model.py"),
         include_bytes!("../../../../examples/scalar_model/model.py"),
     )

@@ -6,7 +6,9 @@ from decimal import InvalidOperation
 from pathlib import Path
 import sys
 from implementation import evaluate
-from protocol import IDENTITIES, ModelError, exact_json, publish, read_json, read_request
+from protocol import (BoundaryError, IDENTITIES, ModelError, claim_workspace, exact_json,
+                      preflight_result, publish, read_json, read_request, staged_dataset,
+                      validate_storage)
 
 RELEASE = Path(__file__).resolve().parent
 
@@ -26,9 +28,21 @@ def main():
         print("Wrapper: invalid request or scientific declaration.", file=sys.stderr)
         return 2
     # Refuse prior evidence before scientific work, including native command launch.
-    result_path = Path(args.result).absolute()
-    if result_path.exists() or result_path.is_symlink():
-        print("Wrapper: preserve existing result evidence.", file=sys.stderr)
+    try:
+        result_path = preflight_result(args.result)
+        if result_path.name.lower() == ".model-workspace" or (mode == "files" and result_path.name.lower() == "processed.csv"):
+            raise BoundaryError("Result and declared output paths must be distinct.")
+        if mode == "json" and request["input_files"]:
+            raise BoundaryError("The scalar model declares no staged file mappings.")
+        if mode == "files":
+            staged_dataset(request, result_path.parent)
+            output = result_path.parent / "processed.csv"
+            if output.exists() or output.is_symlink():
+                raise BoundaryError("Preserve existing scientific outputs.")
+        if mode == "files" or (RELEASE / "demo_solver.py").exists():
+            claim_workspace(result_path.parent)
+    except (BoundaryError, OSError):
+        print("Wrapper: preserve workspace evidence; use a fresh workspace.", file=sys.stderr)
         return 2
     result = {"wrapper_protocol_version": 1, **{key: request[key] for key in IDENTITIES},
               "outcome": "succeeded", "outputs": {}, "files": {}, "failure": None}
@@ -37,6 +51,10 @@ def main():
         # Encoding/size failures are scientific failures, never partial results.
         if len((exact_json(result) + "\n").encode()) > 65536:
             raise ModelError("Result exceeds the wrapper byte limit.")
+        validate_storage(result)
+    except BoundaryError:
+        print("Wrapper: preserve output evidence; publication failed.", file=sys.stderr)
+        return 2
     except (ModelError, OSError, ValueError, InvalidOperation, OverflowError, csv.Error):
         result.update(outcome="failed", outputs={}, files={}, failure={
             "code": "model_failure", "message": "Model could not process its declared inputs or publish outputs."})

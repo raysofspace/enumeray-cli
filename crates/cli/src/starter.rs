@@ -158,6 +158,11 @@ pub(crate) fn init(
             false,
         ),
         (
+            "test_protocol.py",
+            include_str!("../starter-kit/test_protocol.py").into(),
+            false,
+        ),
+        (
             "README.md",
             include_str!("../starter-kit/README.md")
                 .replace("{{MODEL_ID}}", id)

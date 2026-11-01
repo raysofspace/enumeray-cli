@@ -89,6 +89,10 @@ class UnifiedPackageTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('Standalone guide\n')
         (api / 'crates/cli/examples').mkdir(exist_ok=True)
+        for example in ('scalar_model', 'collections'):
+            (api / 'examples' / example).mkdir(parents=True, exist_ok=True)
+            (api / 'examples' / example / 'test_fixture.py').write_text('import unittest\n')
+        (api / 'scripts/verify-example-bundle.py').write_text('Standalone verifier\n')
         target_directory = target_directory or api / 'target'
         binary = target_directory / 'test-target/release/enumeray'
         binary.parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +100,8 @@ class UnifiedPackageTests(unittest.TestCase):
         binary.chmod(0o755)
         metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}],
                                'target_directory': str(target_directory)})
-        with mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
+        with mock.patch.object(packaging.example_bundle, 'audit_starter'), \
+             mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
              mock.patch.object(packaging.subprocess, 'check_output', side_effect=[metadata, tree]), \
              mock.patch.object(packaging.artifacts, 'source_identity', return_value={
                  'repository': packaging.artifacts.REPOSITORY, 'revision': None, 'tree': None,

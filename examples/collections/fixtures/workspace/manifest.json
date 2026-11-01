@@ -1,0 +1,24 @@
+[
+  {
+    "path": "mesh/a.bin",
+    "media_type": "application/octet-stream",
+    "scientific_metadata": {
+      "step": 1
+    },
+    "size_bytes": 22,
+    "checksum_sha256": "VtYxldc2M3UoLWd0BBbN0E0AOM6u4aVRK7KfALk1n78=",
+    "artifact_id": "66666666-6666-4666-8666-666666666666",
+    "version_id": "fixture-object-version-1"
+  },
+  {
+    "path": "series/snapshot-002.bin",
+    "media_type": "application/octet-stream",
+    "scientific_metadata": {
+      "step": 2
+    },
+    "size_bytes": 28,
+    "checksum_sha256": "pc8Z5B17x4igH9hhPklh4DF0CMlK0mq4yHeGQFFZ6aE=",
+    "artifact_id": "77777777-7777-4777-8777-777777777777",
+    "version_id": "fixture-object-version-2"
+  }
+]
