@@ -118,7 +118,7 @@ The generated project runs without an API checkout:
 | `model.py` | Standalone scientific Python functions |
 | `implementation.py` | Scientific input/output mapping; executable projects call fixed native argv |
 | `wrapper.py`, `protocol.py` | Process entrypoint, bounded envelopes and durable result publication |
-| `fixtures/`, `test_starter.py` | Full request/result fixtures and tests in fresh workspaces |
+| `fixtures/`, `test_starter.py`, `test_protocol.py` | Full request/result fixtures, scientific checks and shared boundary tests in fresh workspaces |
 | `model.sbatch` | Slurm resources/runtime setup and foreground worker |
 
 A complete process publication is:
@@ -216,7 +216,7 @@ enumeray model init example --directory example
 enumeray model init csv-example --directory csv-example --io files
 enumeray model init solver-example --directory solver-example --kind executable --io files --driver slurm
 cd example
-python3 -m unittest discover -s . -p 'test_starter.py'
+python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
 The destination must be new and its parent must exist. Defaults are Python,
@@ -449,7 +449,7 @@ RELEASE_DIR=/opt/enumeray/models/example/r1
 mkdir "$RELEASE_DIR"
 cp -R . "$RELEASE_DIR/"
 chmod a+rx "$RELEASE_DIR/wrapper.py"
-python3 -m unittest discover -s "$RELEASE_DIR" -p 'test_starter.py'
+python3 -B -m unittest discover -s "$RELEASE_DIR" -p 'test_*.py'
 chmod -R a-w "$RELEASE_DIR"
 ```
 

@@ -5,7 +5,7 @@ checkout, Rust toolchain, API credentials, database or Python package installati
 for local tests. Run from this directory:
 
 ```sh
-python3 -m unittest discover -s . -p 'test_*.py'
+python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
 Tests create fresh workspaces, stage fixture files, invoke `wrapper.py`, and compare
