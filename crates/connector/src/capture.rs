@@ -756,6 +756,34 @@ mod tests {
         let (root, assignment, policy) = named_fixture();
         let source = LogSource::model("solver").unwrap();
         let path = root.join("workspace/logs/solver.log");
+        // Collection is nonblocking and may defer while another descriptor
+        // owns the source lock. Assert committed state after it converges.
+        let collect_until = |complete: bool, epoch: i64, end: u64| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                collect_named(&root, &assignment, &policy, complete).unwrap();
+                let captured = manifest(&source_directory(&root, source)).unwrap();
+                let ready = captured
+                    .as_ref()
+                    .is_some_and(|m| m.epoch == epoch && m.end == end && m.closed == complete);
+                let missing_closed = !complete
+                    || manifest(&source_directory(
+                        &root,
+                        LogSource::model("missing").unwrap(),
+                    ))
+                    .unwrap()
+                    .is_some_and(|m| m.closed);
+                if ready && missing_closed {
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "named capture did not reach epoch {epoch}, end {end}, closed={complete}: {}",
+                    serde_json::to_string(&captured).unwrap()
+                );
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        };
         collect_named(&root, &assignment, &policy, false).unwrap();
         assert!(
             manifest(&source_directory(&root, source))
@@ -763,7 +791,7 @@ mod tests {
                 .is_none()
         );
         fs::write(&path, b"first\0\xff").unwrap();
-        collect_named(&root, &assignment, &policy, false).unwrap();
+        collect_until(false, 1, 7);
         let before = manifest(&source_directory(&root, source)).unwrap().unwrap();
         assert_eq!(before.end, 7);
         // Uncommitted bytes after a simulated crash must never be delivered.
@@ -784,6 +812,12 @@ mod tests {
             .unwrap()
             .write_all(b" next")
             .unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(source_directory(&root, source).join("owner.lock"))
+            .unwrap();
+        held.lock().unwrap();
         collect_named(&root, &assignment, &policy, false).unwrap();
         let read_at = |epoch| {
             read(
@@ -797,16 +831,20 @@ mod tests {
             )
             .unwrap()
         };
+        assert_eq!(STANDARD.decode(read_at(1).data).unwrap(), b"first\0\xff");
+        drop(held);
+        collect_until(false, 1, 12);
         assert_eq!(
             STANDARD.decode(read_at(1).data).unwrap(),
             b"first\0\xff next"
         );
         fs::write(&path, b"tiny").unwrap();
-        collect_named(&root, &assignment, &policy, false).unwrap();
+        collect_until(false, 2, 4);
         assert_eq!(read_at(1).epoch, 2);
+        assert_eq!(STANDARD.decode(read_at(2).data).unwrap(), b"tiny");
         fs::write(root.join("workspace/logs/new"), b"replaced and longer").unwrap();
         fs::rename(root.join("workspace/logs/new"), &path).unwrap();
-        collect_named(&root, &assignment, &policy, true).unwrap();
+        collect_until(true, 3, 19);
         let final_read = read_at(2);
         assert_eq!(final_read.epoch, 3);
         assert!(final_read.closed);
