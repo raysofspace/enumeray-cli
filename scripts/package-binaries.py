@@ -7,78 +7,22 @@ The release workflow supplies the signature, after this script creates checksums
 import argparse
 import importlib.util
 import json
-import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import tempfile
-from urllib.parse import unquote
 
 _spec = importlib.util.spec_from_file_location('release_artifacts', Path(__file__).with_name('release_artifacts.py'))
 artifacts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(artifacts)
 
-
-def bundle_guide(source, destination, repository, guide_names, revision=None):
-    """Keep packaged guides navigable without their original checkout layout."""
-    prefix = "https://github.com/raysofspace/enumeray-cli/blob/main/"
-
-    def rewrite(match):
-        target, separator, fragment = match[1].partition("#")
-        if target.startswith(prefix):
-            resolved = repository / unquote(target[len(prefix):])
-        elif re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", target) or target.startswith(("/", "#")) or not target:
-            return match[0]
-        else:
-            resolved = source.parent / unquote(target)
-        resolved = resolved.resolve()
-        if resolved in guide_names:
-            url = guide_names[resolved]
-        else:
-            try:
-                url = prefix.replace('/main/', '/' + revision + '/') if revision else prefix
-                url += resolved.relative_to(repository.resolve()).as_posix()
-            except ValueError:
-                raise SystemExit(f"Guide link escapes the source repository: {source}: {target}")
-        return "](" + url + (separator + fragment if separator else "") + ")"
-
-    destination.write_text(re.sub(r"\]\(([^\s)]+)\)", rewrite, source.read_text()))
-
-
-def copy_examples(root, destination, revision=None):
-    """Release archives exclude even ignored local files from the example tree."""
-    relative = Path('crates/cli/examples')
-    if revision is None:
-        shutil.copytree(root / relative, destination)
-        return
-    destination.mkdir()
-    files = subprocess.check_output(['git', 'ls-tree', '-rz', '--name-only', revision, '--', relative.as_posix()], cwd=root)
-    for entry in files.split(b'\0'):
-        if not entry:
-            continue
-        source = root / entry.decode('utf-8')
-        if source.is_symlink() or not source.is_file():
-            raise ValueError('Release examples must contain tracked regular files')
-        target = destination / source.relative_to(root / relative)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-
-
-def bundle_example_guides(root, destination, guide_names, revision=None):
-    """Keep links relative to each relocated example, including top-level guides."""
-    sources = root / 'crates/cli/examples'
-    bundled = {**guide_names, (root / 'LICENSE').resolve(): 'LICENSE',
-               sources.resolve(): 'examples'}
-    for path in destination.rglob('*'):
-        relative = path.relative_to(destination)
-        bundled[(sources / relative).resolve()] = (Path('examples') / relative).as_posix()
-    for target in destination.rglob('*.md'):
-        source = sources / target.relative_to(destination)
-        relative_names = {name: Path(os.path.relpath(destination.parent / output, target.parent)).as_posix()
-                          for name, output in bundled.items()}
-        bundle_guide(source, target, root, relative_names, revision=revision)
-    return bundled
+_bundle_spec = importlib.util.spec_from_file_location('example_bundle', Path(__file__).with_name('example_bundle.py'))
+example_bundle = importlib.util.module_from_spec(_bundle_spec)
+_bundle_spec.loader.exec_module(example_bundle)
+bundle_guide = example_bundle.bundle_guide
+copy_examples = example_bundle.copy_examples
+bundle_example_guides = example_bundle.bundle_example_guides
 
 
 def assert_source_unchanged(root, revision, original):
@@ -146,33 +90,7 @@ def main():
         (contents / binary).chmod(0o755)
         shutil.copy2(root / "LICENSE", contents / "LICENSE")
         artifacts.write_json(contents / 'THIRD_PARTY_NOTICES.json', notices)
-        guide_names = {
-            (root / "crates/cli/INSTALL.md").resolve(): "INSTALL.md",
-            (root / "crates/cli/SETUP_GUIDE.md").resolve(): "SETUP_GUIDE.md",
-            (root / "crates/cli/AUTHOR_GUIDE.md").resolve(): "AUTHOR_GUIDE.md",
-            (root / "crates/cli/ANALYSIS_GUIDE.md").resolve(): "ANALYSIS_GUIDE.md",
-            (root / "crates/connector/README.md").resolve(): "CONNECTOR_GUIDE.md",
-            (root / "crates/connector/EXTENDING.md").resolve(): "EXTENDING.md",
-        }
-        copy_examples(root, contents / 'examples', source_identity['revision'] if args.release else None)
-        bundled_names = bundle_example_guides(root, contents / 'examples', guide_names,
-                                             revision=source_identity['revision'])
-        for source, name in guide_names.items():
-            if name not in ("AUTHOR_GUIDE.md", "ANALYSIS_GUIDE.md"):
-                bundle_guide(source, contents / name, root, bundled_names, revision=source_identity['revision'])
-        shutil.copy2(root / "crates" / "cli" / "AUTHOR_GUIDE.md", contents / "AUTHOR_GUIDE.md")
-        shutil.copy2(root / "crates" / "cli" / "ANALYSIS_GUIDE.md", contents / "ANALYSIS_GUIDE.md")
-        # Release jobs package native binaries. Generate complete projects
-        # through the embedded assets so archive examples cannot drift.
-        starters = contents / "starter-kit"
-        starters.mkdir()
-        for kind in ("python", "executable"):
-            for io in ("json", "files"):
-                subprocess.run([
-                    str(contents / binary), "model", "init", f"starter-{kind}-{io}",
-                    "--directory", str(starters / f"{kind}-{io}"),
-                    "--kind", kind, "--io", io, "--driver", "slurm",
-                ], check=True, stdout=subprocess.DEVNULL)
+        example_bundle.assemble_examples(root, contents, contents / binary, source_identity, version, release=args.release)
         protocol = {
             "package": package, "binary": binary, "version": version,
             "target": args.target, "api": "v1", "connector_protocol": 1,

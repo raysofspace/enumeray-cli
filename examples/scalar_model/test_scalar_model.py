@@ -72,7 +72,7 @@ class WrapperTests(unittest.TestCase):
         return json.loads(self.result_path.read_text(), parse_int=Decimal, parse_float=Decimal)
 
     def test_external_wrapper_copied_independently_echoes_identity_and_exact_value(self):
-        for filename in ("model.py", "wrapper.py"):
+        for filename in ("model.py", "wrapper.py", "protocol.py"):
             shutil.copyfile(PACKAGE / filename, self.directory / filename)
         raw = json.dumps(REQUEST).replace('"value": 2', '"value": 9007199254740993.123456789')
         completed = self.run_wrapper(raw, self.directory / "wrapper.py")
@@ -148,12 +148,31 @@ class WrapperTests(unittest.TestCase):
         self.assertEqual(self.result_path.read_text(), "existing durable evidence")
         self.assertEqual(list(self.directory.glob(".scalar-result-*")), [])
 
+    def test_expanded_result_budget_publishes_explicit_scientific_failure(self):
+        raw = json.dumps(REQUEST).replace('"value": 2', '"value": 1e65525')
+        completed = self.run_wrapper(raw)
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        result = self.read_result()
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["failure"]["code"], "scalar_overflow")
+        self.assertEqual(result["outputs"], {})
+
     def test_failed_file_sync_does_not_publish_partial_output(self):
         with mock.patch.object(wrapper.os, "fsync", side_effect=OSError("private-sentinel")):
-            with self.assertRaisesRegex(wrapper.WrapperError, "could not be durably published"):
+            with self.assertRaisesRegex(wrapper.WrapperError, "durably publish"):
                 wrapper.publish_result(self.result_path, {"example": Decimal("1.2")})
         self.assertFalse(self.result_path.exists())
         self.assertEqual(list(self.directory.glob(".scalar-result-*")), [])
+
+    def test_existing_result_rejects_before_scientific_calculation(self):
+        self.request_path.write_text(json.dumps(REQUEST))
+        self.result_path.write_bytes(b"retained evidence")
+        with mock.patch.object(wrapper, "double") as science:
+            code = wrapper.main(["execute", "--request", str(self.request_path),
+                                 "--result", str(self.result_path)])
+        self.assertEqual(code, 2)
+        science.assert_not_called()
+        self.assertEqual(self.result_path.read_bytes(), b"retained evidence")
 
     def test_help_does_not_require_request_files(self):
         completed = subprocess.run(

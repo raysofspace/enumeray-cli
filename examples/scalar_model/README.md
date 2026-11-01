@@ -1,6 +1,7 @@
 # External scalar reference model
 
-This directory is a separately installable Python 3 standard-library model and
+This `scalar-double` fixture belongs to `enumeray-model-examples-v1`.
+This directory is a separately installable Python 3.9+ standard-library model and
 wrapper. Copy the directory to an approved local installation; no Python package
 installation, Rust build, API access, credentials, or connector journal is needed.
 The model is a protocol demonstration, not a scientific reference result.
@@ -10,11 +11,11 @@ the decimal coefficient without rounding to binary floating point or the active
 decimal context. Run it independently from this directory:
 
 ```sh
-python3 model.py 2
-python3 model.py 9007199254740993.123456789
+python3 -B model.py 2
+python3 -B model.py 9007199254740993.123456789
 ```
 
-`wrapper.py` owns the protocol-1 request/result envelope, identity validation,
+`wrapper.py` and the local `protocol.py` own the protocol-1 request/result envelope, identity validation,
 model-specific input mapping, failure mapping, and atomic result publication.
 It invokes the model in the wrapper process. The connector launches this wrapper
 as an external process and owns scheduling, local logs, and recovery.
@@ -34,7 +35,7 @@ result path. On macOS or Linux, from this directory:
 
 ```sh
 result_dir=$(mktemp -d)
-python3 wrapper.py execute --request request.json --result "$result_dir/result.json"
+python3 -B wrapper.py execute --request request.json --result "$result_dir/result.json"
 cat "$result_dir/result.json"
 ```
 
@@ -60,8 +61,8 @@ management, then validated by the enrolled connector. Changes to model or wrappe
 behavior require a new immutable release and publication. The context and
 publication select execution paths; submitted inputs never select commands.
 
-Run the standard-library tests from the public repository root:
+Run the standalone standard-library tests from this directory:
 
 ```sh
-python3 -m unittest discover -s examples/scalar_model -p 'test_*.py'
+python3 -B -m unittest discover -s . -p 'test_*.py'
 ```

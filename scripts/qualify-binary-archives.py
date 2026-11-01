@@ -131,6 +131,9 @@ def main():
     subprocess.run([str(binary), "--json", "model", "validate", "--file",
                     str(contents / "examples" / "scalar-publication.json")],
                    cwd=fresh, env=environment, check=True, stdout=subprocess.DEVNULL)
+    result['example_conformance'] = json.loads(subprocess.check_output(
+        [sys.executable, '-B', str(contents / 'verify-examples.py'), '--root', str(contents)],
+        cwd=fresh, env=environment, text=True))
     if not (contents / "AUTHOR_GUIDE.md").is_file():
         raise SystemExit("CLI archive lacks the author guide")
     for kind in ("python", "executable"):
@@ -146,7 +149,7 @@ def main():
             if (bundled / "ANALYSIS_GUIDE.md").read_bytes() != (contents / "ANALYSIS_GUIDE.md").read_bytes():
                 raise SystemExit("Bundled analysis guides differ")
             subprocess.run([sys.executable, "-B", "-m", "unittest", "discover",
-                            "-s", ".", "-p", "test_starter.py"],
+                            "-s", ".", "-p", "test_*.py"],
                            cwd=bundled, env={**environment, "PYTHONDONTWRITEBYTECODE": "1"}, check=True)
             for driver in ("process", "slurm"):
                 project = fresh / f"{kind}-{io}-{driver}"
@@ -162,7 +165,7 @@ def main():
                 subprocess.run([str(binary), "model", "validate", "--file", str(project / "publication.json")],
                                cwd=fresh, env=environment, check=True, stdout=subprocess.DEVNULL)
                 subprocess.run([sys.executable, "-B", "-m", "unittest", "discover",
-                                "-s", ".", "-p", "test_starter.py"], cwd=project,
+                                "-s", ".", "-p", "test_*.py"], cwd=project,
                                env={**environment, "PYTHONDONTWRITEBYTECODE": "1"}, check=True)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)

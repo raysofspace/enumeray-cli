@@ -106,7 +106,7 @@ fn every_starter_is_offline_and_uses_one_editable_publication_source() {
                         "-s",
                         ".",
                         "-p",
-                        "test_starter.py",
+                        "test_*.py",
                     ])
                     .current_dir(&project)
                     .env("PYTHONDONTWRITEBYTECODE", "1")

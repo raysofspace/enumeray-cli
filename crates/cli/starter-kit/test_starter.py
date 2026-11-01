@@ -85,7 +85,10 @@ class StarterTests(unittest.TestCase):
         self.assertEqual(self.result()["outcome"], "succeeded")
 
     def test_scientific_failure_is_safe_and_explicit(self):
-        self.request["inputs"] = {"unexpected": "private-sentinel"}
+        if FILES:
+            (self.root / "inputs/dataset.csv").write_text("private-sentinel")
+        else:
+            self.request["inputs"] = {"unexpected": "private-sentinel"}
         done = self.execute()
         self.assertEqual(done.returncode, 1)
         result = self.result()
@@ -93,6 +96,17 @@ class StarterTests(unittest.TestCase):
         self.assertEqual(result["outputs"], {})
         self.assertEqual(result["files"], {})
         self.assertNotIn("private-sentinel", done.stderr + (self.root / "result.json").read_text())
+
+    def test_expanded_result_budget_is_a_safe_scientific_failure(self):
+        if FILES:
+            return  # file contents are not embedded in the scalar result envelope
+        self.request["inputs"] = {"value": "NUMBER"}
+        done = self.execute(json.dumps(self.request).replace('"NUMBER"', '1e65525'))
+        self.assertEqual(done.returncode, 1, done.stderr)
+        result = self.result()
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["outputs"], {})
+        self.assertEqual(result["failure"]["code"], "model_failure")
 
     def test_preserve_prior_result_and_declared_output(self):
         (self.root / "result.json").write_bytes(b"retained")
@@ -102,7 +116,7 @@ class StarterTests(unittest.TestCase):
         if FILES:
             (self.root / "result.json").unlink()
             (self.root / "processed.csv").write_bytes(b"retained-file")
-            self.assertEqual(self.execute().returncode, 1)
+            self.assertEqual(self.execute().returncode, 2)
             self.assertEqual((self.root / "processed.csv").read_bytes(), b"retained-file")
 
     @unittest.skipUnless(FILES, "file starter only")
@@ -110,19 +124,18 @@ class StarterTests(unittest.TestCase):
         staged = self.request["input_files"]["dataset"]
         for path in ("../escape.csv", str(self.root / "inputs/dataset.csv"), "inputs/missing.csv"):
             staged["path"] = path
-            self.assertEqual(self.execute().returncode, 1)
-            (self.root / "result.json").unlink()
+            self.assertEqual(self.execute().returncode, 2)
+            self.assertFalse((self.root / ".model-workspace").exists())
         staged["path"] = "inputs/dataset.csv"
         staged["artifact_id"] = "66666666-6666-4666-8666-666666666666"
-        self.assertEqual(self.execute().returncode, 1)
-        (self.root / "result.json").unlink()
+        self.assertEqual(self.execute().returncode, 2)
         staged["artifact_id"] = self.request["inputs"]["dataset"]["artifact_id"]
         with tempfile.TemporaryDirectory() as outside:
             escape = Path(outside) / "secret.csv"
             escape.write_text("index,value\n0,3\n")
             (self.root / "inputs/link.csv").symlink_to(escape)
             staged["path"] = "inputs/link.csv"
-            self.assertEqual(self.execute().returncode, 1)
+            self.assertEqual(self.execute().returncode, 2)
         self.assertFalse((self.root / "processed.csv").exists())
 
     def test_sync_failure_never_publishes_partial_result(self):
@@ -132,6 +145,49 @@ class StarterTests(unittest.TestCase):
                 protocol.publish(destination, b"complete")
         self.assertFalse(destination.exists())
         self.assertEqual(list(self.root.glob(".model-result-*")), [])
+
+    def test_competing_wrappers_preserve_one_consistent_execution_result(self):
+        path = self.root / "request.json"
+        path.write_text(json.dumps(self.request))
+        command = [sys.executable, "-B", str(RELEASE / "wrapper.py"), "execute",
+                   "--request", str(path), "--result", str(self.root / "result.json")]
+        workers = [subprocess.Popen(command, cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                   for _ in range(2)]
+        for worker in workers:
+            worker.communicate(timeout=10)
+        self.assertEqual(sorted(worker.returncode for worker in workers), [0, 2])
+        self.assertEqual(self.result()["outcome"], "succeeded")
+        if FILES:
+            self.assertEqual((self.root / "processed.csv").read_bytes(),
+                             (RELEASE / "fixtures/expected.csv").read_bytes())
+
+    def test_retained_claim_prevents_file_or_native_science(self):
+        if not FILES and not (RELEASE / "demo_solver.py").exists():
+            return  # pure scalar science creates no workspace files
+        protocol.claim_workspace(self.root)
+        self.assertEqual(self.execute().returncode, 2)
+        self.assertFalse((self.root / "processed.csv").exists())
+        self.assertFalse((self.root / "result.json").exists())
+
+    def test_result_aliases_and_undeclared_mapping_reject_before_science(self):
+        path = self.root / "request.json"
+        if not FILES:
+            self.request["input_files"] = {"unexpected": {"artifact_id": "private-sentinel"}}
+            self.assertEqual(self.execute().returncode, 2)
+            self.assertFalse((self.root / ".model-workspace").exists())
+            self.request["input_files"] = {}
+        path.write_text(json.dumps(self.request))
+        aliases = [".model-workspace", ".MODEL-WORKSPACE"]
+        if FILES:
+            aliases.extend(["processed.csv", "PROCESSED.CSV"])
+        for name in aliases:
+            done = subprocess.run([sys.executable, "-B", str(RELEASE / "wrapper.py"), "execute",
+                                   "--request", str(path), "--result", str(self.root / name)],
+                                  cwd=self.root, capture_output=True, timeout=10)
+            self.assertEqual(done.returncode, 2, done.stderr)
+            self.assertFalse((self.root / name).exists())
+            self.assertFalse((self.root / "processed.csv").exists())
+            self.assertFalse((self.root / ".model-workspace").exists())
 
     def test_existing_executable_failure(self):
         if not (RELEASE / "demo_solver.py").exists():

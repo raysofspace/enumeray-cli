@@ -1,4 +1,54 @@
-# Analysis examples
+# Model examples: offline tests and installed analyses
+
+## Start from the complete bundle
+
+The versioned model-examples archive contains this `examples/` directory, complete
+standalone scalar and collection projects, four generated `starter-kit/` projects,
+the workflow guides, `verify-examples.py` and `examples-manifest.json`. Its manifest
+records the source revision, working-tree status and exact file hashes; the
+archive has a separate SHA-256 checksum. Verify that checksum before extracting.
+Run these commands from the extracted root with Python 3.9+:
+
+```sh
+python3 verify-examples.py --root .
+```
+
+The verifier checks the acquired bytes and runs all six projects' tests in fresh
+disposable copies. It requires no network, credentials, API, source checkout or
+Rust tools. Tests and fixtures are inside each project; for example:
+
+```sh
+cd examples/collections
+python3 -B -m unittest discover -s . -p 'test_*.py'
+```
+
+A matching installed CLI is needed only for CLI commands below and for creating
+new starter projects. Downloading an individual file does not acquire its sibling
+modules, fixtures or tests; choose the complete bundle for the offline path.
+
+## Fixture identity and file map
+
+| Project / purpose | Model identity and entrypoint | Inputs and expected interpretation |
+| --- | --- | --- |
+| `examples/scalar_model/` standalone reference | `scalar-double`; `wrapper.py execute` | `request.json`, value 2; `doubled: 4` |
+| Package scalar publication below | `scalar-double`; installed `run-model` | `examples/scalar-inputs.json`, value 21; `doubled: 42` |
+| `starter-kit/python-json/` | `starter-python-json`; `wrapper.py execute` | `fixtures/request.json`, value 2; `doubled: 4` |
+| `starter-kit/executable-json/` | `starter-executable-json`; fixed demo solver through `wrapper.py` | Same scalar contract and answer |
+| `starter-kit/python-files/` | `starter-python-files`; `wrapper.py execute` | Two-row `fixtures/dataset.csv`; `sample_count: 2`, doubled CSV |
+| `starter-kit/executable-files/` | `starter-executable-files`; fixed demo solver through `wrapper.py` | Same file contract and answer |
+| `examples/collections/` | `collection-example`; `wrapper.py execute` | Empty or two nested members copied byte-for-byte; `member_count: 0` or `2` |
+| Author tutorial generated locally | `example` / `csv-example` / `solver-example` | Separate `model init` projects; use their own publication and fixtures |
+| Single-user connector tutorial | `development-double` | Separate installed development fixture; value 21 gives 42 |
+
+The extracted directory is a local source root, not an installed model release.
+The collection declaration's `/opt/models/collection-example` is an installation
+placeholder. A generated starter leaves its deployment context/path unset. Model
+IDs, publication IDs, entrypoints, roots and request identities must match their
+own project's declaration; do not mix files across these rows. Scientific failure
+is an explicit result independent of a transport or protocol rejection. Toy
+answers demonstrate mapping and evidence handling, not scientific validation.
+
+## Continue with an installed offering
 
 These package examples consume already-installed model offerings. Select the
 actual context, immutable release path and compute grant before registration;
@@ -83,8 +133,8 @@ them. Status, logs, cancellation and collection use the folder after acceptance.
 
 ## Collection example
 
-The [collection publication](https://github.com/raysofspace/enumeray-cli/blob/main/examples/collections/publication.json)
-and [Python wrapper](https://github.com/raysofspace/enumeray-cli/blob/main/examples/collections/wrapper.py)
+The [collection publication](../../../examples/collections/publication.json)
+and [Python wrapper](../../../examples/collections/wrapper.py)
 describe `collection-example`, with input `dataset` and output `snapshots`.
 Install and publish that model through the author workflow, then follow the
 [complete two-member setup](../ANALYSIS_GUIDE.md#bind-local-collections): it creates

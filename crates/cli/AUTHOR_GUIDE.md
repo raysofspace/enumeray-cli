@@ -1,12 +1,16 @@
 # Model author guide
 
-This guide also appears in the [web documentation](https://doc.enumeray.com/),
-alongside contracts, reference and troubleshooting. The site is previewed locally.
-The included [analysis guide](ANALYSIS_GUIDE.md) covers the shared execution,
+Use this guide as the complete author walkthrough; the
+[web documentation](https://doc.enumeray.com/authors/overview/) also offers focused
+task pages, contracts and troubleshooting. The included
+[analysis guide](ANALYSIS_GUIDE.md) covers the shared execution,
 recovery, copied-folder and noninteractive JSON workflow.
 
 The independently distributed `enumeray` CLI creates editable Python 3.9+ projects
 with one editable publication declaration without an API checkout or credentials.
+The [complete model examples download](https://doc.enumeray.com/reference/manifests/#run-the-model-examples-offline)
+also supplies ready-to-run projects: Python 3.9+ is sufficient for their local tests,
+before installing a CLI or obtaining publication access.
 Examples demonstrate contracts; replace their scientific calculation and assert
 results appropriate to your model before publishing.
 
@@ -18,6 +22,67 @@ actual service response values. Replace the example API origin, context IDs and
 release paths with values supplied by your site. New release/analysis operations
 need new directories, and independent upload/download operations need new
 destinations; retain the original directories and state for exact retries.
+
+## Run the downloaded model examples offline
+
+Download the [archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
+and its [SHA-256 file](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
+into a new directory, keeping those filenames. Python 3.9+ and `tar` are required
+for these commands; no API, credentials or source checkout is needed:
+
+```sh
+python3 - <<'PY'
+from hashlib import sha256
+from pathlib import Path
+archive = Path("model-examples.tar.gz")
+expected = Path("model-examples.tar.gz.sha256").read_text().split()[0]
+if sha256(archive.read_bytes()).hexdigest() != expected:
+    raise SystemExit("Archive checksum mismatch")
+PY
+tar -xzf model-examples.tar.gz
+cd enumeray-examples-*
+python3 verify-examples.py --root .
+```
+
+The versioned root contains `examples-manifest.json`, which records the package
+version, exact public source revision and file hashes. Verification checks those
+bytes and runs fresh copies of all supplied projects. From an already extracted
+package root, only the last command is needed. To edit one Python scalar starter:
+
+```sh
+cd starter-kit/python-json
+python3 -B -m unittest discover -s . -p 'test_*.py'
+```
+
+The **model examples** family has the following intentional identity/file map:
+
+| Project from the extracted root | Model and fixture |
+| --- | --- |
+| `starter-kit/python-json/` | `starter-python-json`, named example `starter-example`; `fixtures/request.json` has `value: 2`, expected `doubled: 4` |
+| `starter-kit/python-files/` | `starter-python-files`, named example `starter-example`; CSV fixture rows `0,1` and `1,2` become `0,2` and `1,4`, with `sample_count: 2` |
+| `starter-kit/executable-json/`, `starter-kit/executable-files/` | `starter-executable-json` / `starter-executable-files`; same corresponding fixtures, with a fixed `demo_solver.py` command |
+| `examples/scalar_model/` | `scalar-double`; local `request.json` uses `value: 2`, expected `doubled: 4`; run `wrapper.py execute` with `protocol.py` and `model.py` alongside it |
+| `examples/collections/` | `collection-example`; `fixtures/request.json` and `fixtures/workspace/` copy two nested members into `snapshots/`, with `member_count: 2`; empty sets are valid |
+| `examples/scalar-publication.json`, `examples/slurm-scalar-publication.json` | Installed `scalar-double` / named example `double-two`; the separate `scalar-inputs.json` uses `value: 21`, expected `doubled: 42`; these declarations require a matching installed `run-model` entrypoint |
+
+This guide generates `example` and `csv-example` instead of the bundled starter
+IDs. The connector's single-user journey separately generates `development-double`
+under `models/development-double-r1/`. Choose one project and keep its model ID,
+publication and request fixtures together; do not combine fixtures by filename.
+The scalar tutorial uses `/opt/enumeray/models/example/r1`, the installed scalar
+templates use `/opt/enumeray/models/scalar-double/r1`, and the collection declaration
+uses `/opt/models/collection-example`. These are example installed roots to agree
+with a site, separate from the extracted project and per-run workspace. Bundled
+starter declarations leave site context/root unset until that agreement.
+
+The individual declarations describe already installed offerings; they do not
+install code. A `run-model` entrypoint must invoke an implementation matching its
+declaration; it is not the filename of the supplied Python wrapper. Start with a
+complete starter when you need a ready local project. The
+[file/download chooser](https://doc.enumeray.com/reference/manifests/#choose-the-file-for-your-command)
+distinguishes author declarations, scientific inputs, wrapper envelopes and
+collection manifests. EUHFORIA examples are illustrative integration layouts
+requiring real scientific mapping, rather than runnable solver projects.
 
 ## Responsibilities and execution choices
 
@@ -53,7 +118,7 @@ The generated project runs without an API checkout:
 | `model.py` | Standalone scientific Python functions |
 | `implementation.py` | Scientific input/output mapping; executable projects call fixed native argv |
 | `wrapper.py`, `protocol.py` | Process entrypoint, bounded envelopes and durable result publication |
-| `fixtures/`, `test_starter.py` | Full request/result fixtures and tests in fresh workspaces |
+| `fixtures/`, `test_starter.py`, `test_protocol.py` | Full request/result fixtures, scientific checks and shared boundary tests in fresh workspaces |
 | `model.sbatch` | Slurm resources/runtime setup and foreground worker |
 
 A complete process publication is:
@@ -151,7 +216,7 @@ enumeray model init example --directory example
 enumeray model init csv-example --directory csv-example --io files
 enumeray model init solver-example --directory solver-example --kind executable --io files --driver slurm
 cd example
-python3 -m unittest discover -s . -p 'test_starter.py'
+python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
 The destination must be new and its parent must exist. Defaults are Python,
@@ -384,7 +449,7 @@ RELEASE_DIR=/opt/enumeray/models/example/r1
 mkdir "$RELEASE_DIR"
 cp -R . "$RELEASE_DIR/"
 chmod a+rx "$RELEASE_DIR/wrapper.py"
-python3 -m unittest discover -s "$RELEASE_DIR" -p 'test_starter.py'
+python3 -B -m unittest discover -s "$RELEASE_DIR" -p 'test_*.py'
 chmod -R a-w "$RELEASE_DIR"
 ```
 
@@ -467,6 +532,7 @@ Use the full Candidate ID displayed by `model release status release-r1` as
 exercise the exact ready candidate in a separate analysis directory:
 
 ```sh
+PUBLICATION_ID='REPLACE_WITH_FULL_CANDIDATE_ID_FROM_RELEASE_STATUS'
 cat > trial-inputs.json <<'JSON'
 {"value":2}
 JSON
@@ -859,15 +925,39 @@ The sidecar is an array of objects with `path`, `media_type` and optional
 integrity. Keep member arrays out of wrapper envelopes. Manifests are capped at
 16 MiB and transported in pages of at most 64 KiB.
 
-The runnable [collection wrapper](https://github.com/raysofspace/enumeray-cli/blob/main/examples/collections/wrapper.py)
-and its [publication declaration](https://github.com/raysofspace/enumeray-cli/blob/main/examples/collections/publication.json) demonstrate this boundary. Run
-`python3 -m unittest discover -s examples/collections -p 'test_*.py'` from the
-repository root. Immutable collections retain membership after individual bytes
-become unavailable; inspect current availability before reuse.
+The [complete model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
+contains the collection wrapper, protocol helper, publication, full request/result
+fixtures and executable tests together. From its extracted root, run
+`python3 -B -m unittest discover -s examples/collections -p 'test_*.py'`.
+For a manual run from that root, stage the supplied input tree in a fresh workspace:
+
+```sh
+COLLECTION_DIR="$(pwd)/examples/collections"
+WORK_DIR="$(mktemp -d)"
+cp -R "$COLLECTION_DIR/fixtures/workspace/." "$WORK_DIR/"
+python3 -B "$COLLECTION_DIR/wrapper.py" execute \
+  --request "$COLLECTION_DIR/fixtures/request.json" \
+  --result "$WORK_DIR/result.json"
+cmp "$WORK_DIR/inputs/mesh/a.bin" "$WORK_DIR/snapshots/mesh/a.bin"
+cmp "$WORK_DIR/inputs/series/snapshot-002.bin" "$WORK_DIR/snapshots/series/snapshot-002.bin"
+python3 -m json.tool "$WORK_DIR/result.json"
+```
+
+Expect `outcome: succeeded`, `member_count: 2` and byte-identical members.
+The output sidecar is `snapshots-members.json`; output paths are relative to
+`snapshots/`. The tests also cover an empty set, malformed identities/mappings,
+existing evidence, safe scientific failure and interrupted/competing publication.
+Rejecting invalid requests or existing evidence must leave previous files and
+scientific side effects unchanged. Local wrapper success does not establish
+service acceptance or scientific suitability. Immutable collections retain
+membership after individual bytes become unavailable; inspect current availability
+before reuse.
 
 For collection inputs in an analysis directory, see the included
 [analysis guide](ANALYSIS_GUIDE.md#bind-local-collections). For protocol examples,
-see the [collection wrapper](https://github.com/raysofspace/enumeray-cli/blob/main/examples/collections/wrapper.py).
+use the complete archive above; an individual
+[wrapper download](https://doc.enumeray.com/examples/collection-wrapper.py) also
+requires its protocol helper and matching fixtures.
 
 ## Maintainer verification mapping
 
