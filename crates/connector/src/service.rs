@@ -17,52 +17,60 @@ use std::{
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Recovery {
+    /// Require external stopped-owner confirmation after an unclosed journal session.
     Manual,
+    /// Use local liveness evidence only on a single unshared, uncloned local installation.
     ExclusiveLocal,
 }
 
 #[derive(Args)]
 pub struct Options {
+    /// Private durable journal directory; reuse after restart and never clone an active journal.
     #[arg(long)]
     journal: PathBuf,
     /// Connector-owned capture/archive policy, pinned before launch.
     #[arg(long)]
     log_policy_file: Option<PathBuf>,
+    /// API origin bound to the enrolled identity; non-loopback HTTP requires --allow-insecure-http.
     #[arg(long)]
     api_base_url: String,
+    /// Enrolled connector ID; must match the token and retained journal.
     #[arg(long)]
     connector_id: String,
+    /// Private regular file containing only the long-lived connector bearer token from enrollment.
     #[arg(long)]
     token_file: PathBuf,
     /// Private credential-reference map; never sent to Enumeray.
     #[arg(long)]
     credentials_file: Option<PathBuf>,
-    /// Bound assignments reserving compute capacity; Slurm queue entries count too.
+    /// Maximum assignments reserving compute capacity (1-64); queued Slurm allocations count too.
     #[arg(long,default_value_t=1,value_parser=clap::value_parser!(u32).range(1..=64))]
     max_workers: u32,
-    /// Bound simultaneous bulk I/O subprocesses independently of compute work.
+    /// Maximum simultaneous bulk I/O subprocesses (1-64), independent of compute capacity.
     #[arg(long,default_value_t=2,value_parser=clap::value_parser!(u32).range(1..=64))]
     max_transfer_workers: u32,
-    /// Persistent budget for scientific input/output transfer copies.
+    /// Persistent scientific input/output-copy budget in bytes; default 1 TiB, reserved until confirmed cleanup.
     #[arg(long,default_value_t=1099511627776_u64,value_parser=clap::value_parser!(u64).range(1..))]
     max_spool_bytes: u64,
-    /// Bound all retained unfinished assignments, including unpublished outputs.
+    /// Maximum retained unfinished assignments (1-64), including unpublished outputs; must be at least --max-workers.
     #[arg(long,default_value_t=64,value_parser=clap::value_parser!(u32).range(1..=64))]
     max_pending_assignments: u32,
-    /// Optional retention deadline for unpublished finalized outputs; omission retains indefinitely.
+    /// Retention deadline in seconds for unpublished finalized outputs (1-315360000); omit to retain indefinitely.
     #[arg(long,value_parser=clap::value_parser!(u64).range(1..=315360000))]
     unpublished_retention_seconds: Option<u64>,
+    /// Service polling interval in seconds (1-300); heartbeat and transfer work remain independent.
     #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(u64).range(1..=300))]
     poll_interval_seconds: u64,
+    /// Shutdown grace period in seconds (1-3600); unfinished work remains in the journal for recovery.
     #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=3600))]
     shutdown_timeout_seconds: u64,
-    /// Cadence for bounded, low-priority completed payload cleanup.
+    /// Cadence in seconds for bounded, low-priority completed payload cleanup (1-3600).
     #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=3600))]
     cleanup_interval_seconds: u64,
-    /// Optional debugging grace after safe completion; zero cleans immediately.
+    /// Debugging grace in seconds after safe completion; zero adds no delay before eligible cleanup.
     #[arg(long, default_value_t = 0)]
     completed_retention_seconds: u64,
-    /// Only for one installation on an unshared, uncloned local volume.
+    /// Journal ownership recovery policy; manual requires external stopped-owner confirmation.
     #[arg(long, value_enum, default_value = "manual")]
     recovery_mode: Recovery,
     /// Confirm an unclosed manual-recovery session's previous owner stopped everywhere.

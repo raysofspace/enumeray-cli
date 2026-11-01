@@ -59,14 +59,17 @@ pub fn host_configuration_plan(
 pub enum HostCommand {
     /// Start the connector using its saved host configuration, without a user profile.
     Start {
+        /// Private connector-host.json generated and reviewed during host setup.
         #[arg(long)]
         configuration: PathBuf,
+        /// Run in this terminal until stopped; choose exactly one of --foreground or --background.
         #[arg(
             long,
             required_unless_present = "background",
             conflicts_with = "background"
         )]
         foreground: bool,
+        /// Start the explicitly configured native service; alternative to --foreground.
         #[arg(long)]
         background: bool,
         /// Explicit manual journal recovery assertion; never inferred from a stale heartbeat.
@@ -75,6 +78,7 @@ pub enum HostCommand {
     },
     /// Inspect local journal and native service evidence; performs no probes or repairs.
     Status {
+        /// Private connector-host.json for the local installation to inspect.
         #[arg(long)]
         configuration: PathBuf,
     },
@@ -83,6 +87,7 @@ pub enum HostCommand {
     Configuration(ConfigurationCommand),
     /// Check host prerequisites locally, without profiles or model publications.
     Preflight {
+        /// Generated host-plan.json to check without applying or repairing it.
         #[arg(long)]
         plan: PathBuf,
         /// Explicit consent for trusted same-user process/direct checks.
@@ -93,20 +98,25 @@ pub enum HostCommand {
     Enroll(EnrollOptions),
     /// Continuously claim and execute assignments over HTTP.
     Run(RunOptions),
-    /// Create a journal bound to one connector and a loopback HTTP API.
+    /// Create a one-shot journal bound to one connector and an HTTPS or loopback HTTP API.
     Init {
+        /// New private durable journal directory; never clone an active connector's journal.
         #[arg(long)]
         journal: PathBuf,
+        /// API origin using HTTPS or loopback HTTP; retained identity stays bound to this origin.
         #[arg(long)]
         api_base_url: String,
+        /// Stable connector ID matching the enrollment credential and intended journal.
         #[arg(long)]
         connector_id: String,
     },
     /// Register a process session, send a heartbeat, and prepare at most one assignment.
     /// Read the bearer token from stdin unless --token-file is supplied.
     ClaimOnce {
+        /// Existing private durable journal directory; reuse the same path after interruption.
         #[arg(long)]
         journal: PathBuf,
+        /// Private regular file containing the connector bearer token; omit to read token text from stdin.
         #[arg(long)]
         token_file: Option<PathBuf>,
         /// Private credential-reference map used while compiling API configuration.
@@ -118,8 +128,10 @@ pub enum HostCommand {
     },
     /// Retrieve existing work and reconcile ownership without claiming or launching work.
     Reconcile {
+        /// Existing private durable journal directory containing the original execution evidence.
         #[arg(long)]
         journal: PathBuf,
+        /// Private regular file containing the connector bearer token; omit to read token text from stdin.
         #[arg(long)]
         token_file: Option<PathBuf>,
         /// Assert that the previous process has stopped, including on other hosts.
@@ -128,12 +140,16 @@ pub enum HostCommand {
     },
     /// Execute or resume one prepared assignment, retaining durable backend evidence.
     ExecuteOnce {
+        /// Connector-owned log capture/archive policy JSON; omit for the bounded default policy.
         #[arg(long)]
         log_policy_file: Option<PathBuf>,
+        /// Existing private durable journal containing the prepared assignment; retain for recovery.
         #[arg(long)]
         journal: PathBuf,
+        /// Private regular file containing the connector bearer token; omit to read token text from stdin.
         #[arg(long)]
         token_file: Option<PathBuf>,
+        /// Assert that the journal's previous process stopped on every host before recovery.
         #[arg(long)]
         confirm_prior_process_stopped: bool,
         /// Exercise recovery after a backend commit whose acknowledgement is lost.
@@ -148,20 +164,25 @@ pub enum HostCommand {
     },
     /// Publish retained terminal log archives without executing scientific work.
     PublishLogArchives {
+        /// Existing private durable journal retaining the terminal archive and delivery evidence.
         #[arg(long)]
         journal: PathBuf,
+        /// Private regular file containing the connector bearer token; omit to read token text from stdin.
         #[arg(long)]
         token_file: Option<PathBuf>,
+        /// Assert that the journal's previous process stopped on every host before recovery.
         #[arg(long)]
         confirm_prior_process_stopped: bool,
     },
     /// Reclaim confirmed, delivered run payloads; preserve evidence and launch fences.
     Cleanup {
+        /// Existing private durable journal; dry-run inspection may run while its service owns it.
         #[arg(long)]
         journal: PathBuf,
         /// Inspect eligibility and payload usage without changing durable state.
         #[arg(long)]
         dry_run: bool,
+        /// Maximum archived assignments reported or unfinished cleanup items attempted (1-64).
         #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u32).range(1..=64))]
         limit: u32,
         /// Keep safely completed payloads for this optional debugging grace period.
@@ -170,6 +191,7 @@ pub enum HostCommand {
     },
     /// Show journal identities and prepared assignment IDs, without inputs or secrets.
     Inspect {
+        /// Existing private durable journal to inspect without taking its process lock.
         #[arg(long)]
         journal: PathBuf,
     },
@@ -179,8 +201,10 @@ pub enum HostCommand {
 pub enum ConfigurationCommand {
     /// Render a version-1 host setup specification into a new private directory.
     Generate {
+        /// Version-1 host setup specification JSON containing reviewed site paths and identities.
         #[arg(long)]
         file: PathBuf,
+        /// New private output directory for the plan, runtime configuration and host instructions.
         #[arg(long)]
         directory: PathBuf,
     },
@@ -200,8 +224,10 @@ pub enum RuntimeCommand {
     },
     /// Credential-free runner on an SSH host or Slurm submission host.
     ComputeRunner {
+        /// Version-1 runner operation; read its protocol JSON from stdin and emit the result as JSON.
         #[arg(value_parser = ["identity", "preflight", "prepare", "start", "status", "request-cancel", "validate", "protect-installations", "write-input", "write-collection", "read-collection", "transfer-probe", "read-output", "allocation-status", "read-logs", "build-log-archive", "read-log-archive", "cleanup-log-archive", "cleanup-run"])]
         action: String,
+        /// Action-specific approved directory: a retained job directory or the execution work root.
         #[arg(long)]
         directory: PathBuf,
     },
