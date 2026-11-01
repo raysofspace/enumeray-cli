@@ -1,0 +1,38 @@
+{
+  "arguments": [
+    "analysis",
+    "status",
+    "analysis"
+  ],
+  "command": [
+    "enumeray",
+    "--json"
+  ],
+  "contract": "analysis-summary",
+  "exit_code": 0,
+  "schema_version": 1,
+  "stderr": "",
+  "stdout": {
+    "cancellation": null,
+    "collection": null,
+    "context_id": "context-one",
+    "directory": "/private/enumeray-example/analysis",
+    "disclosure": "Model and compute administrators can read submitted data.",
+    "execution_location": "Research compute",
+    "grant_id": null,
+    "input_collections": [],
+    "input_files": [],
+    "installation": null,
+    "installation_status": "published",
+    "model_id": "model",
+    "next_action": "Repeat analysis submit DIR to reconcile the exact saved submission.",
+    "publication_delegation_id": null,
+    "publication_id": "release-one",
+    "purpose": "standard",
+    "receipt": null,
+    "run": null,
+    "run_id": null,
+    "schema_version": 1,
+    "stage": "submission_uncertain"
+  }
+}

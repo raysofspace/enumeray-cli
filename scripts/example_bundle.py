@@ -13,12 +13,15 @@ GUIDES = {
     "crates/cli/SETUP_GUIDE.md": "SETUP_GUIDE.md",
     "crates/cli/AUTHOR_GUIDE.md": "AUTHOR_GUIDE.md",
     "crates/cli/ANALYSIS_GUIDE.md": "ANALYSIS_GUIDE.md",
+    "crates/cli/CLI_AUTOMATION.md": "CLI_AUTOMATION.md",
     "crates/connector/README.md": "CONNECTOR_GUIDE.md",
     "crates/connector/EXTENDING.md": "EXTENDING.md",
 }
 PROJECTS = ("examples/scalar_model", "examples/collections",
             "starter-kit/python-json", "starter-kit/python-files",
-            "starter-kit/executable-json", "starter-kit/executable-files")
+            "starter-kit/executable-json", "starter-kit/executable-files",
+            "examples/http-contract")
+STANDALONE_PROJECTS = ("examples/scalar_model", "examples/collections", "examples/http-contract")
 
 def bundle_guide(source, destination, repository, guide_names, revision=None):
     """Keep packaged guides navigable without their original checkout layout."""
@@ -136,28 +139,34 @@ def assemble_examples(root, destination, binary, source, version, release=False)
     copy_examples(root, destination / 'examples', source['revision'] if release else None)
     bundled_names = bundle_example_guides(root, destination / 'examples', guide_names,
                                          revision=source['revision'])
-    for relative in ('examples/scalar_model', 'examples/collections'):
+    for relative in STANDALONE_PROJECTS:
         source_directory = root / relative
         if not source_directory.is_dir():
             raise ValueError('Missing standalone example: ' + relative)
         copy_project(source_directory, destination / relative,
                      source['revision'] if release else None, root=root)
-        for path in source_directory.rglob('*'):
-            if path.is_file() and '__pycache__' not in path.parts and path.suffix != '.pyc':
-                bundled_names[path.resolve()] = (Path(relative) / path.relative_to(source_directory)).as_posix()
+        copied_directory = destination / relative
+        # Map only the acquired inventory. Release assembly can exclude tracked-
+        # revision omissions and ignored local files that still exist in source.
+        bundled_names[source_directory.resolve()] = relative
+        for path in copied_directory.rglob('*'):
+            source_path = source_directory / path.relative_to(copied_directory)
+            bundled_names[source_path.resolve()] = path.relative_to(destination).as_posix()
     support = root / 'examples/local-scalar-model.json'
     if support.is_file():
         shutil.copy2(support, destination / 'examples/local-scalar-model.json')
         bundled_names[support.resolve()] = 'examples/local-scalar-model.json'
-    for relative in ('examples/scalar_model', 'examples/collections'):
+    for relative in STANDALONE_PROJECTS:
         for target in (destination / relative).rglob('*.md'):
             source_file = root / relative / target.relative_to(destination / relative)
             names = {name: Path(os.path.relpath(destination / output, target.parent)).as_posix()
                      for name, output in bundled_names.items()}
             bundle_guide(source_file, target, root, names, revision=source['revision'])
     # Revisit package Markdown now that standalone sibling projects are mapped.
-    for target in (destination / 'examples').glob('*.md'):
-        source_file = root / 'crates/cli/examples' / target.name
+    for target in (destination / 'examples').rglob('*.md'):
+        if any(target.is_relative_to(destination / project) for project in STANDALONE_PROJECTS):
+            continue
+        source_file = root / 'crates/cli/examples' / target.relative_to(destination / 'examples')
         names = {name: Path(os.path.relpath(destination / output, target.parent)).as_posix()
                  for name, output in bundled_names.items()}
         bundle_guide(source_file, target, root, names, revision=source['revision'])

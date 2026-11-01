@@ -9,6 +9,7 @@ use crate::{
 };
 use enumeray_client::{EnumerayClient, Error, observation::ObservationClient, resource_path};
 use enumeray_contracts::{
+    automation::{ReleaseComparison, ReleaseSummary, SchemaVersion},
     execution::InstallationDescriptor,
     management::{
         AvailableGrant, Collection, ManagedModel, PublicationActivation,
@@ -253,7 +254,7 @@ fn init(
         grant: None,
         grant_checked: false,
     };
-    Ok(summary(&directory, &release, &progress, &snapshot))
+    summary(&directory, &release, &progress, &snapshot)
 }
 
 fn required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, Error> {
@@ -742,7 +743,7 @@ fn summary(
     release: &Release,
     progress: &Progress,
     snapshot: &Snapshot,
-) -> Value {
+) -> Result<Value, Error> {
     let p = snapshot.publication.as_ref();
     let reasons = blockers(release, snapshot);
     let current = current_id(&snapshot.model).expect("validated guard");
@@ -774,18 +775,33 @@ fn summary(
     let baseline = reviewed
         .map(|r| r.current.clone())
         .unwrap_or_else(|| release.initial_current["current_publication"].clone());
-    json!({"directory":directory.root,"operation_id":release.operation_id,"model_id":release.model_id,"publication_id":release.candidate.id,
-        "stage":stage,"candidate_status":p.map(|p| &p["status"]),"blockers":reasons,"validation_message":p.map(|p| &p["validation_message"]),
-        "model_generation":snapshot.model["generation"],"release_authority":p.map(|p|&p["release_authority"]),"delegation_attempts":progress.delegation_attempts,"current_publication_id":current,"expected_current_publication_id":reviewed.map(|r| &r.expected_current),"guard_changed":guard_changed,
-        "candidate_is_current":snapshot.model["current_publication_id"] == release.candidate.id,"activation_receipt":progress.activation_attempts.last().and_then(|a| a.response.as_ref()),
-        "activation_uncertain":progress.activation_attempts.last().is_some_and(|a| a.response.is_none()) && !progress.observed_current,
-        "registration_uncertain":progress.registration_started && progress.registered_identity.is_none(),
-        "comparison":{"current":baseline,"candidate":p.map(identity).unwrap_or_else(|| json!({"id":release.candidate.id,"context_id":release.candidate.context_id,"definition":release.candidate.definition,"descriptor":release.candidate.descriptor})),"observed_current":snapshot.model["current_publication"]},
-        "execution_location":p.map(|p| &p["execution_location"]),"disclosure":p.map(|p| &p["disclosure"]),
-        "trial_availability":p.map(|p| &p["trial_availability"]),"trial_evidence":p.map(|p| &p["trial_evidence"]),
-        "trial_init_command":p.filter(|p| p["trial_availability"]["available"] == true).map(|_| json!(["analysis","init",release.model_id,"--candidate",release.candidate.id,"--inputs","INPUTS.json","--directory","NEW_TRIAL_DIR"])),
-        "rollback_source":release.source.get("publication"),"next_command":["model","release",next,directory.root.to_string_lossy()],
-        "next_action":if activated { "Inspect current availability; accepted work retains its original publication." } else if !reasons.is_empty() { blocked_action(&reasons) } else if next == "review" { "Review trial evidence and scientific checks, then save the activation comparison." } else if next == "activate" { "Activate explicitly after reviewing the saved comparison and disclosure." } else { "Resume this exact saved candidate; readiness never activates it." }})
+    let field = |name: &str| p.and_then(|p| p.get(name)).cloned().unwrap_or(Value::Null);
+    let summary = ReleaseSummary {
+        schema_version: SchemaVersion, directory: directory.root.to_string_lossy().into_owned(), operation_id: release.operation_id,
+        model_id: release.model_id.clone(), publication_id: release.candidate.id.clone(),
+        stage: serde_json::from_value(json!(stage))?, candidate_status: serde_json::from_value(field("status"))?,
+        validation_message: serde_json::from_value(field("validation_message"))?,
+        model_generation: snapshot.model["generation"].as_i64().ok_or_else(|| invalid("Service omitted model generation."))?,
+        release_authority: serde_json::from_value(field("release_authority"))?,
+        delegation_attempts: progress.delegation_attempts.iter().map(|attempt| Ok(enumeray_contracts::automation::ReleaseDelegationAttempt {
+            id: attempt.id, user_id: attempt.user_id, expected_generation: attempt.expected_generation,
+            response: attempt.response.clone().map(serde_json::from_value).transpose()?,
+        })).collect::<Result<_, Error>>()?,
+        current_publication_id: current, expected_current_publication_id: reviewed.and_then(|r| r.expected_current.clone()), guard_changed,
+        candidate_is_current: snapshot.model["current_publication_id"] == release.candidate.id,
+        activation_receipt: progress.activation_attempts.last().and_then(|a| a.response.clone()).map(serde_json::from_value).transpose()?,
+        activation_uncertain: progress.activation_attempts.last().is_some_and(|a| a.response.is_none()) && !progress.observed_current,
+        registration_uncertain: progress.registration_started && progress.registered_identity.is_none(),
+        comparison: ReleaseComparison {current:baseline,candidate:p.map(identity).unwrap_or_else(|| json!({"id":release.candidate.id,"context_id":release.candidate.context_id,"definition":release.candidate.definition,"descriptor":release.candidate.descriptor})),observed_current:snapshot.model["current_publication"].clone()},
+        execution_location: serde_json::from_value(field("execution_location"))?, disclosure: serde_json::from_value(field("disclosure"))?,
+        trial_availability: serde_json::from_value(field("trial_availability"))?, trial_evidence: serde_json::from_value(field("trial_evidence"))?,
+        trial_init_command: p.filter(|p| p["trial_availability"]["available"] == true).map(|_| format!("enumeray analysis init {} --candidate {} --inputs INPUTS.json --directory NEW_TRIAL_DIR", release.model_id, release.candidate.id)),
+        rollback_source: release.source.get("publication").cloned(), next_command: format!("enumeray model release {next} {}",directory.root.display()),
+        next_action: if activated { "Inspect current availability; accepted work retains its original publication." } else if !reasons.is_empty() { blocked_action(&reasons) } else if next == "review" { "Review trial evidence and scientific checks, then save the activation comparison." } else if next == "activate" { "Activate explicitly after reviewing the saved comparison and disclosure." } else { "Resume this exact saved candidate; readiness never activates it." }.into(),
+        blockers: reasons,
+    };
+    summary.validate().map_err(invalid)?;
+    Ok(serde_json::to_value(summary)?)
 }
 
 fn blocked_action(reasons: &[String]) -> &'static str {
@@ -826,7 +842,7 @@ fn complete(
     snapshot: &Snapshot,
     exit: u8,
 ) -> Result<Completion, Failure> {
-    let mut value = summary(directory, release, progress, snapshot);
+    let mut value = summary(directory, release, progress, snapshot)?;
     next_invocation(args, &mut value);
     Ok(Completion {
         value: Some(value),
@@ -835,14 +851,34 @@ fn complete(
 }
 
 fn next_invocation(args: &Args, value: &mut Value) {
-    for key in ["next_command", "trial_init_command"] {
-        if let Some(words) = value[key].as_array() {
-            let words = words
-                .iter()
-                .map(|v| v.as_str().expect("command word").to_owned())
-                .collect::<Vec<_>>();
-            value[key] = json!(crate::output::invocation(args, &words));
-        }
+    let next = match value["stage"].as_str() {
+        Some("activated" | "blocked") => "status",
+        Some("ready") => "review",
+        Some("reviewed") => "activate",
+        _ => "resume",
+    };
+    let words = [
+        "model",
+        "release",
+        next,
+        value["directory"].as_str().expect("directory"),
+    ]
+    .map(str::to_owned);
+    value["next_command"] = json!(crate::output::invocation(args, &words));
+    if value["trial_init_command"].is_string() {
+        let words = [
+            "analysis",
+            "init",
+            value["model_id"].as_str().expect("model"),
+            "--candidate",
+            value["publication_id"].as_str().expect("publication"),
+            "--inputs",
+            "INPUTS.json",
+            "--directory",
+            "NEW_TRIAL_DIR",
+        ]
+        .map(str::to_owned);
+        value["trial_init_command"] = json!(crate::output::invocation(args, &words));
     }
 }
 

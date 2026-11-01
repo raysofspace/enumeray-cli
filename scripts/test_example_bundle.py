@@ -38,6 +38,10 @@ class ExampleBundleTests(unittest.TestCase):
             (project / 'test_fixture.py').write_text(
                 'import unittest\nimport value\nclass Fixture(unittest.TestCase):\n'
                 ' def test_local_import(self):\n  self.assertEqual(value.ANSWER, 42)\n')
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/http-contract',
+                        root / 'examples/http-contract', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        (root / 'examples/http-contract/README.md').write_text(
+            '[workflow](HTTP_WORKFLOWS.md)\n[inputs](digest-vectors/)\n[automation](../../crates/cli/CLI_AUTOMATION.md)\n')
         (root / 'LICENSE').write_text('License\n')
         (root / 'scripts').mkdir()
         shutil.copyfile(Path(__file__).with_name('verify-example-bundle.py'), root / 'scripts/verify-example-bundle.py')
@@ -70,6 +74,29 @@ class ExampleBundleTests(unittest.TestCase):
             self.assertEqual(verifier.verify_examples(destination)['file_count'], len(manifest['files']))
             self.assertFalse(any(destination.rglob('__pycache__')))
             self.assertIn('[guide](../AUTHOR_GUIDE.md)', (destination / 'examples/README.md').read_text())
+            self.assertIn('examples/http-contract', manifest['projects'])
+            for name in ('raw-http.py', 'collection-identity.py', 'digest-vectors/vectors.json', 'files/nested/café.txt'):
+                self.assertIn('examples/http-contract/' + name, manifest['files'])
+            readme = (destination / 'examples/http-contract/README.md').read_text()
+            self.assertIn('[workflow](HTTP_WORKFLOWS.md)', readme)
+            self.assertIn('[inputs](digest-vectors)', readme)
+            self.assertIn('[automation](../../CLI_AUTOMATION.md)', readme)
+
+    def test_http_vectors_run_offline_and_reject_a_stale_digest_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            root.mkdir()
+            destination = Path(temporary) / 'bundle'
+            manifest = self.assemble(root, destination)
+            # Keep the inventory internally consistent so qualification must
+            # catch the scientific-identity mismatch by executing the vectors.
+            relative = 'examples/http-contract/digest-vectors/mixed-requested.bytes.json'
+            (destination / relative).write_bytes(b'[]')
+            manifest['files'][relative] = hashlib.sha256(b'[]').hexdigest()
+            (destination / 'examples-manifest.json').write_text(json.dumps(manifest))
+            shutil.rmtree(root)
+            with self.assertRaises(subprocess.CalledProcessError):
+                verifier.verify_examples(destination)
 
     def test_same_version_stale_embedded_protocol_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

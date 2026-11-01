@@ -1,0 +1,4 @@
+[
+{"checksum_sha256":"ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=","size_bytes":3,"scientific_metadata":{"unit":"K","sampling":[1,1.0,1e0,1E+00,-0,-0.0,90071992547409921234567890.123456789],"nested":{"z":null,"a":true}},"media_type":"text/csv","path":"a.csv"},
+{"path":"nested/café.txt","media_type":"text/plain","scientific_metadata":{"\ud800\udc00":"non-BMP key","\ue000":"BMP key","text":"雪\t\n\u0001\"\\/","empty":{},"null":null},"size_bytes":0,"checksum_sha256":"47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="}
+]

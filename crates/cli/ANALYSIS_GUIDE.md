@@ -200,6 +200,11 @@ Use analysis directories for execution submission and the normal local lifecycle
 
 ## Script with structured output
 
+The [CLI JSON contract](https://doc.enumeray.com/reference/cli-json/) supplies complete matching transcripts,
+schemas and the four-file review specimen for this recipe. Check `schema_version`
+and required decision fields before acting; an unsupported or incomplete response
+must stop an automation while preserving the current analysis directory.
+
 Use global `--json` for compact machine-readable responses. Runtime error objects, progress and recovery hints go to stderr. Argument parsing errors remain plain text on stderr with exit 2. `--timeout` bounds an individual HTTP operation; `analysis wait --deadline` bounds observation and does not limit scientific runtime. A native command's redirected human output is still human output unless `--json` is present.
 
 This complete scalar-starter recipe needs `jq`, an authenticated profile and access to the activated `example` model. Run initialization once in a private working directory:

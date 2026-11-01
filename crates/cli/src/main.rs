@@ -18,7 +18,7 @@ mod transfers;
 use args::Args;
 use clap::{CommandFactory, Parser, Subcommand};
 use enumeray_client::Error;
-use serde_json::json;
+use enumeray_contracts::automation::{CliErrorDetail, CliRuntimeError, SchemaVersion};
 use std::io::Write;
 
 fn main() -> std::process::ExitCode {
@@ -86,25 +86,63 @@ fn main() -> std::process::ExitCode {
         Err(failure) => {
             let error = failure.error;
             if args.json {
-                let value = match &error {
+                let (status, code, message, request_id, details, retry_after) = match &error {
                     Error::Api {
                         status,
                         failure,
                         retry_after,
-                    } => json!({"status":status,"error":failure,"retry_after":retry_after}),
-                    Error::Session { code, message } => {
-                        json!({"error":{"code":code.as_str(),"message":message}})
-                    }
+                    } => (
+                        Some(*status),
+                        failure.code.clone(),
+                        failure.message.clone(),
+                        Some(failure.request_id.clone()),
+                        failure.details.clone(),
+                        retry_after.clone(),
+                    ),
+                    Error::Session { code, message } => (
+                        None,
+                        code.as_str().into(),
+                        message.clone(),
+                        None,
+                        None,
+                        None,
+                    ),
                     Error::OAuth {
                         status,
                         kind,
                         retry_after,
-                    } => {
-                        json!({"status":status,"error":{"code":kind.as_str(),"message":error.to_string()},"retry_after":retry_after})
-                    }
-                    _ => json!({"error":{"code":"client_error","message":error.to_string()}}),
+                    } => (
+                        Some(*status),
+                        kind.as_str().into(),
+                        error.to_string(),
+                        None,
+                        None,
+                        retry_after.clone(),
+                    ),
+                    _ => (
+                        None,
+                        "client_error".into(),
+                        error.to_string(),
+                        None,
+                        None,
+                        None,
+                    ),
                 };
-                eprintln!("{value}");
+                let value = CliRuntimeError {
+                    schema_version: SchemaVersion,
+                    status,
+                    error: CliErrorDetail {
+                        code,
+                        message,
+                        request_id,
+                        details,
+                    },
+                    retry_after,
+                };
+                eprintln!(
+                    "{}",
+                    serde_json::to_string(&value).expect("runtime error JSON")
+                );
             } else {
                 eprintln!("enumeray: {}", output::safe_text(&error.to_string(), true));
                 if let Some(hint) = output::error_hint(&args, &error) {

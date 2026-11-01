@@ -1,11 +1,13 @@
 //! Self-service management requests and responses shared by the API and standalone CLI.
 mod responses;
+mod tokens;
 use crate::{
     execution::{ExecutionContextDefinition, InstallationSpec},
     models::{ModelMetadata, ScientificDefinition},
 };
 pub use responses::*;
 use serde::{Deserialize, Serialize};
+pub use tokens::*;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -465,6 +467,26 @@ pub struct InvitationCreate {
     pub recipient_id: Option<Uuid>,
     pub recipient_email: Option<String>,
 }
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for InvitationCreate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{OneOf, Schema};
+        let schema: OneOf = serde_json::from_value(serde_json::json!({
+            "description":"Exactly one non-null recipient is required; email invitations bind to an identity-provider-verified email.",
+            "oneOf":[
+                {"type":"object","additionalProperties":false,"required":["recipient_id"],"properties":{
+                    "recipient_id":{"type":"string","format":"uuid"},"recipient_email":{"type":"null"}}},
+                {"type":"object","additionalProperties":false,"required":["recipient_email"],"properties":{
+                    "recipient_email":{"type":"string","format":"email","maxLength":320},"recipient_id":{"type":"null"}}}
+            ]
+        })).expect("exclusive invitation recipient schema");
+        Schema::OneOf(schema).into()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for InvitationCreate {}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

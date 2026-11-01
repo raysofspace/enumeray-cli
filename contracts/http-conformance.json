@@ -1,0 +1,670 @@
+{
+  "version": 1,
+  "limits": {
+    "token_page_default": 50,
+    "token_page_maximum": 100,
+    "multipart_threshold_bytes": 67108864,
+    "single_put_maximum_bytes": 5368709120,
+    "artifact_structural_maximum_bytes": 53687091200000,
+    "file_admission_default_bytes": 107374182400,
+    "run_direction_default_bytes": 1099511627776,
+    "owner_outstanding_default_bytes": 1099511627776,
+    "destination_outstanding_default_bytes": 10995116277760,
+    "archive_structural_maximum_bytes": 536870912,
+    "archive_compressed_default_bytes": 52428800,
+    "request_body_default_bytes": 1048576,
+    "request_body_maximum_bytes": 16777216,
+    "run_json_part_maximum_bytes": 1048576,
+    "run_input_json_maximum_bytes": 65536,
+    "run_attachment_maximum_count": 8
+  },
+  "operations": [
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}",
+      "purpose": "Inspect accepted inputs, immutable requirements and current run state.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/logs",
+      "purpose": "Read retained log batches in arrival order.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/events",
+      "purpose": "Read retained observations and diagnostics.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/provenance",
+      "purpose": "Inspect a consistent versioned snapshot of recorded run evidence.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/provenance/content",
+      "purpose": "Download the same recorded provenance as a JSON attachment.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/artifacts",
+      "purpose": "List scientific output artifacts; input artifacts and log archives are separate.",
+      "scopes": [
+        "artifacts:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{id}/collections",
+      "purpose": "List committed output collections in declared-name order.",
+      "scopes": [
+        "artifacts:read"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "400 invalid_query",
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized collection/run",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/log-archive",
+      "purpose": "Inspect the separate diagnostic archive and its availability.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "No mutation or execution authority is granted.",
+      "retained": "Run identity; opaque cursor where returned.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized resource"
+      ],
+      "next_action": "Inspect current state; follow exact referenced artifact identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs/{run_id}/logs/stream",
+      "purpose": "Follow retained and live logs without treating stream closure as run completion.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter or current model owner/co-admin; model-administrator reads are audited. Connector administration and model execution grants alone confer no scientific read access.",
+      "retry": "Reconnect with either the saved Last-Event-ID or cursor, never both.",
+      "guards": "Credential and current model membership are rechecked before each buffered entry and idle poll.",
+      "retained": "Run identity and last delivered cursor; on retention gaps, recovery cursor.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found",
+        "410 history_cursor_expired",
+        "auth_revoked stream event"
+      ],
+      "next_action": "Poll run inspection independently; show retention gaps when resuming.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/runs",
+      "purpose": "List the authenticated submitter's own run history.",
+      "scopes": [
+        "runs:read"
+      ],
+      "roles": "Run submitter; model-administrator history uses the model run-history route.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "This personal inventory is creator-scoped.",
+      "retained": "User identity, filters and opaque cursor.",
+      "errors": [
+        "400 invalid_pagination",
+        "403 insufficient_scope"
+      ],
+      "next_action": "Inspect a returned run or use model run history for administrative investigation.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "post",
+      "path": "/api/v1/runs",
+      "purpose": "Accept one durable scientific execution intent.",
+      "scopes": [
+        "runs:create"
+      ],
+      "roles": "Authorized model user; candidate trials additionally require models:manage and current model-administrator/captured-grant or named-delegation authority.",
+      "retry": "Persist the request and Idempotency-Key before sending; repeat both unchanged after a lost reply. The same account/key returns the original acceptance receipt, not current run status.",
+      "guards": "Explicit expected_publication_id, current access/admission and compatible declared inputs. Keys identify semantic requests and belong to the user, not one credential.",
+      "retained": "API/account, full original body, Idempotency-Key and returned run/receipt identities.",
+      "errors": [
+        "409 idempotency_conflict",
+        "413 payload_too_large",
+        "422 invalid_inputs or invalid_artifact_input",
+        "429 queue capacity"
+      ],
+      "next_action": "Inspect the recovered run; a deliberate new execution requires a new key.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/artifacts/{artifact_id}",
+      "purpose": "Inspect immutable artifact metadata and current availability.",
+      "scopes": [
+        "artifacts:read"
+      ],
+      "roles": "Artifact creator, or current administrator of a run that produced or accepted the exact artifact dependency. Unrelated standalone uploads remain private.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "Knowing an artifact UUID grants no authority.",
+      "retained": "Artifact UUID and published version/size/SHA-256; never retain capability URLs.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized artifact",
+        "503 artifact_unavailable"
+      ],
+      "next_action": "Use content only when ready; keep immutable identities.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/artifacts/{artifact_id}/content",
+      "purpose": "Authorize an exact-version five-minute object-storage download.",
+      "scopes": [
+        "artifacts:download"
+      ],
+      "roles": "Artifact creator, or current administrator of a run that produced or accepted the exact artifact dependency. Unrelated standalone uploads remain private.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "For content, exact published version is verified and credential, membership and availability are rechecked before issuing a 303. Follow Location in a separate storage request without API bearer headers.",
+      "retained": "Artifact UUID and published version/size/SHA-256; never retain capability URLs.",
+      "errors": [
+        "403 insufficient_scope",
+        "404 not_found",
+        "409 artifact_not_ready",
+        "410 artifact_gone",
+        "503 artifact_storage_unavailable"
+      ],
+      "next_action": "Verify full downloaded size and SHA-256; request a fresh capability after expiry.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/connectors",
+      "purpose": "List connectors administered by the authenticated account.",
+      "scopes": [
+        "connectors:read"
+      ],
+      "roles": "Current connector owner/co-admin only; a compute grant alone does not add an entry.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "Connector administration is separate from compute-grant discovery.",
+      "retained": "Pagination cursor and account.",
+      "errors": [
+        "403 insufficient_scope"
+      ],
+      "next_action": "Grant-only authors use GET /api/v1/compute-grants or enumeray connector grant available.",
+      "workflow": "/reference/permissions/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/compute-grants",
+      "purpose": "Discover active compute grants available to the authenticated account.",
+      "scopes": [
+        "connectors:read"
+      ],
+      "roles": "Named grant recipient; the grant does not confer connector administration.",
+      "retry": "Repeat GET using the same resource identity; each request rechecks current credential and resource authority.",
+      "guards": "Returned grants remain subject to current context and grant policy.",
+      "retained": "Grant/context identities and pagination cursor.",
+      "errors": [
+        "403 insufficient_scope"
+      ],
+      "next_action": "Select a personal grant for fresh publication registration.",
+      "workflow": "/reference/permissions/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/tokens",
+      "purpose": "List the authenticated account's personal token metadata; default page size 50, maximum 100.",
+      "scopes": [
+        "tokens:manage"
+      ],
+      "roles": "Authenticated account manages its own personal credentials; no model-user or connector role is required.",
+      "retry": "Repeat inventory GET safely. Token issuance is not an idempotent reservation; after uncertainty inspect inventory before issuing another token.",
+      "guards": "Requested scopes cannot exceed parent scopes and expiration cannot exceed parent lifetime.",
+      "retained": "Account, token ID/name/scopes and inventory cursor; token secret is returned only at issuance.",
+      "errors": [
+        "403 insufficient_scope or scope_escalation",
+        "422 invalid_token_request"
+      ],
+      "next_action": "Save issued secret privately; inventory never reveals it.",
+      "workflow": "/start/login/"
+    },
+    {
+      "method": "post",
+      "path": "/api/v1/tokens",
+      "purpose": "Issue a bounded personal token once; store its returned secret privately.",
+      "scopes": [
+        "tokens:manage"
+      ],
+      "roles": "Authenticated account manages its own personal credentials; no model-user or connector role is required.",
+      "retry": "Repeat inventory GET safely. Token issuance is not an idempotent reservation; after uncertainty inspect inventory before issuing another token.",
+      "guards": "Requested scopes cannot exceed parent scopes and expiration cannot exceed parent lifetime.",
+      "retained": "Account, token ID/name/scopes and inventory cursor; token secret is returned only at issuance.",
+      "errors": [
+        "403 insufficient_scope or scope_escalation",
+        "422 invalid_token_request"
+      ],
+      "next_action": "Save issued secret privately; inventory never reveals it.",
+      "workflow": "/start/login/"
+    },
+    {
+      "method": "post",
+      "path": "/api/v1/uploads",
+      "purpose": "Reserve exact bytes with durable upload and artifact identities.",
+      "scopes": [
+        "uploads:create"
+      ],
+      "roles": "Authenticated creator; private reservation ownership does not grant model or connector authority.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 invalid_idempotency_key",
+        "409 idempotency_conflict",
+        "413 metadata/body or general structural byte bound",
+        "422 invalid_upload",
+        "429 upload_quota_exceeded",
+        "503 upload_uncertain"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/uploads/{upload_id}",
+      "purpose": "Inspect the original reservation and refresh temporary transfer instructions.",
+      "scopes": [
+        "uploads:read"
+      ],
+      "roles": "Authenticated creator; private reservation ownership does not grant model or connector authority.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "503 upload_unavailable"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/uploads/{upload_id}/completion",
+      "purpose": "Verify and publish the exact stored version; multipart may return 202 while the worker verifies.",
+      "scopes": [
+        "uploads:complete"
+      ],
+      "roles": "Authenticated creator; private reservation ownership does not grant model or connector authority.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "409 upload_bytes_missing or upload_completion_conflict",
+        "410 upload_expired",
+        "413 completion JSON/body bound",
+        "422 invalid_upload_completion or upload_verification_failed",
+        "503 upload_uncertain"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "post",
+      "path": "/connector/v1/assignments/{assignment_id}/uploads",
+      "purpose": "Reserve exact bytes with durable upload and artifact identities.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment and holds its active X-Connector-Session.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 invalid_idempotency_key",
+        "409 idempotency_conflict",
+        "413 metadata/body or general structural byte bound",
+        "422 invalid_upload",
+        "429 upload_quota_exceeded",
+        "503 upload_uncertain",
+        "404 not_found: unrelated assignment",
+        "409 session_required, journal_conflict or invalid_transition"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "get",
+      "path": "/connector/v1/assignments/{assignment_id}/uploads/{upload_id}",
+      "purpose": "Inspect the original reservation and refresh temporary transfer instructions.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment and holds its active X-Connector-Session.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "503 upload_unavailable",
+        "409 session_required or journal_conflict"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "put",
+      "path": "/connector/v1/assignments/{assignment_id}/uploads/{upload_id}/completion",
+      "purpose": "Verify and publish the exact stored version; multipart may return 202 while the worker verifies.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment and holds its active X-Connector-Session.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB. Single-PUT ceiling, per-file policy, declaration and aggregate quotas are independent. Existing reservations retain transport and expiry.",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "409 upload_bytes_missing or upload_completion_conflict",
+        "410 upload_expired",
+        "413 completion JSON/body bound",
+        "422 invalid_upload_completion or upload_verification_failed",
+        "503 upload_uncertain",
+        "409 session_required, journal_conflict or invalid_transition"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "post",
+      "path": "/connector/v1/assignments/{assignment_id}/log-archive/uploads",
+      "purpose": "Reserve exact bytes with durable upload and artifact identities.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment, active X-Connector-Session and finalized archive intent before its independent publication deadline.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB; existing reservations keep transport and expiry. Archive size must satisfy both 512 MiB structural and captured compressed-policy bounds (422 invalid_upload).",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 invalid_idempotency_key",
+        "409 idempotency_conflict",
+        "413 metadata/body or general structural byte bound",
+        "422 invalid_upload",
+        "429 upload_quota_exceeded",
+        "503 upload_uncertain",
+        "404 not_found: unrelated assignment",
+        "409 session_required, journal_conflict or invalid_transition"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "get",
+      "path": "/connector/v1/assignments/{assignment_id}/log-archive/uploads/{upload_id}",
+      "purpose": "Inspect the original reservation and refresh temporary transfer instructions.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment, active X-Connector-Session and finalized archive intent before its independent publication deadline.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB; existing reservations keep transport and expiry. Archive size must satisfy both 512 MiB structural and captured compressed-policy bounds (422 invalid_upload).",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "503 upload_unavailable",
+        "409 session_required or journal_conflict"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "put",
+      "path": "/connector/v1/assignments/{assignment_id}/log-archive/uploads/{upload_id}/completion",
+      "purpose": "Verify and publish the exact stored version; multipart may return 202 while the worker verifies.",
+      "scopes": [],
+      "roles": "Authenticated connector owns the exact assignment, active X-Connector-Session and finalized archive intent before its independent publication deadline.",
+      "retry": "Reservation: retry original Idempotency-Key and body. Completion: retry original version_id or multipart:true intent. Current views may refresh temporary instructions; committed receipts retain their identities.",
+      "guards": "New reservations select multipart strictly above 64 MiB; existing reservations keep transport and expiry. Archive size must satisfy both 512 MiB structural and captured compressed-policy bounds (422 invalid_upload).",
+      "retained": "Same account/assignment, source checksum and unchanged source bytes, original request/key, upload/artifact UUIDs, completion intent and confirmed parts.",
+      "errors": [
+        "400 bad_request",
+        "404 not_found: missing or unauthorized upload",
+        "409 upload_bytes_missing or upload_completion_conflict",
+        "410 upload_expired",
+        "413 completion JSON/body bound",
+        "422 invalid_upload_completion or upload_verification_failed",
+        "503 upload_uncertain",
+        "409 session_required, journal_conflict or invalid_transition"
+      ],
+      "next_action": "Preserve the original operation; inspect to reconcile uncertainty; use completed artifact identity after verification.",
+      "workflow": "/users/files/"
+    },
+    {
+      "method": "post",
+      "path": "/api/v1/collections",
+      "purpose": "Create a bounded immutable collection operation.",
+      "scopes": [
+        "uploads:create"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "409 collection_conflict",
+        "413 payload_too_large",
+        "422 invalid_collection",
+        "429 collection_quota",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/collections/{id}",
+      "purpose": "Inspect a collection and its requested or sealed identity.",
+      "scopes": [
+        "artifacts:read"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "400 invalid_query",
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized collection/run",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/collections/{id}/members",
+      "purpose": "Page member metadata using the returned immutable index cursor.",
+      "scopes": [
+        "artifacts:read"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "400 invalid_query",
+        "403 insufficient_scope",
+        "404 not_found: missing or unauthorized collection/run",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/collections/{id}/members/{index}",
+      "purpose": "Write member metadata at the original zero-based index.",
+      "scopes": [
+        "uploads:create"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "409 collection_conflict",
+        "413 payload_too_large",
+        "422 invalid_collection",
+        "429 collection_quota",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/collections/{id}/freeze",
+      "purpose": "Freeze the exact requested member manifest before artifact binding.",
+      "scopes": [
+        "uploads:create"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "409 collection_conflict",
+        "413 payload_too_large",
+        "422 invalid_collection",
+        "429 collection_quota",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/collections/{id}/members/{index}/artifact",
+      "purpose": "Bind an exact verified member artifact after freezing metadata.",
+      "scopes": [
+        "uploads:complete"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "409 collection_conflict",
+        "413 payload_too_large",
+        "422 invalid_collection",
+        "429 collection_quota",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/collections/{id}/completion",
+      "purpose": "Atomically seal all member artifact/version identities.",
+      "scopes": [
+        "uploads:complete"
+      ],
+      "roles": "Creator of a user-upload collection for mutations; producing output collections are published only by their assignment connector/session. Reads additionally permit current administrators of an accepting or producing run.",
+      "retry": "Create with saved key/body; replay member pages at their original index. Freeze/bind/complete repeat unchanged identities. Changed or overlapping page content conflicts.",
+      "guards": "Freeze metadata before binding verified artifacts. Requested manifest_sha256 and sealed manifest_digest cover different records; use the published byte algorithm.",
+      "retained": "Collection ID, original key/request, member order/pages, requested digest, member artifact UUIDs and sealed digest.",
+      "errors": [
+        "409 collection_conflict",
+        "413 payload_too_large",
+        "422 invalid_collection",
+        "429 collection_quota",
+        "503 collection_uncertain"
+      ],
+      "next_action": "Inspect the retained operation and continue its next unfinished step.",
+      "workflow": "/reference/http-workflows/"
+    }
+  ]
+}

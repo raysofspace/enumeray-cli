@@ -1,0 +1,525 @@
+{
+  "schema_version": 1,
+  "description": "Complete inert HTTP specimen transactions and explicitly labeled field fragments. Replace fixture identities with reviewed values before real service use.",
+  "scenarios": [
+    {
+      "name": "scalar-run-lifecycle",
+      "description": "One accepted scalar run, followed through coherent queued, running and terminal observations. Replay returns the original queued receipt, not the current inspection.",
+      "exchanges": [
+        {
+          "name": "accepted-run",
+          "method": "post",
+          "path": "/api/v1/runs",
+          "status": 201,
+          "response": {
+            "run_id": "00000000-0000-4000-8000-000000000001",
+            "model_id": "scalar-double",
+            "publication_id": "scalar-double-r1",
+            "purpose": "standard",
+            "state": "queued",
+            "created_at": "2026-11-02T10:00:00Z"
+          },
+          "request": {
+            "model_id": "scalar-double",
+            "expected_publication_id": "scalar-double-r1",
+            "inputs": {
+              "value": 2
+            }
+          }
+        },
+        {
+          "name": "queued-run",
+          "method": "get",
+          "path": "/api/v1/runs/{run_id}",
+          "status": 200,
+          "response": {
+            "run_id": "00000000-0000-4000-8000-000000000001",
+            "model_id": "scalar-double",
+            "publication_id": "scalar-double-r1",
+            "purpose": "standard",
+            "state": "queued",
+            "created_at": "2026-11-02T10:00:00Z",
+            "context_id": "lab-cpu",
+            "execution_location": "Approved laboratory CPU host",
+            "phase": null,
+            "observation_freshness": "unknown",
+            "last_observed_at": null,
+            "blocked_reason": null,
+            "cancelled_at": null,
+            "cancellation": null,
+            "execution_control": {
+              "state": "authorized",
+              "authorization_reason": null
+            },
+            "resolution": null,
+            "result": null,
+            "created_by_user_id": "00000000-0000-4000-8000-000000000002",
+            "contract_version": 1,
+            "requested_inputs": {
+              "value": 2
+            },
+            "effective_inputs": {
+              "value": 2
+            },
+            "disclosure": "This model runs on the laboratory CPU host."
+          }
+        },
+        {
+          "name": "running-run",
+          "method": "get",
+          "path": "/api/v1/runs/{run_id}",
+          "status": 200,
+          "response": {
+            "run_id": "00000000-0000-4000-8000-000000000001",
+            "model_id": "scalar-double",
+            "publication_id": "scalar-double-r1",
+            "purpose": "standard",
+            "state": "running",
+            "created_at": "2026-11-02T10:00:00Z",
+            "context_id": "lab-cpu",
+            "execution_location": "Approved laboratory CPU host",
+            "phase": "executing",
+            "observation_freshness": "fresh",
+            "last_observed_at": "2026-11-02T10:01:00Z",
+            "blocked_reason": null,
+            "cancelled_at": null,
+            "cancellation": null,
+            "execution_control": {
+              "state": "authorized",
+              "authorization_reason": null
+            },
+            "resolution": null,
+            "result": null,
+            "created_by_user_id": "00000000-0000-4000-8000-000000000002",
+            "contract_version": 1,
+            "requested_inputs": {
+              "value": 2
+            },
+            "effective_inputs": {
+              "value": 2
+            },
+            "disclosure": "This model runs on the laboratory CPU host."
+          }
+        },
+        {
+          "name": "succeeded-run",
+          "method": "get",
+          "path": "/api/v1/runs/{run_id}",
+          "status": 200,
+          "response": {
+            "run_id": "00000000-0000-4000-8000-000000000001",
+            "model_id": "scalar-double",
+            "publication_id": "scalar-double-r1",
+            "purpose": "standard",
+            "state": "succeeded",
+            "created_at": "2026-11-02T10:00:00Z",
+            "context_id": "lab-cpu",
+            "execution_location": "Approved laboratory CPU host",
+            "phase": null,
+            "observation_freshness": "fresh",
+            "last_observed_at": "2026-11-02T10:01:00Z",
+            "blocked_reason": null,
+            "cancelled_at": null,
+            "cancellation": null,
+            "execution_control": {
+              "state": "completed",
+              "authorization_reason": null
+            },
+            "resolution": null,
+            "result": {
+              "receipt": {
+                "run_id": "00000000-0000-4000-8000-000000000001",
+                "assignment_id": "00000000-0000-4000-8000-000000000003",
+                "attempt_id": "00000000-0000-4000-8000-000000000004",
+                "outcome": "succeeded",
+                "completed_at": "2026-11-02T10:01:00Z"
+              },
+              "outputs": {
+                "doubled": 4
+              },
+              "files": {},
+              "optional_output_failures": {},
+              "failure": null
+            },
+            "created_by_user_id": "00000000-0000-4000-8000-000000000002",
+            "contract_version": 1,
+            "requested_inputs": {
+              "value": 2
+            },
+            "effective_inputs": {
+              "value": 2
+            },
+            "disclosure": "This model runs on the laboratory CPU host."
+          }
+        },
+        {
+          "name": "replayed-acceptance",
+          "method": "post",
+          "path": "/api/v1/runs",
+          "status": 201,
+          "response": {
+            "run_id": "00000000-0000-4000-8000-000000000001",
+            "model_id": "scalar-double",
+            "publication_id": "scalar-double-r1",
+            "purpose": "standard",
+            "state": "queued",
+            "created_at": "2026-11-02T10:00:00Z"
+          },
+          "request": {
+            "model_id": "scalar-double",
+            "expected_publication_id": "scalar-double-r1",
+            "inputs": {
+              "value": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "model-invitations",
+      "description": "Alternative recipient forms; each request has exactly one recipient. Tokens are shape-valid inert fixtures, never usable credentials.",
+      "exchanges": [
+        {
+          "name": "invite-email",
+          "method": "post",
+          "path": "/api/v1/models/{model_id}/invitations",
+          "status": 200,
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "model_id": "scalar-double",
+            "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "expires_at": "2026-11-03T10:00:00Z"
+          },
+          "request": {
+            "recipient_email": "colleague@example.org",
+            "recipient_id": null
+          }
+        },
+        {
+          "name": "invite-user",
+          "method": "post",
+          "path": "/api/v1/models/{model_id}/invitations",
+          "status": 200,
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "model_id": "scalar-double",
+            "token": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+            "expires_at": "2026-11-03T10:00:00Z"
+          },
+          "request": {
+            "recipient_id": "00000000-0000-4000-8000-000000000007",
+            "recipient_email": null
+          }
+        },
+        {
+          "name": "accept-invitation",
+          "method": "post",
+          "path": "/api/v1/models/{model_id}/invitations/accept",
+          "status": 200,
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "accepted": true
+          },
+          "request": {
+            "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+          }
+        }
+      ]
+    },
+    {
+      "name": "connector-enrollment-and-membership",
+      "description": "Valid one-time enrollment shape and removal of an existing co-administrator. Fixture verifier is SHA-256 of a nonsecret fixture token.",
+      "exchanges": [
+        {
+          "name": "enroll-connector",
+          "method": "post",
+          "path": "/connector/v1/enroll",
+          "status": 200,
+          "response": {
+            "connector_id": "lab-connector",
+            "credential_id": "00000000-0000-4000-8000-000000000008"
+          },
+          "request": {
+            "enrollment_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "machine_id": "00000000-0000-4000-8000-000000000009",
+            "credential_id": "00000000-0000-4000-8000-000000000008",
+            "token_verifier": "b255d443632f58a48e6e071ed1a9243fb4de190c1245e8349979b96e3367d52d"
+          }
+        },
+        {
+          "name": "remove-connector-member",
+          "method": "delete",
+          "path": "/api/v1/connectors/{connector_id}/members/{user_id}",
+          "status": 200,
+          "response": {
+            "user_id": "00000000-0000-4000-8000-000000000007",
+            "co_admin": false,
+            "generation": 3
+          },
+          "request": {
+            "expected_generation": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "personal-tokens",
+      "description": "Inventory never returns a secret. Issuance returns the secret only once. Values are inert fixtures.",
+      "exchanges": [
+        {
+          "name": "token-inventory",
+          "method": "get",
+          "path": "/api/v1/tokens",
+          "status": 200,
+          "response": {
+            "items": [
+              {
+                "id": "00000000-0000-4000-8000-000000000010",
+                "name": "analysis-script",
+                "scopes": [
+                  "models:read",
+                  "runs:read"
+                ],
+                "created_at": "2026-11-02T10:00:00Z",
+                "expires_at": "2026-11-03T10:00:00Z",
+                "revoked_at": null
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000015",
+                "name": "operator-issued",
+                "scopes": [
+                  "*"
+                ],
+                "created_at": "2026-11-02T10:00:00Z",
+                "expires_at": null,
+                "revoked_at": null
+              }
+            ],
+            "next_cursor": null
+          }
+        },
+        {
+          "name": "empty-token-inventory",
+          "method": "get",
+          "path": "/api/v1/tokens",
+          "status": 200,
+          "response": {
+            "items": [],
+            "next_cursor": null
+          }
+        },
+        {
+          "name": "issue-token",
+          "method": "post",
+          "path": "/api/v1/tokens",
+          "status": 201,
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000010",
+            "user_id": "00000000-0000-4000-8000-000000000002",
+            "token": "fixture-only-not-a-credential",
+            "expires_at": "2026-11-03T10:00:00Z",
+            "scopes": [
+              "models:read",
+              "runs:read"
+            ]
+          },
+          "request": {
+            "name": "analysis-script",
+            "scopes": [
+              "models:read",
+              "runs:read"
+            ],
+            "expires_in_seconds": 86400
+          }
+        }
+      ]
+    },
+    {
+      "name": "empty-collection",
+      "description": "The exact digest input is the two UTF-8 bytes []. Empty collections need freeze and completion but no member page or upload.",
+      "exchanges": [
+        {
+          "name": "create-empty-collection",
+          "method": "post",
+          "path": "/api/v1/collections",
+          "status": 200,
+          "response": {
+            "collection_id": "00000000-0000-4000-8000-000000000011",
+            "request": {
+              "logical_name": "empty-observations",
+              "scientific_metadata": {},
+              "member_count": 0,
+              "total_bytes": 0,
+              "manifest_sha256": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU="
+            }
+          },
+          "request": {
+            "logical_name": "empty-observations",
+            "scientific_metadata": {},
+            "member_count": 0,
+            "total_bytes": 0,
+            "manifest_sha256": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU="
+          }
+        },
+        {
+          "name": "freeze-empty-collection",
+          "method": "put",
+          "path": "/api/v1/collections/{id}/freeze",
+          "status": 200,
+          "response": {
+            "collection_id": "00000000-0000-4000-8000-000000000011",
+            "manifest_sha256": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU="
+          },
+          "request": {}
+        },
+        {
+          "name": "complete-empty-collection",
+          "method": "put",
+          "path": "/api/v1/collections/{id}/completion",
+          "status": 200,
+          "response": {
+            "collection_id": "00000000-0000-4000-8000-000000000011",
+            "request": {
+              "logical_name": "empty-observations",
+              "scientific_metadata": {},
+              "member_count": 0,
+              "total_bytes": 0,
+              "manifest_sha256": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU="
+            },
+            "state": "ready",
+            "manifest_digest": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU=",
+            "available": true
+          },
+          "request": {}
+        },
+        {
+          "name": "empty-member-page",
+          "method": "get",
+          "path": "/api/v1/collections/{id}/members",
+          "status": 200,
+          "response": {
+            "items": [],
+            "next_cursor": null
+          }
+        },
+        {
+          "name": "no-run-output-collections",
+          "method": "get",
+          "path": "/api/v1/runs/{id}/collections",
+          "status": 200,
+          "response": {
+            "items": [],
+            "next_cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "run-request-errors",
+      "description": "Only authorized scientific validation failures include bounded scientific-schema violations; authentication errors do not.",
+      "exchanges": [
+        {
+          "name": "unauthenticated-run",
+          "method": "post",
+          "path": "/api/v1/runs",
+          "status": 401,
+          "response": {
+            "code": "unauthenticated",
+            "message": "A valid user bearer token is required.",
+            "request_id": "00000000-0000-4000-8000-000000000012"
+          }
+        },
+        {
+          "name": "invalid-scientific-input",
+          "method": "post",
+          "path": "/api/v1/runs",
+          "status": 422,
+          "response": {
+            "code": "invalid_inputs",
+            "message": "Inputs do not satisfy the publication schema or supported JSON storage limits.",
+            "request_id": "00000000-0000-4000-8000-000000000013",
+            "details": {
+              "violations": [
+                {
+                  "position": "/value",
+                  "position_redacted": false,
+                  "rule": "type",
+                  "correction": "Use a number."
+                }
+              ],
+              "truncated": false
+            }
+          },
+          "request": {
+            "model_id": "scalar-double",
+            "expected_publication_id": "scalar-double-r1",
+            "inputs": {
+              "value": "wrong scientific type"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "fragments": [
+    {
+      "name": "publication-trials",
+      "schema": "PublicationTrialEvidence",
+      "parent": "PublicationDetail.trial_evidence",
+      "description": "Complete field value, not a complete PublicationDetail response. Counts and latest records describe the same candidate trial history.",
+      "value": {
+        "counts": {
+          "queued": 0,
+          "running": 0,
+          "succeeded": 1,
+          "failed": 0,
+          "cancelled": 0
+        },
+        "latest_run": {
+          "run_id": "00000000-0000-4000-8000-000000000014",
+          "publication_id": "scalar-double-r1",
+          "purpose": "candidate_trial",
+          "state": "succeeded",
+          "created_at": "2026-11-02T10:00:00Z"
+        },
+        "latest_succeeded_run": {
+          "run_id": "00000000-0000-4000-8000-000000000014",
+          "publication_id": "scalar-double-r1",
+          "purpose": "candidate_trial",
+          "state": "succeeded",
+          "created_at": "2026-11-02T10:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "no-publication-trials",
+      "schema": "PublicationTrialEvidence",
+      "parent": "PublicationDetail.trial_evidence",
+      "description": "Complete field value when no trials have been accepted.",
+      "value": {
+        "counts": {
+          "queued": 0,
+          "running": 0,
+          "succeeded": 0,
+          "failed": 0,
+          "cancelled": 0
+        },
+        "latest_run": null,
+        "latest_succeeded_run": null
+      }
+    },
+    {
+      "name": "observed-publication-validation",
+      "schema": "PublicationValidationEvidence",
+      "parent": "PublicationDetail.validation_evidence",
+      "description": "Complete connector-observed evidence field. This is an installation check, not scientific validation.",
+      "value": {
+        "authority": "connector_observed",
+        "verified_digests": {
+          "wrapper.py": "13308b745dcad7f83e4e23e3d47362d8ba4ee9f7d883e688463c5782bf840b4c"
+        },
+        "observed_at": "2026-11-02T10:00:00Z"
+      }
+    }
+  ]
+}

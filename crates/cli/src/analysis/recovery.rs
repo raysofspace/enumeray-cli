@@ -5,6 +5,7 @@ use enumeray_client::{
     EnumerayClient, Error, PreparedRun, RunPurpose, SubmissionReceipt, resource_path,
 };
 use enumeray_contracts::{
+    automation::{AnalysisIdentity, AnalysisStage, AnalysisSummary, SchemaVersion},
     execution::InstallationIdentity,
     models::{self, ScientificDefinition},
 };
@@ -807,7 +808,7 @@ pub(crate) fn import(args: &Args, prepared: &Path, path: &Path) -> Result<Value,
         let _snapshot = directory.state_lock()?;
         load(&directory, initial.api_url(), initial.user_id(), true)?
     };
-    Ok(summary(&directory, &saved, None))
+    summary(&directory, &saved, None)
 }
 
 fn read_prepared(path: &Path) -> Result<PreparedRun, Error> {
@@ -942,7 +943,7 @@ pub(super) fn attach(
         load(&directory, client.base_url(), initial.user_id(), true)?
     };
     hydrate(client, &directory, &mut saved)?;
-    Ok(summary(&directory, &saved, None))
+    summary(&directory, &saved, None)
 }
 
 pub(super) fn hydrate(
@@ -1006,26 +1007,42 @@ pub(super) fn submit(
             "Attachment is incomplete; repeat analysis attach with this directory. Attached runs cannot submit executions.",
         ));
     }
-    Ok(summary(directory, saved, None))
+    summary(directory, saved, None)
 }
 
-pub(super) fn summary(directory: &Directory, saved: &Recovery, run: Option<Value>) -> Value {
+pub(super) fn summary(
+    directory: &Directory,
+    saved: &Recovery,
+    run: Option<Value>,
+) -> Result<Value, Error> {
     let receipt = match saved {
         Recovery::ImportedPrepared { receipt, .. } => {
             serde_json::to_value(receipt).unwrap_or(Value::Null)
         }
         Recovery::AttachedRun { .. } => Value::Null,
     };
+    let mut identity = saved.identity();
+    let execution_location = serde_json::from_value(identity["execution_location"].clone())?;
+    let disclosure = serde_json::from_value(identity["disclosure"].clone())?;
+    identity
+        .as_object_mut()
+        .expect("identity")
+        .remove("execution_location");
+    identity
+        .as_object_mut()
+        .expect("identity")
+        .remove("disclosure");
+    let identity: AnalysisIdentity = serde_json::from_value(identity)?;
     let accepted = saved.run_id().is_some();
-    let mut value = json!({"directory":directory.root,"stage":if accepted {"accepted"} else if matches!(saved,Recovery::ImportedPrepared {..}) {"submission_uncertain"} else {"attachment_incomplete"},
-        "run_id":saved.run_id(),"receipt":receipt,"run":run,"input_files":[],"input_collections":[],
-        "next_action":if accepted {"Observe with analysis status/wait DIR; collect terminal evidence with analysis collect DIR."}
+    let summary = AnalysisSummary { schema_version:SchemaVersion,directory:directory.root.to_string_lossy().into_owned(),identity,
+        stage:if accepted {AnalysisStage::Accepted} else if matches!(saved,Recovery::ImportedPrepared {..}) {AnalysisStage::SubmissionUncertain} else {AnalysisStage::AttachmentIncomplete},
+        run_id:saved.run_id().map(|id| id.parse()).transpose().map_err(|_|invalid("Invalid accepted run identity."))?,
+        execution_location,disclosure,receipt:serde_json::from_value(receipt)?,run:run.map(serde_json::from_value).transpose()?,input_files:vec![],input_collections:vec![],collection:None,cancellation:None,
+        next_action:if accepted {"Observe with analysis status/wait DIR; collect terminal evidence with analysis collect DIR."}
             else if matches!(saved,Recovery::ImportedPrepared {..}) {"The original submission outcome is unknown. Explicitly use analysis submit DIR to submit or reconcile the unchanged original request and key."}
-            else {"Repeat analysis attach with this directory to recover accepted evidence; attachment cannot request an execution."}});
-    for (key, field) in saved.identity().as_object().expect("identity object") {
-        value[key] = field.clone();
-    }
-    value
+            else {"Repeat analysis attach with this directory to recover accepted evidence; attachment cannot request an execution."}.into()};
+    summary.validate().map_err(invalid)?;
+    Ok(serde_json::to_value(summary)?)
 }
 
 #[cfg(test)]

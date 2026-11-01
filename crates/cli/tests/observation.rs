@@ -469,6 +469,7 @@ fn run_for(state: &str, folder: bool) -> Value {
         value["created_by_user_id"] = json!(USER);
         value["requested_inputs"] = json!({"value":2});
         value["effective_inputs"] = json!({"value":2});
+        value["execution_control"] = json!({"state":if matches!(state,"succeeded"|"failed"|"cancelled") {"completed"} else {"authorized"},"authorization_reason":null});
     }
     value
 }

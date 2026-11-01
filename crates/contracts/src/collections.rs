@@ -15,6 +15,21 @@ pub const MAX_MEMBERS: usize = 10_000;
 pub const MAX_MANIFEST_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_PAGE_BYTES: usize = 64 * 1024;
 
+/// Closed immutable collection reference used by scientific inputs and results.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CollectionReference {
+    #[serde(deserialize_with = "crate::models::files::canonical_reference_id")]
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            pattern = "^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+    )]
+    pub collection_id: Uuid,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidCollection;
 impl fmt::Display for InvalidCollection {
@@ -190,6 +205,14 @@ pub struct MemberSpec {
     pub media_type: String,
     pub scientific_metadata: Value,
     pub size_bytes: u64,
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            min_length = 44,
+            max_length = 44,
+            pattern = "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+        )
+    )]
     pub checksum_sha256: String,
 }
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -209,6 +232,14 @@ pub struct CollectionRequest {
     pub scientific_metadata: Value,
     pub member_count: u32,
     pub total_bytes: u64,
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            min_length = 44,
+            max_length = 44,
+            pattern = "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+        )
+    )]
     pub manifest_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_name: Option<String>,
@@ -225,6 +256,15 @@ pub struct CollectionView {
     #[serde(flatten)]
     pub receipt: CollectionReceipt,
     pub state: String,
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            required = true,
+            min_length = 44,
+            max_length = 44,
+            pattern = "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+        )
+    )]
     pub manifest_digest: Option<String>,
     /// Current tracked member availability. Delivery independently verifies the
     /// exact storage version; this flag never substitutes for content evidence.
@@ -268,6 +308,37 @@ pub struct MemberView {
 pub struct MemberPage {
     pub items: Vec<MemberView>,
     pub next_cursor: Option<u32>,
+}
+
+/// Retained identity and exact range accepted by a member metadata page.
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct CollectionPageReceipt {
+    pub collection_id: Uuid,
+    pub start: u32,
+    pub count: usize,
+}
+
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct CollectionFreezeReceipt {
+    pub collection_id: Uuid,
+    #[cfg_attr(
+        feature = "openapi",
+        schema(
+            min_length = 44,
+            max_length = 44,
+            pattern = "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"
+        )
+    )]
+    pub manifest_sha256: String,
+}
+
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[derive(Clone, Deserialize, Serialize)]
+pub struct CollectionBindingReceipt {
+    pub artifact_id: Uuid,
+    pub version_id: String,
 }
 
 pub fn parse_document<T: serde::de::DeserializeOwned>(
@@ -360,6 +431,44 @@ pub fn member_id(collection: Uuid, index: u32) -> Uuid {
     hash.update(index.to_be_bytes());
     let bytes = hash.finalize();
     Uuid::from_bytes(bytes[..16].try_into().expect("digest"))
+}
+
+#[cfg(test)]
+mod public_identity_vectors {
+    use super::*;
+
+    #[test]
+    fn independent_downloadable_vectors_match_runtime_serialization() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/http-contract/digest-vectors");
+        let catalogue: Value =
+            serde_json::from_slice(&std::fs::read(root.join("vectors.json")).unwrap()).unwrap();
+        assert_eq!(catalogue["schema_version"], 1);
+        for vector in catalogue["vectors"].as_array().unwrap() {
+            let source = std::fs::read(root.join(vector["input"].as_str().unwrap())).unwrap();
+            let expected = std::fs::read(root.join(vector["bytes"].as_str().unwrap())).unwrap();
+            let (actual, digest) = if vector["sealed"] == true {
+                let members: Vec<PinnedMember> =
+                    parse_document(&source, MAX_MANIFEST_BYTES).unwrap();
+                let specs = members.iter().map(|m| m.member.clone()).collect::<Vec<_>>();
+                validate_members(&specs).unwrap();
+                (
+                    serde_json::to_vec(&members).unwrap(),
+                    manifest_digest(&members).unwrap(),
+                )
+            } else {
+                let members: Vec<MemberSpec> = parse_document(&source, MAX_MANIFEST_BYTES).unwrap();
+                validate_members(&members).unwrap();
+                (
+                    serde_json::to_vec(&members).unwrap(),
+                    manifest_digest(&members).unwrap(),
+                )
+            };
+            assert_eq!(actual, expected, "{}", vector["name"]);
+            assert_eq!(digest, vector["sha256_base64"].as_str().unwrap());
+            assert_eq!(actual.len() as u64, vector["size_bytes"].as_u64().unwrap());
+        }
+    }
 }
 
 #[cfg(test)]

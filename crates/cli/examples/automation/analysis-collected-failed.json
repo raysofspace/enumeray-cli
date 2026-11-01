@@ -1,0 +1,33 @@
+{
+  "arguments": [
+    "analysis",
+    "collect",
+    "analysis"
+  ],
+  "command": [
+    "enumeray",
+    "--json"
+  ],
+  "contract": "analysis-collection-summary",
+  "exit_code": 0,
+  "schema_version": 1,
+  "stderr": "",
+  "stdout": {
+    "bundle": "/private/enumeray-example/analysis/bundle.json",
+    "collections": {},
+    "complete": true,
+    "context_id": "context-one",
+    "directory": "/private/enumeray-example/analysis",
+    "grant_id": null,
+    "installation": null,
+    "installation_status": "published",
+    "model_id": "model",
+    "outputs": {},
+    "publication_delegation_id": null,
+    "publication_id": "release-one",
+    "purpose": "standard",
+    "run_id": "33333333-3333-4333-8333-333333333333",
+    "schema_version": 1,
+    "scientific_state": "failed"
+  }
+}

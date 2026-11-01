@@ -1,0 +1,47 @@
+{
+  "arguments": [
+    "analysis",
+    "collect",
+    "analysis"
+  ],
+  "command": [
+    "enumeray",
+    "--json"
+  ],
+  "contract": "analysis-collection-summary",
+  "exit_code": 0,
+  "schema_version": 1,
+  "stderr": "Retained download checkpoint: /private/enumeray-example/analysis/results/files/.enumeray-download-0000000000000000000000000000000000000000000000000000000000000000\nResuming 0 of 20 bytes.\n",
+  "stdout": {
+    "bundle": "/private/enumeray-example/analysis/bundle.json",
+    "collections": {},
+    "complete": true,
+    "context_id": "context-one",
+    "directory": "/private/enumeray-example/analysis",
+    "grant_id": null,
+    "installation": null,
+    "installation_status": "published",
+    "model_id": "model",
+    "outputs": {
+      "../hostile%output": {
+        "artifact_id": "55555555-5555-4555-8555-555555555555",
+        "checksum": {
+          "algorithm": "sha256",
+          "checksum_type": "full_object",
+          "value": "7W12lWs+m1gFeipCkRwGaQ5vrd6eKtIbuU0mYOnc5NY="
+        },
+        "logical_name": "../hostile%output",
+        "media_type": "text/csv",
+        "path": "results/files/55555555-5555-4555-8555-555555555555",
+        "size_bytes": 20,
+        "version_id": "version-one"
+      }
+    },
+    "publication_delegation_id": null,
+    "publication_id": "release-one",
+    "purpose": "standard",
+    "run_id": "33333333-3333-4333-8333-333333333333",
+    "schema_version": 1,
+    "scientific_state": "succeeded"
+  }
+}

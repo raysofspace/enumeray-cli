@@ -143,13 +143,13 @@ pub(super) fn cancel(
             if let Some(run) = &run {
                 validate_run(saved, run)?;
             }
-            let mut value = summary(directory, saved, run);
+            let mut value = summary(directory, saved, run)?;
             value["run_id"] = json!(run_id);
             value["cancellation"] = serde_json::to_value(journal)?;
             value["next_action"] = json!(
                 "Observe authoritative progress with analysis status DIR or analysis wait DIR; collect terminal evidence with analysis collect DIR. A request does not establish termination."
             );
-            Ok(value)
+            super::validated_summary(value)
         }
         Err(error) => {
             let rejected = matches!(

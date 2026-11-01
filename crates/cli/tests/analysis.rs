@@ -1,4 +1,5 @@
 //! Binary-level analysis recovery over real HTTP sockets and real local files.
+mod automation_support;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -25,6 +26,201 @@ const DELEGATION: &str = "88888888-8888-4888-8888-888888888888";
 const BYTES: &[u8] = b"index,value\n0,2\n1,3\n";
 const ANSWER: &[u8] = b"index,value\n0,4\n1,6\n";
 const SLOT: &str = "../hostile%output";
+
+#[test]
+fn automation_transcripts_cover_review_replay_observation_and_collection() {
+    use enumeray_contracts::automation::{
+        AnalysisCollectionSummary, AnalysisSummary, CliRuntimeError,
+    };
+    let server = Server::new(false);
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("inputs.json"), r#"{"value":2}"#).unwrap();
+    let model = server.call(root.path(), &["model", "get", "model"], true);
+    let init_args = [
+        "analysis",
+        "init",
+        "model",
+        "--directory",
+        "analysis",
+        "--inputs",
+        "inputs.json",
+    ];
+    let initialized = server.call(root.path(), &init_args, true);
+    let initialized = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-initialized.json",
+        Some("analysis-summary"),
+        &init_args,
+        &initialized,
+        &[],
+    );
+    let reviewed = server.call(root.path(), &["analysis", "status", "analysis"], true);
+    let reviewed = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-reviewed.json",
+        Some("analysis-summary"),
+        &["analysis", "status", "analysis"],
+        &reviewed,
+        &[],
+    );
+    let mut files = json!({"schema_version":1,"files": {
+        "model.json":serde_json::from_slice::<Value>(&model.stdout).unwrap(),
+        "initialized.json":initialized["stdout"], "reviewed-analysis.json":reviewed["stdout"],
+        "analysis/inputs.json":read(root.path(), "analysis/inputs.json")
+    }});
+    automation_support::normalize(
+        &mut files,
+        &[
+            (
+                root.path().canonicalize().unwrap().to_str().unwrap(),
+                "/private/enumeray-example",
+            ),
+            (root.path().to_str().unwrap(), "/private/enumeray-example"),
+            (&server.origin, "https://enumeray.example.org/"),
+        ],
+    );
+    automation_support::save("four-file-review.json", &files);
+    let parsed: AnalysisSummary = serde_json::from_value(initialized["stdout"].clone()).unwrap();
+    parsed.validate().unwrap();
+    server.fixture.lock().unwrap().drop_accept = true;
+    server.call(root.path(), &["analysis", "submit", "analysis"], false);
+    let uncertain = server.call(root.path(), &["analysis", "status", "analysis"], true);
+    automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-submission-uncertain.json",
+        Some("analysis-summary"),
+        &["analysis", "status", "analysis"],
+        &uncertain,
+        &[],
+    );
+    let accepted = server.call(root.path(), &["analysis", "submit", "analysis"], true);
+    let accepted = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-submitted.json",
+        Some("analysis-summary"),
+        &["analysis", "submit", "analysis"],
+        &accepted,
+        &[],
+    );
+    for state in ["queued", "running", "succeeded"] {
+        {
+            let mut fixture = server.fixture.lock().unwrap();
+            fixture.outcome = state.into();
+            fixture.run_override = if state == "running" {
+                Some(("phase".into(), json!("executing")))
+            } else {
+                None
+            };
+        }
+        let output = server.call(root.path(), &["analysis", "status", "analysis"], true);
+        let transcript = automation_support::specimen(
+            root.path(),
+            &server.origin,
+            &format!("analysis-status-{state}.json"),
+            Some("analysis-summary"),
+            &["analysis", "status", "analysis"],
+            &output,
+            &[],
+        );
+        let parsed: AnalysisSummary = serde_json::from_value(transcript["stdout"].clone()).unwrap();
+        parsed.validate().unwrap();
+        assert_eq!(
+            transcript["stdout"]["receipt"],
+            accepted["stdout"]["receipt"]
+        );
+        assert_eq!(transcript["stdout"]["run"]["state"], state);
+    }
+    let collected = server.call(root.path(), &["analysis", "collect", "analysis"], true);
+    let transcript = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-collected-empty.json",
+        Some("analysis-collection-summary"),
+        &["analysis", "collect", "analysis"],
+        &collected,
+        &[],
+    );
+    serde_json::from_value::<AnalysisCollectionSummary>(transcript["stdout"].clone())
+        .unwrap()
+        .validate()
+        .unwrap();
+
+    let server = Server::new(false);
+    let root = tempfile::tempdir().unwrap();
+    server.init(root.path(), false);
+    server.call(root.path(), &["analysis", "submit", "analysis"], true);
+    server.fixture.lock().unwrap().outcome = "failed".into();
+    let output = server.call(root.path(), &["analysis", "status", "analysis"], true);
+    automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-status-failed.json",
+        Some("analysis-summary"),
+        &["analysis", "status", "analysis"],
+        &output,
+        &[],
+    );
+    let failed = server.call(root.path(), &["analysis", "collect", "analysis"], true);
+    let transcript = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-collected-failed.json",
+        Some("analysis-collection-summary"),
+        &["analysis", "collect", "analysis"],
+        &failed,
+        &[],
+    );
+    serde_json::from_value::<AnalysisCollectionSummary>(transcript["stdout"].clone())
+        .unwrap()
+        .validate()
+        .unwrap();
+
+    let server = Server::new(true);
+    let root = tempfile::tempdir().unwrap();
+    server.init(root.path(), true);
+    server.call(root.path(), &["analysis", "submit", "analysis"], true);
+    for (name, args) in [
+        (
+            "analysis-collected-partial.json",
+            vec!["analysis", "collect", "analysis", "--evidence-only"],
+        ),
+        (
+            "analysis-collected-files.json",
+            vec!["analysis", "collect", "analysis"],
+        ),
+    ] {
+        let output = server.call(root.path(), &args, true);
+        let transcript = automation_support::specimen(
+            root.path(),
+            &server.origin,
+            name,
+            Some("analysis-collection-summary"),
+            &args,
+            &output,
+            &[],
+        );
+        serde_json::from_value::<AnalysisCollectionSummary>(transcript["stdout"].clone())
+            .unwrap()
+            .validate()
+            .unwrap();
+    }
+    let root = tempfile::tempdir().unwrap();
+    let output = server.call(root.path(), &["analysis", "collect", "missing"], false);
+    let transcript = automation_support::specimen(
+        root.path(),
+        &server.origin,
+        "analysis-runtime-error.json",
+        Some("runtime-error"),
+        &["analysis", "collect", "missing"],
+        &output,
+        &[],
+    );
+    serde_json::from_str::<CliRuntimeError>(transcript["stderr"].as_str().unwrap()).unwrap();
+}
 
 #[derive(Default)]
 struct RequestGate {
@@ -163,6 +359,7 @@ impl Fixture {
         };
         let request = &self.accepted.as_ref().unwrap().1;
         let mut run = json!({"run_id":RUN,"model_id":"model","publication_id":"release-one","purpose":request.get("purpose").cloned().unwrap_or(json!("standard")),"publication_delegation_id":request["publication_delegation_id"],"created_by_user_id":USER,"contract_version":1,"storage_destination_id":null,"created_at":"2026-10-16T12:00:00Z","cancelled_at":null,"phase":null,"state":self.outcome,"requested_inputs":inputs,"effective_inputs":inputs,"result":result});
+        run["execution_control"] = json!({"state":if matches!(self.outcome.as_str(),"succeeded"|"failed"|"cancelled") {"completed"} else {"authorized"},"authorization_reason":null});
         if let Some((field, value)) = &self.run_override {
             run[field] = value.clone();
         }
@@ -199,7 +396,7 @@ impl Fixture {
         let response = if line.starts_with("GET /api/v1/me ") {
             json!({"user_id":self.user,"label":"Researcher"})
         } else if line.starts_with("GET /api/v1/models/model ") {
-            json!({"model_id":"model","current_publication_id":self.current,"current_publication":{"publication_id":self.current,"context_id":"context-one","execution_location":"Research compute","disclosure":"Model and compute administrators can read submitted data.","definition":definition(self.files)}})
+            json!({"model_id":"model","name":"Example model","description":"A reproducible scalar or file fixture.","owner_id":USER,"generation":1,"access_mode":"open","visibility":"listed","can_run":true,"can_manage":false,"current_publication_id":self.current,"current_publication":{"id":self.current,"publication_id":self.current,"context_id":"context-one","execution_location":"Research compute","disclosure":"Model and compute administrators can read submitted data.","definition":definition(self.files),"revoked_at":null,"installation_revoked_at":null,"status":"published","available":true,"submission_availability":{"admission_open":true,"has_approved_execution_path":true,"unavailable_reason":null,"execution_destination":{"context_id":"context-one","execution_location":"Research compute","disclosure":"Model and compute administrators can read submitted data."}}}})
         } else if line.starts_with("GET /api/v1/models/model/publications/release-one ") {
             self.candidate.clone()
         } else if line.starts_with("POST /api/v1/runs ") {

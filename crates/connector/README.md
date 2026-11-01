@@ -412,10 +412,21 @@ The optional private credential-reference file is:
 {"ssh":{"cluster-key":"/absolute/path/to/private/id_ed25519"}}
 ```
 
-Credentials remain on the connector host. OpenSSH must be installed and host keys
-must already be trusted in that account's `known_hosts`. The connector requires
+Credentials remain on the connector host. OpenSSH runs as the connector OS
+account. The verified remote host key must already be trusted in that account's
+`~/.ssh/known_hosts`. The connector requires
 batch authentication and strict host-key verification; it never automatically
 accepts an unknown host key.
+
+| Host and account | Files and responsibility |
+| --- | --- |
+| Connector host, connector OS account | Private credential-reference JSON and SSH private key; the verified remote host key in this account's `~/.ssh/known_hosts` |
+| Remote execution host, execution account | Matching public key in `~/.ssh/authorized_keys`, SSH-compatible shell, SFTP and the installed runner |
+| Remote execution host, approved execution roots | Immutable model release, per-run work roots and runner paths named by the registered context |
+
+Preparing the execution account's `known_hosts` does not prepare the connector's
+outbound trust store. Obtain the host fingerprint through your site's trusted
+route before testing strict SSH as the connector account.
 
 Add `--credentials-file credentials.json` to `run` for SSH contexts. Store this
 map and its private keys with mode 0600 under the connector account. Paths in the

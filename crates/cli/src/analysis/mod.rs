@@ -13,7 +13,13 @@ use crate::{
 use enumeray_client::{
     EnumerayClient, Error, PreparedRun, RunSubmission, UploadChecksum, UploadRequest, resource_path,
 };
-use enumeray_contracts::models::{self, ScientificDefinition};
+use enumeray_contracts::{
+    automation::{
+        AnalysisIdentity, AnalysisStage, AnalysisSummary, InputCollectionProgress,
+        InputFileProgress, SchemaVersion,
+    },
+    models::{self, ScientificDefinition},
+};
 use serde_json::{Value, json};
 use state::{
     AnalysisState, Binding, Directory, Saved, invalid, upload_path, validate_receipt, verify_source,
@@ -225,7 +231,7 @@ fn execute_inner(
             if let Some(run) = &run {
                 validate_run(&saved, run)?;
             }
-            let mut summary = summary(&directory, &saved, run);
+            let mut summary = summary(&directory, &saved, run)?;
             summary["collection"] = collection;
             summary["cancellation"] = cancellation;
             if matches!(
@@ -236,7 +242,7 @@ fn execute_inner(
                     "Local cancellation has no confirmed reply. Inspect the authoritative run state; if cancellation is still intended, explicitly repeat analysis cancel DIR for the same run. Status never retries cancellation."
                 );
             }
-            summary
+            validated_summary(summary)?
         }
         Analysis::Logs { page, .. } => {
             let id = accepted_id(&saved)?;
@@ -524,7 +530,7 @@ fn init_with_collections(
         }
     }
     directory.save(&saved)?;
-    Ok(local_summary(&directory, &saved, None))
+    local_summary(&directory, &saved, None)
 }
 
 fn read_inputs(path: &Path) -> Result<Value, Error> {
@@ -590,7 +596,7 @@ fn submit(
         if saved.receipt.is_none() {
             accept(client, directory, saved)?;
         }
-        return Ok(local_summary(directory, saved, None));
+        return local_summary(directory, saved, None);
     }
     let inputs = directory.inputs()?;
     models::validate_input_value(&inputs).map_err(|error| invalid(error.to_string()))?;
@@ -750,7 +756,7 @@ fn submit(
     saved.submission_started = true;
     directory.save(saved)?;
     accept(client, directory, saved)?;
-    Ok(local_summary(directory, saved, None))
+    local_summary(directory, saved, None)
 }
 
 fn accept(client: &EnumerayClient, directory: &Directory, saved: &mut Saved) -> Result<(), Error> {
@@ -862,32 +868,50 @@ fn add_identity(saved: &AnalysisState, value: &mut Value) {
     }
 }
 
-fn summary(directory: &Directory, saved: &AnalysisState, run: Option<Value>) -> Value {
+fn summary(
+    directory: &Directory,
+    saved: &AnalysisState,
+    run: Option<Value>,
+) -> Result<Value, Error> {
     match saved {
         AnalysisState::Local(local) => local_summary(directory, local, run),
         AnalysisState::Recovery(recovered) => recovery::summary(directory, recovered, run),
     }
 }
 
-fn add_local_identity(saved: &Saved, value: &mut Value) {
-    value["model_id"] = json!(saved.model_id);
-    value["publication_id"] = json!(saved.publication_id);
-    value["purpose"] = json!(saved.purpose);
-    value["grant_id"] = saved.publication["grant_id"].clone();
-    value["publication_delegation_id"] = json!(saved.publication_delegation_id);
-    value["context_id"] = saved.publication["context_id"].clone();
-    value["installation_status"] = saved.publication["status"].clone();
-    value["installation"] = saved.publication["descriptor"].clone();
+fn validated_summary(value: Value) -> Result<Value, Error> {
+    let summary: AnalysisSummary = serde_json::from_value(value)?;
+    summary.validate().map_err(invalid)?;
+    Ok(serde_json::to_value(summary)?)
 }
 
-fn local_summary(directory: &Directory, saved: &Saved, run: Option<Value>) -> Value {
-    let mut value = json!({"directory":directory.root,"model_id":saved.model_id,"publication_id":saved.publication_id,
-        "execution_location":saved.publication["execution_location"],"disclosure":saved.publication["disclosure"],
-        "stage":if saved.receipt.is_some() {"accepted"} else if saved.submission_started {"submission_uncertain"} else if saved.frozen_inputs.is_some() {"uploading"} else {"editable"},
-        "input_collections":saved.collection_bindings.keys().map(|name|json!({"slot":name,"completed":saved.collection_uploads.contains_key(name)})).collect::<Vec<_>>(),
-        "input_files":saved.bindings.iter().map(|(name, binding)| json!({"slot":name,"source":binding.operation.source,"size_bytes":binding.operation.request.expected_size_bytes,"media_type":binding.operation.request.media_type,"completed":saved.uploads.contains_key(name)})).collect::<Vec<_>>(),
-        "receipt":saved.receipt,"run":run,
-        "next_action":if saved.receipt.is_some() {"Observe with analysis status/wait DIR; collect terminal evidence with analysis collect DIR."} else if saved.submission_started {"Repeat analysis submit DIR to reconcile the exact saved submission."} else if saved.frozen_inputs.is_some() {"Repeat analysis submit DIR to resume the frozen operation."} else {"Edit inputs.json as needed, review the destination/disclosure, then explicitly authorize execution with analysis submit DIR."}});
-    add_local_identity(saved, &mut value);
-    value
+fn local_summary(directory: &Directory, saved: &Saved, run: Option<Value>) -> Result<Value, Error> {
+    let receipt = saved
+        .receipt
+        .as_ref()
+        .map(|receipt| serde_json::from_value(serde_json::to_value(receipt)?))
+        .transpose()?;
+    let summary = AnalysisSummary {
+        schema_version: SchemaVersion,
+        directory: directory.root.to_string_lossy().into_owned(),
+        identity: AnalysisIdentity {
+            model_id: saved.model_id.clone(), publication_id: saved.publication_id.clone(), purpose: saved.purpose,
+            grant_id: serde_json::from_value(saved.publication["grant_id"].clone())?,
+            publication_delegation_id: saved.publication_delegation_id,
+            context_id: serde_json::from_value(saved.publication["context_id"].clone())?,
+            installation_status: serde_json::from_value(saved.publication["status"].clone())?,
+            installation: serde_json::from_value(saved.publication["descriptor"].clone())?,
+            source_evidence: Default::default(),
+        },
+        stage: if saved.receipt.is_some() { AnalysisStage::Accepted } else if saved.submission_started { AnalysisStage::SubmissionUncertain } else if saved.frozen_inputs.is_some() { AnalysisStage::Uploading } else { AnalysisStage::Editable },
+        run_id: saved.receipt.as_ref().map(|r| r.run_id),
+        execution_location: serde_json::from_value(saved.publication["execution_location"].clone())?,
+        disclosure: serde_json::from_value(saved.publication["disclosure"].clone())?,
+        input_collections: saved.collection_bindings.keys().map(|name| InputCollectionProgress {slot:name.clone(),completed:saved.collection_uploads.contains_key(name)}).collect(),
+        input_files: saved.bindings.iter().map(|(name, binding)| InputFileProgress {slot:name.clone(),source:binding.operation.source.to_string_lossy().into_owned(),size_bytes:binding.operation.request.expected_size_bytes,media_type:binding.operation.request.media_type.clone(),completed:saved.uploads.contains_key(name)}).collect(),
+        receipt, run: run.map(serde_json::from_value).transpose()?, collection: None, cancellation: None,
+        next_action: if saved.receipt.is_some() {"Observe with analysis status/wait DIR; collect terminal evidence with analysis collect DIR."} else if saved.submission_started {"Repeat analysis submit DIR to reconcile the exact saved submission."} else if saved.frozen_inputs.is_some() {"Repeat analysis submit DIR to resume the frozen operation."} else {"Edit inputs.json as needed, review the destination/disclosure, then explicitly authorize execution with analysis submit DIR."}.into(),
+    };
+    summary.validate().map_err(invalid)?;
+    Ok(serde_json::to_value(summary)?)
 }

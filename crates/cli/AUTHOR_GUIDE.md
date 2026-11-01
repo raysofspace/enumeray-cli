@@ -521,7 +521,18 @@ initialization. Missing files alone do not prove registration never started. If
 original checkpoints or inspect/adopt that exact candidate with `--candidate`.
 Never create a fresh ID merely to resolve uncertain registration.
 
-`resume` registers the exact frozen candidate and waits for readiness. Repeat it after interruption or an uncertain reply; it never activates or refreshes the saved review guard. `--interval` defaults to 2 seconds and `--deadline` to 3600. Deadline exit 5 and interruption exit 130 retain the operation. Known blockers exit 1 with status on stdout; request/authentication errors go to stderr. `status` shows blockers, trial evidence and the next command. Release preflight uses `me:read`, `models:read`, `models:manage` and `connectors:read`.
+`resume` registers the exact frozen candidate and waits for readiness. Repeat it after interruption or an uncertain reply; it never activates or refreshes the saved review guard. `--interval` defaults to 2 seconds and `--deadline` to 3600. Deadline exit 5 and interruption exit 130 retain the operation. Known blockers exit 1 with status on stdout; request/authentication errors go to stderr. `status` shows blockers, trial evidence and the next command. The [CLI JSON contract](https://doc.enumeray.com/reference/cli-json/) defines its complete structured response and decision fields.
+
+All release initialization source modes require `me:read`, `models:read` and
+current model administration. `init --file` freezes local settings;
+`init --rollback-from` reads retained settings and allocates a fresh candidate;
+`init --candidate` adopts that exact candidate without registration. None of
+these initialization modes discovers compute grants. Before a fresh registration,
+`resume` additionally requires `connectors:read` to discover the current account's
+grant and `models:manage` to register. Delegated-candidate adoption/inspection
+needs no grant inventory; review/activation requires `models:manage` and available
+server-reported release authority. Trial submission has its separate
+run/artifact scopes and explicit review.
 
 Registration resolves your active context grant and derives the installation key. Exact retries preserve that captured grant. Identical model/context/settings and scientific installation identities can reuse a retained installation; changed installation settings or identities obtain a new key. A permanently revoked installation cannot be reused, including after grant reissue. Removed author fields (`grant_id`, `provider_binding_id`, duplicate installation claims) remain rejected.
 
