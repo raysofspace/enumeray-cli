@@ -19,18 +19,23 @@ const MAX_ENROLLMENT_BYTES: u64 = 64 * 1024;
 
 #[derive(clap::Args)]
 pub struct EnrollOptions {
+    /// Private durable identity directory; reuse after an uncertain reply to retain the same enrollment.
     #[arg(long)]
     directory: PathBuf,
+    /// API origin using HTTPS or loopback HTTP; non-loopback HTTP requires --allow-insecure-http.
     #[arg(long)]
     api_base_url: String,
+    /// Private file containing only the one-time enrollment token; alternative to --enrollment-file.
     #[arg(
         long,
         conflicts_with = "enrollment_file",
         required_unless_present = "enrollment_file"
     )]
     enrollment_token_file: Option<PathBuf>,
+    /// Private JSON document from connector create/enrollment; alternative to --enrollment-token-file.
     #[arg(long)]
     enrollment_file: Option<PathBuf>,
+    /// Permit enrollment credentials over HTTP to a trusted private network; HTTPS and loopback need no flag.
     #[arg(long)]
     allow_insecure_http: bool,
 }
