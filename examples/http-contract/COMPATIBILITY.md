@@ -43,6 +43,40 @@ Native JavaScript numbers cannot represent all scientific JSON values; use the
 lossless [collection identity implementation](COLLECTION_IDENTITY.md) when
 calculating digests, and preserve scientific numeric precision in other clients.
 
+### Reproduce the generated client
+
+Use Node 24+, Docker and TypeScript 6.0.3 for this optional tooling check. In a
+fresh directory, save the matching [published OpenAPI](https://doc.enumeray.com/openapi.json)
+as `openapi.json`, plus [generator-settings.json](generator-settings.json) and
+[generated-client-smoke.ts](generated-client-smoke.ts). The complete examples
+archive also supplies those two companion files in `examples/http-contract/`.
+
+The pinned generator requires form models to be retained and JSON null to be a
+native TypeScript primitive. The published settings capture those options;
+generation consumes the downloaded specification unchanged:
+
+```sh
+node --input-type=module <<'JS'
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+const settings = JSON.parse(readFileSync('generator-settings.json', 'utf8'));
+execFileSync('docker', ['run', '--rm', '-v', `${process.cwd()}:/work`,
+  settings.generator_image, 'generate', '-i', '/work/openapi.json',
+  '-g', settings.generator_name, '-o', '/work/sdk', ...settings.options],
+  { stdio: 'inherit' });
+JS
+printf '%s\n' '{"private":true,"type":"module"}' > package.json
+npx --yes --package typescript@6.0.3 tsc --strict --target ES2022 \
+  --lib ES2022,DOM --module NodeNext --moduleResolution NodeNext \
+  --outDir compiled sdk/index.ts generated-client-smoke.ts
+```
+
+Generation and compilation make no API calls. The smoke function requires the
+explicit disposable fixture described by its typed `SmokeContext`; the service
+acceptance suite supplies that fixture and exercises the eleven distinct methods.
+Normal integrations can import the generated SDK and follow the independently
+executable [HTTP workflows](HTTP_WORKFLOWS.md).
+
 ## CLI machine projections
 
 Analysis/release summaries and runtime errors now include `schema_version: 1`;
