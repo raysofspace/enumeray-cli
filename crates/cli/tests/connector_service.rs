@@ -1383,6 +1383,7 @@ async fn archived(scratch: &Scratch, count: usize) {
 #[tokio::test]
 async fn sequential_service_reuses_bounded_journal_across_lost_receipts_and_archive_interruption() {
     let scratch = Scratch::new();
+    install(&scratch, 0.0);
     let api = Api::start(4, false).await;
     {
         let mut peer = api.state.lock().unwrap();
@@ -1393,6 +1394,10 @@ async fn sequential_service_reuses_bounded_journal_across_lost_receipts_and_arch
         peer.pending_cap = Some(2);
     }
     let child = start(&scratch, &api, 3);
+    // Execution and lost-reply recovery precede archive convergence. A slow
+    // runner must not consume the archive phase's separate bounded deadline.
+    api.until(|peer| peer.jobs.len() == 4 && peer.jobs.values().all(|job| job.result.is_some()))
+        .await;
     archived(&scratch, 4).await;
     api.until(|p| p.heartbeat >= 2).await;
     assert_eq!(stop(child).await["drained"], true);
@@ -1403,13 +1408,15 @@ async fn sequential_service_reuses_bounded_journal_across_lost_receipts_and_arch
         assert_eq!(peer.sessions, 1);
     }
     // Recreate the crash window after an archive was synced but before removal.
-    let path = fs::read_dir(scratch.journal().join("archive"))
+    let archives: BTreeMap<_, _> = fs::read_dir(scratch.journal().join("archive"))
         .unwrap()
-        .next()
-        .unwrap()
-        .unwrap()
-        .path();
-    let archive: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    let archive: Value = serde_json::from_slice(archives.values().next().unwrap()).unwrap();
     assert_eq!(archive["version"], 1);
     let mut data = scratch.read();
     data["prepared_assignments"] = json!([archive["entry"]]);
@@ -1421,6 +1428,18 @@ async fn sequential_service_reuses_bounded_journal_across_lost_receipts_and_arch
     let child = start(&scratch, &api, 3);
     archived(&scratch, 4).await;
     stop(child).await;
+    for (path, bytes) in archives {
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+    assert_eq!(api.state.lock().unwrap().jobs.len(), 4);
+    assert_eq!(
+        fs::read_to_string(scratch.0.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        4,
+        "lost receipts and interrupted archiving must never repeat a model launch"
+    );
     assert!(
         !fs::read_to_string(scratch.0.join("service.log"))
             .unwrap()
