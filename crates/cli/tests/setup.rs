@@ -217,8 +217,19 @@ fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
         // unprivileged boundary even in root-run CI, without preparing its host.
         // Copy the binary because Cargo's target directory may be root-private.
         let executable = root.path().join("enumeray");
-        fs::copy(env!("CARGO_BIN_EXE_enumeray"), &executable).unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        // Keep the writable copy descriptor out of this threaded test process:
+        // a concurrently forked child could otherwise inherit it until exec
+        // and transiently prevent this executable from launching (ETXTBSY).
+        let copied = Command::new("/usr/bin/install")
+            .args(["-m", "755"])
+            .arg(env!("CARGO_BIN_EXE_enumeray"))
+            .arg(&executable)
+            .status()
+            .expect("stage the unprivileged executable in a separate process");
+        assert!(
+            copied.success(),
+            "failed to stage the unprivileged executable"
+        );
         for path in [root.path(), file.as_path()] {
             chown(path, Some(65534), Some(65534)).unwrap();
         }

@@ -133,7 +133,8 @@
         ]
       ],
       "tools": [
-        "cargo"
+        "cargo",
+        "install"
       ]
     },
     "connector-native": {
