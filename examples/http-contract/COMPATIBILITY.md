@@ -51,25 +51,27 @@ as `openapi.json`, plus [generator-settings.json](generator-settings.json) and
 archive also supplies those two companion files in `examples/http-contract/`.
 
 The pinned generator requires form models to be retained and JSON null to be a
-native TypeScript primitive. Its standard operation-name mapping maps the retained
+native TypeScript primitive. TypeScript 6 needs `--ignoreConfig` when compiling
+explicit source files from the generated SDK, which includes its own `tsconfig.json`.
+Its standard operation-name mapping maps the retained
 preflight ID `request` to `requestContextPreflight`, avoiding the transport method
 `BaseAPI.request`. The published settings capture those options;
 generation consumes the downloaded specification unchanged:
 
 ```sh
 node --input-type=module <<'JS'
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 const settings = JSON.parse(readFileSync('generator-settings.json', 'utf8'));
 execFileSync('docker', ['run', '--rm', '-v', `${process.cwd()}:/work`,
   settings.generator_image, 'generate', '-i', '/work/openapi.json',
   '-g', settings.generator_name, '-o', '/work/sdk', ...settings.options],
   { stdio: 'inherit' });
+writeFileSync('package.json', JSON.stringify({ private: true, type: 'module' }) + '\n');
+execFileSync('npx', ['--yes', '--package', `typescript@${settings.typescript_version}`,
+  'tsc', ...settings.typescript_options, 'sdk/index.ts', 'generated-client-smoke.ts'],
+  { stdio: 'inherit' });
 JS
-printf '%s\n' '{"private":true,"type":"module"}' > package.json
-npx --yes --package typescript@6.0.3 tsc --strict --target ES2022 \
-  --lib ES2022,DOM --module NodeNext --moduleResolution NodeNext \
-  --outDir compiled sdk/index.ts generated-client-smoke.ts
 ```
 
 Generation and compilation make no API calls. The smoke function requires the
