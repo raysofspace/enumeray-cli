@@ -122,7 +122,8 @@ def main():
             parser.error("Executable changed during packaging; rebuild and retry")
         shutil.copy2(root / "LICENSE", contents / "LICENSE")
         artifacts.write_json(contents / 'THIRD_PARTY_NOTICES.json', notices)
-        example_bundle.assemble_examples(root, contents, contents / binary, source_identity, version, release=args.release)
+        example_source = {**source_identity, 'content_sha256': content_sha256 or build_identity['source']['content_sha256']}
+        example_bundle.assemble_examples(root, contents, contents / binary, example_source, version, release=args.release)
         protocol = {
             "package": package, "binary": binary, "version": version,
             "target": args.target, "api": "v1", "connector_protocol": 1,

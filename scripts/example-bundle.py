@@ -49,7 +49,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='enumeray-examples-') as temporary:
         contents = Path(temporary) / name
         contents.mkdir()
-        manifest = bundle.assemble_examples(root, contents, binary, source, version, release=args.release)
+        example_source = {**source, 'content_sha256': artifacts.content_identity(root)['content_sha256']}
+        manifest = bundle.assemble_examples(root, contents, binary, example_source, version, release=args.release)
         if args.release and artifacts.source_identity(root, args.revision, require_clean=True) != source:
             raise ValueError('Public source identity changed during example assembly')
         digest = artifacts.archive_directory(contents, archive)

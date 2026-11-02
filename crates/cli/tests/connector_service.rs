@@ -57,6 +57,8 @@ struct Peer {
     claims: BTreeMap<String, Uuid>,
     claim_calls: Vec<String>,
     heartbeat: usize,
+    heartbeat_builds: Vec<Value>,
+    service_executable: Option<PathBuf>,
     sessions: usize,
     recoveries: usize,
     logs: BTreeMap<String, Value>,
@@ -103,6 +105,59 @@ struct Api {
     origin: String,
     state: Arc<Mutex<Peer>>,
     task: JoinHandle<()>,
+}
+
+#[tokio::test]
+async fn running_service_keeps_embedded_build_after_atomic_executable_replacement() {
+    let scratch = Scratch::new();
+    let installed = scratch.0.join("installed-enumeray");
+    fs::copy(env!("CARGO_BIN_EXE_enumeray"), &installed).unwrap();
+    // Warm and observe the copied real executable before the service deadline.
+    let initial = support::successful_json(
+        &support::run(Command::new(&installed).args(["--json", "compatibility", "inspect"])).await,
+    );
+    let mut embedded = initial.clone();
+    let fields = embedded.as_object_mut().unwrap();
+    assert!(fields.remove("executable_sha256").is_some());
+    assert!(fields.remove("observed_at").is_some());
+    let api = Api::start(0, true).await;
+    api.state.lock().unwrap().service_executable = Some(installed.clone());
+    let mut child = start(&scratch, &api, 1);
+    api.until(|peer| peer.heartbeat_builds.contains(&embedded))
+        .await;
+
+    // A small inspect-only fixture distinguishes the newly installed path from
+    // the old executable image. Rename replaces the directory entry atomically;
+    // it does not alter the inode mapped by the already-running idle service.
+    let mut replacement = initial.clone();
+    replacement["source"]["content_sha256"] = json!("0".repeat(64));
+    assert_ne!(replacement["source"], embedded["source"]);
+    let staged = scratch.0.join("replacement-enumeray");
+    fs::write(
+        &staged,
+        format!("#!/bin/sh\nprintf '%s\\n' '{}'\n", replacement),
+    )
+    .unwrap();
+    fs::set_permissions(&staged, fs::metadata(&installed).unwrap().permissions()).unwrap();
+    fs::rename(&staged, &installed).unwrap();
+    let before = api.state.lock().unwrap().heartbeat_builds.len();
+    let newly_installed = support::successful_json(
+        &support::run(Command::new(&installed).args(["--json", "compatibility", "inspect"])).await,
+    );
+    assert_eq!(newly_installed, replacement);
+    api.until(|peer| peer.heartbeat_builds.len() >= before + 2)
+        .await;
+    assert!(child.try_wait().unwrap().is_none());
+    assert_eq!(stop(child).await["drained"], true);
+    let peer = api.state.lock().unwrap();
+    assert!(peer.jobs.is_empty(), "idle identity test launched work");
+    assert!(peer.heartbeat_builds.len() >= before + 2);
+    assert!(peer.heartbeat_builds.iter().all(|build| build == &embedded));
+    assert!(
+        peer.heartbeat_builds
+            .iter()
+            .all(|build| build["source"] != newly_installed["source"])
+    );
 }
 
 #[tokio::test]
@@ -903,6 +958,7 @@ async fn handle(State(state): State<Arc<Mutex<Peer>>>, request: Request) -> Resp
     }
     if path == "/connector/v1/heartbeat" {
         peer.heartbeat += 1;
+        peer.heartbeat_builds.push(body["build_identity"].clone());
         return Json(json!({"connector_id":CONNECTOR,"received_at":"2026-09-29T12:00:00Z","heartbeat_interval_seconds":1,"stale_after_seconds":60})).into_response();
     }
     if path == "/connector/v1/sessions" || path == "/connector/v1/sessions/recover" {
@@ -1206,7 +1262,14 @@ fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development
     }
     api.state.lock().unwrap().installation_root = Some(scratch.0.clone());
     let stderr = fs::File::create(scratch.0.join("service.log")).unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_enumeray"));
+    let executable = api
+        .state
+        .lock()
+        .unwrap()
+        .service_executable
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_BIN_EXE_enumeray")));
+    let mut command = Command::new(executable);
     let relative = api.state.lock().unwrap().relative_host_paths;
     if relative {
         command.current_dir(&scratch.0);

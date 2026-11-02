@@ -136,6 +136,15 @@ pub(crate) fn execute(args: &Args, command: &Compatibility) -> Result<Completion
         "Matching development identities and protocol version 1 do not establish release qualification or alpha upgrade support.".into(),
         "Connector and runner reports identify embedded source/builds, not executable-byte attestation or journal ownership. Docs/examples inputs compare identity metadata, not all bundle bytes.".into(),
     ];
+    if options.connector.is_none() {
+        limits.push("No live connector was selected for comparison.".into());
+    }
+    if options.context.is_empty() {
+        limits.push("No runner/context observation was selected for comparison.".into());
+    }
+    if options.peer.is_empty() {
+        limits.push("No saved peer executable observation was selected for comparison.".into());
+    }
     if options.local_only {
         limits.push("Local/saved-snapshot scope: live API, connector ownership and remote runtime availability were not checked.".into());
     } else {
@@ -244,15 +253,7 @@ pub(crate) fn execute(args: &Args, command: &Compatibility) -> Result<Completion
                     json!("https://github.com/raysofspace/enumeray"),
                     docs["root"]["repository"].clone(),
                 );
-                if docs["root"]["clean"] == false {
-                    comparison(
-                        &mut checks,
-                        "docs",
-                        "service_content_sha256",
-                        selected["service_content_sha256"].clone(),
-                        docs["root"]["content_sha256"].clone(),
-                    );
-                } else {
+                if docs["root"]["clean"] != false {
                     comparison(
                         &mut checks,
                         "docs",
@@ -261,6 +262,13 @@ pub(crate) fn execute(args: &Args, command: &Compatibility) -> Result<Completion
                         docs["root"]["clean"].clone(),
                     );
                 }
+                observations::content(
+                    &mut checks,
+                    "docs",
+                    "service_content_sha256",
+                    &docs["root"],
+                    &selected["service_content_sha256"],
+                );
                 observations::source(&mut checks, "docs", &docs["public"], &selected);
                 if !docs["examples"]["source"].is_null() {
                     observations::source(

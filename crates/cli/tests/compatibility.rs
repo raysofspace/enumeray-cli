@@ -324,3 +324,216 @@ fn incomplete_or_unsupported_development_peers_and_wrong_docs_service_do_not_mat
         "mismatch",
     );
 }
+
+#[test]
+fn selected_content_fingerprint_constrains_clean_peers_at_the_same_revision() {
+    let d = TempDir::new().unwrap();
+    let local = inspect();
+    let selected = selection(&local);
+    let path = d.path().join("clean-peer.json");
+    let mut peer = local.clone();
+    peer["source"]["clean"] = json!(true);
+    peer["source"]["content_sha256"] =
+        json!(if local["source"]["content_sha256"] == "0".repeat(64) {
+            "1".repeat(64)
+        } else {
+            "0".repeat(64)
+        });
+    write(&path, &peer);
+    let receipt = failed(
+        check(d.path(), &selected, "old-clean-peer")
+            .arg("--local-only")
+            .arg("--peer")
+            .arg(&path)
+            .output()
+            .unwrap(),
+        "mismatch",
+    );
+    assert!(
+        receipt["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["component"] == "peer_0"
+                && check["field"] == "development_content_sha256"
+                && check["status"] == "mismatch")
+    );
+    peer["source"]["content_sha256"] = selected["public_content_sha256"].clone();
+    write(&path, &peer);
+    assert_eq!(
+        parsed(
+            check(d.path(), &selected, "matching-clean-peer")
+                .arg("--local-only")
+                .arg("--peer")
+                .arg(&path)
+                .output()
+                .unwrap()
+        )["status"],
+        "match"
+    );
+    let mut legacy_examples = peer["source"].clone();
+    legacy_examples
+        .as_object_mut()
+        .unwrap()
+        .remove("content_sha256");
+    let examples_path = d.path().join("legacy-examples.json");
+    write(&examples_path, &json!({"source":legacy_examples}));
+    let receipt = failed(
+        check(d.path(), &selected, "legacy-examples-content")
+            .arg("--local-only")
+            .arg("--examples")
+            .arg(&examples_path)
+            .output()
+            .unwrap(),
+        "missing_evidence",
+    );
+    assert!(
+        receipt["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["component"] == "examples"
+                && check["field"] == "development_content_sha256"
+                && check["status"] == "missing_evidence")
+    );
+    let mut unspecified = selected.clone();
+    unspecified
+        .as_object_mut()
+        .unwrap()
+        .remove("public_content_sha256");
+    peer["source"]["clean"] = json!(false);
+    write(&path, &peer);
+    let receipt = failed(
+        check(
+            d.path(),
+            &unspecified,
+            "dirty-peer-without-selected-content",
+        )
+        .arg("--local-only")
+        .arg("--peer")
+        .arg(&path)
+        .output()
+        .unwrap(),
+        "missing_evidence",
+    );
+    assert!(
+        receipt["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["component"] == "peer_0"
+                && check["field"] == "development_content_sha256"
+                && check["status"] == "missing_evidence")
+    );
+}
+
+#[test]
+fn selected_service_content_constrains_clean_api_and_docs_at_the_same_revision() {
+    let d = TempDir::new().unwrap();
+    let local = inspect();
+    let mut selected = selection(&local);
+    selected["service_content_sha256"] = json!("d".repeat(64));
+    for (name, observed, clean, status) in [
+        ("old-clean", "e".repeat(64), true, "mismatch"),
+        ("matching-clean", "d".repeat(64), true, "match"),
+        ("matching-dirty", "d".repeat(64), false, "match"),
+    ] {
+        let root = json!({"repository":"https://github.com/raysofspace/enumeray","revision":selected["service_revision"],"clean":clean,"content_sha256":observed});
+        let api = json!({"x-enumeray-build":{"schema_version":1,"version":local["version"],"service_source":root,"public_source":local["source"],"public_revision":selected["public_revision"],"baseline":selected["baseline"]}});
+        let (origin, server) = server(vec![api]);
+        let result = check(d.path(), &selected, &format!("api-{name}"))
+            .arg("--api")
+            .arg(origin)
+            .output()
+            .unwrap();
+        let receipt = if status == "match" {
+            parsed(result)
+        } else {
+            failed(result, status)
+        };
+        assert_eq!(receipt["status"], status);
+        assert!(
+            receipt["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|check| check["component"] == "service"
+                    && check["field"] == "development_content_sha256"
+                    && check["status"] == status)
+        );
+        assert_eq!(server.join().unwrap().len(), 1);
+        let path = d.path().join(format!("docs-{name}.json"));
+        write(
+            &path,
+            &json!({"schema_version":1,"root":root,"public":local["source"]}),
+        );
+        let result = check(d.path(), &selected, &format!("docs-{name}"))
+            .arg("--local-only")
+            .arg("--docs")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let receipt = if status == "match" {
+            parsed(result)
+        } else {
+            failed(result, status)
+        };
+        assert_eq!(receipt["status"], status);
+        assert!(
+            receipt["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|check| check["component"] == "docs"
+                    && check["field"] == "service_content_sha256"
+                    && check["status"] == status)
+        );
+    }
+    selected
+        .as_object_mut()
+        .unwrap()
+        .remove("service_content_sha256");
+    let root = json!({"repository":"https://github.com/raysofspace/enumeray","revision":selected["service_revision"],"clean":false,"content_sha256":"d".repeat(64)});
+    let api = json!({"x-enumeray-build":{"schema_version":1,"version":local["version"],"service_source":root,"public_source":local["source"],"public_revision":selected["public_revision"],"baseline":selected["baseline"]}});
+    let (origin, server) = server(vec![api]);
+    let receipt = failed(
+        check(
+            d.path(),
+            &selected,
+            "dirty-api-without-selected-service-content",
+        )
+        .arg("--api")
+        .arg(origin)
+        .output()
+        .unwrap(),
+        "missing_evidence",
+    );
+    assert!(
+        receipt["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| check["component"] == "service"
+                && check["field"] == "development_content_sha256"
+                && check["status"] == "missing_evidence")
+    );
+    assert_eq!(server.join().unwrap().len(), 1);
+    let path = d.path().join("dirty-unselected-docs.json");
+    write(
+        &path,
+        &json!({"schema_version":1,"root":root,"public":local["source"]}),
+    );
+    failed(
+        check(
+            d.path(),
+            &selected,
+            "dirty-without-selected-service-content",
+        )
+        .arg("--local-only")
+        .arg("--docs")
+        .arg(path)
+        .output()
+        .unwrap(),
+        "missing_evidence",
+    );
+}

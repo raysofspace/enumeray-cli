@@ -12,6 +12,27 @@ use serde_json::{Value, json};
 use std::{process::Command, time::Duration};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+/// An explicitly selected content identity constrains clean and dirty observations.
+/// Dirty observations additionally require such a selection; the clean flag cannot
+/// substitute for the bytes selected by the caller.
+pub(super) fn content(
+    checks: &mut Vec<CompatibilityCheck>,
+    component: &str,
+    field: &str,
+    observed: &Value,
+    selected: &Value,
+) {
+    if !selected.is_null() || observed["clean"] == false {
+        comparison(
+            checks,
+            component,
+            field,
+            selected.clone(),
+            observed["content_sha256"].clone(),
+        );
+    }
+}
+
 pub(super) fn source(
     checks: &mut Vec<CompatibilityCheck>,
     component: &str,
@@ -80,15 +101,14 @@ pub(super) fn source(
                 observed["clean"].clone(),
             );
         }
-    } else if observed["clean"] == false {
-        comparison(
-            checks,
-            component,
-            "development_content_sha256",
-            selected["public_content_sha256"].clone(),
-            observed["content_sha256"].clone(),
-        );
     }
+    content(
+        checks,
+        component,
+        "development_content_sha256",
+        observed,
+        &selected["public_content_sha256"],
+    );
 }
 
 pub(super) fn build(
@@ -478,15 +498,7 @@ pub(super) fn service(
                 &identity["public_source"],
                 selected,
             );
-            if identity["service_source"]["clean"] == false {
-                comparison(
-                    checks,
-                    "service",
-                    "development_content_sha256",
-                    selected["service_content_sha256"].clone(),
-                    identity["service_source"]["content_sha256"].clone(),
-                );
-            } else {
+            if identity["service_source"]["clean"] != false {
                 comparison(
                     checks,
                     "service",
@@ -495,6 +507,13 @@ pub(super) fn service(
                     identity["service_source"]["clean"].clone(),
                 );
             }
+            content(
+                checks,
+                "service",
+                "development_content_sha256",
+                &identity["service_source"],
+                &selected["service_content_sha256"],
+            );
         }
         Err(_) => unavailable(
             checks,
