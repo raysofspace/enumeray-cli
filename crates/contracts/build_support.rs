@@ -99,6 +99,13 @@ fn archive_paths(root: &Path, path: &Path, paths: &mut BTreeSet<String>) {
 
 pub fn source_identity(root: &Path, repository: &str) -> Value {
     let root = root.canonicalize().expect("source root");
+    let own_git = text(&root, &["rev-parse", "--show-toplevel"])
+        .is_some_and(|value| Path::new(&value) == root);
+    if !own_git {
+        for name in ["release-source.json", "release-source-files.json"] {
+            println!("cargo:rerun-if-changed={}", root.join(name).display());
+        }
+    }
     // Watch directories as well as files so newly added source files invalidate Cargo's cache.
     for name in [
         "Cargo.toml",
@@ -119,8 +126,6 @@ pub fn source_identity(root: &Path, repository: &str) -> Value {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }
-    let own_git = text(&root, &["rev-parse", "--show-toplevel"])
-        .is_some_and(|value| Path::new(&value) == root);
     let (revision, tree, clean, paths) = if own_git {
         // Linked worktrees' .git file is stable; watch the actual ref and index too.
         for name in ["HEAD", "index"] {

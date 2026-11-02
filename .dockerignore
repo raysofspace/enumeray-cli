@@ -4,3 +4,13 @@ dist
 **/__pycache__
 **/*.pyc
 .DS_Store
+
+# Local credentials/caches are never source build inputs.
+.env*
+**/.env*
+**/*.token
+**/*.pyc
+.DS_Store
+**/.DS_Store
+.venv
+**/.venv

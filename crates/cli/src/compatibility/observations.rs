@@ -61,13 +61,25 @@ pub(super) fn source(
             "Build cleanliness is unavailable.",
         );
     } else if selected.get("artifacts").is_some() {
-        comparison(
-            checks,
-            component,
-            "source_clean",
-            json!(true),
-            observed["clean"].clone(),
-        );
+        if ["revision", "tree", "lockfile_sha256"]
+            .iter()
+            .any(|field| observed[field].is_null())
+        {
+            unavailable(
+                checks,
+                component,
+                "source_clean",
+                "Unknown source identity cannot establish release-source cleanliness.",
+            );
+        } else {
+            comparison(
+                checks,
+                component,
+                "source_clean",
+                json!(true),
+                observed["clean"].clone(),
+            );
+        }
     } else if observed["clean"] == false {
         comparison(
             checks,
@@ -213,16 +225,27 @@ pub(super) fn build(
             object.remove("observed_at");
             object.remove("executable_sha256");
         }
-        comparison(
-            checks,
-            component,
-            "qualified_build_identity",
-            expected.clone(),
-            serde_json::from_value::<enumeray_contracts::compatibility::BuildIdentity>(identity)
-                .ok()
-                .and_then(|v| serde_json::to_value(v).ok())
-                .unwrap_or(Value::Null),
-        );
+        let complete = parsed.as_ref().is_ok_and(|value| {
+            value.source.revision.is_some()
+                && value.source.tree.is_some()
+                && value.source.lockfile_sha256.is_some()
+        });
+        if complete {
+            comparison(
+                checks,
+                component,
+                "qualified_build_identity",
+                expected.clone(),
+                identity,
+            );
+        } else {
+            unavailable(
+                checks,
+                component,
+                "qualified_build_identity",
+                "Required compiled source facts are unavailable; equality with a release build was not established.",
+            );
+        }
         if !local {
             comparison(
                 checks,
@@ -553,4 +576,31 @@ pub(super) fn service(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn signed_expected_build_keeps_unknown_source_facts_unavailable() {
+        let original =
+            serde_json::to_value(enumeray_contracts::compatibility::build_identity()).unwrap();
+        let target = original["target"].as_str().unwrap();
+        let selected = json!({"version":original["version"],"public_revision":original["source"]["revision"],"source":original["source"],"artifacts":{target:{"build_identity":original}}});
+        let mut unknown = original.clone();
+        unknown["source"]["revision"] = Value::Null;
+        unknown["source"]["tree"] = Value::Null;
+        unknown["source"]["clean"] = json!(false);
+        let mut checks = Vec::new();
+        build(&mut checks, "runner", &unknown, &selected, true);
+        assert!(
+            checks.iter().any(|c| c.status
+                == enumeray_contracts::installation::CompatibilityStatus::MissingEvidence)
+        );
+        assert!(
+            checks.iter().all(
+                |c| c.status != enumeray_contracts::installation::CompatibilityStatus::Mismatch
+            )
+        );
+    }
 }
