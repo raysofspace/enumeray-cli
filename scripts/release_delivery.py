@@ -119,7 +119,29 @@ class GitHub:
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def release(self, tag):
-        return self.api('releases/tags/' + quote(tag, safe=''), missing=True)
+        # The tag endpoint returns published releases only. Authenticated release
+        # listings include drafts; inspect every page so a second exact-tag
+        # record cannot silently select a different candidate.
+        selected, page = None, 1
+        while True:
+            rows = self.api('releases?per_page=100&page=%d' % page)
+            if not isinstance(rows, list):
+                raise ValueError('Invalid GitHub release listing')
+            for entry in rows:
+                if not isinstance(entry, dict) or not isinstance(entry.get('tag_name'), str):
+                    raise ValueError('Invalid GitHub release listing')
+                if entry['tag_name'] != tag:
+                    continue
+                if (type(entry.get('id')) is not int or entry['id'] <= 0
+                        or type(entry.get('draft')) is not bool
+                        or type(entry.get('prerelease')) is not bool):
+                    raise ValueError('Invalid GitHub release identity')
+                if selected is not None:
+                    raise ValueError('Multiple GitHub releases name the exact tag: ' + tag)
+                selected = entry
+            if len(rows) < 100:
+                return selected
+            page += 1
 
     def assets(self, release):
         result, page = [], 1
@@ -156,12 +178,18 @@ class GitHub:
 
     def ensure_release(self, identity):
         tag, revision = identity['tag'], identity['public_revision']
+        # Ref creation is a write too: resolve ambiguity and metadata conflicts
+        # before creating either a tag or a release.
+        release = self.release(tag)
+        if release is not None:
+            validate_release(release, identity['version'])
         existing = self.revision(tag)
         if existing is None:
+            if release is not None and not release['draft']:
+                raise ValueError('Published release lost its source tag')
             self.api('git/refs', 'POST', {'ref': 'refs/tags/' + tag, 'sha': revision})
         elif existing != revision:
             raise ValueError('Release version already names different public source')
-        release = self.release(tag)
         if release is None:
             prerelease = artifacts_policy.is_prerelease(identity['version'])
             release = self.api('releases', 'POST', {'tag_name': tag, 'target_commitish': revision,
@@ -325,10 +353,11 @@ def validate_manifest(manifest, directory=None, identity=None, require_signature
     return manifest
 
 
-def fetch_candidate(client, tag, directory, run=subprocess.run, published=False):
+def fetch_candidate(client, tag, directory, run=subprocess.run, published=False, release=None):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    release = client.release(tag)
+    if release is None:
+        release = client.release(tag)
     if not release:
         raise PendingCandidate('Candidate draft is not available yet')
     if published and release.get('draft'):
@@ -513,7 +542,11 @@ def stage(client, identity, artifacts, workflow_revision, evidence, run=subproce
 
 def publish(client, identity, directory, evidence, run=subprocess.run):
     verify_evidence(identity, evidence, 'publish', run)
-    manifest = fetch_candidate(client, identity['tag'], directory, run)
+    release = client.release(identity['tag'])
+    if not release:
+        raise PendingCandidate('Candidate draft is not available yet')
+    release = dict(release)
+    manifest = fetch_candidate(client, identity['tag'], directory, run, release=release)
     validate_manifest(manifest, identity=identity)
     if sha256(Path(directory) / MANIFEST) != identity['manifest_sha256']:
         raise ValueError('Publication authorization names a different candidate manifest')
@@ -521,8 +554,12 @@ def publish(client, identity, directory, evidence, run=subprocess.run):
     for field in ('service_revision', 'public_revision', 'version', 'baseline'):
         if prepare[field] != identity[field]:
             raise ValueError('Preparation and publication identities differ')
-    release = client.release(identity['tag'])
-    validate_release(release, identity['version'])
+    current = client.release(identity['tag'])
+    if not current:
+        raise ValueError('GitHub release disappeared during verification')
+    validate_release(current, identity['version'])
+    if current['id'] != release['id'] or current['draft'] != release['draft']:
+        raise ValueError('GitHub release identity changed during verification')
     if release['draft']:
         upload_service_evidence(client, release, evidence, 'publish', run)
     else:
