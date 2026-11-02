@@ -100,6 +100,26 @@ class MemoryGitHub:
 
 
 class ManifestTests(unittest.TestCase):
+    def test_publish_refuses_replacement_or_disappearing_release_without_writes(self):
+        for changed in ({'id': 2}, {'draft': False}, None):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
+                root = Path(temporary)
+                record, _ = artifacts(root, '0.1.0-alpha.1', 'candidate')
+                publication, _ = identity('publish', '0.1.0-alpha.1', 'candidate')
+                publication['manifest_sha256'] = delivery.sha256(root / delivery.MANIFEST)
+                receipt = root / 'service-publish.json'
+                receipt.write_text(json.dumps({key: value for key, value in publication.items() if key != 'receipt_sha256'}))
+                publication['receipt_sha256'] = delivery.sha256(receipt)
+                (root / 'service-publish.sigstore.json').write_text('{}')
+                client = MemoryGitHub(root)
+                original = copy.deepcopy(client.record)
+                current = None if changed is None else {**original, **changed}
+                client.release = mock.Mock(side_effect=[original, current])
+                with self.assertRaisesRegex(ValueError, 'release (identity changed|disappeared)'):
+                    delivery.publish(client, publication, Path(destination), root, run=mock.Mock())
+                self.assertEqual(client.calls, [])
+                self.assertEqual(client.release.call_count, 2)
+
     def test_metadata_changed_after_fetch_cannot_be_published_or_repaired_silently(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as destination:
             root = Path(temporary)
@@ -354,6 +374,125 @@ class ManifestTests(unittest.TestCase):
 
 
 class GitHubTests(unittest.TestCase):
+    @staticmethod
+    def release_record(identifier=1, tag='v0.1.0-alpha.1', draft=True):
+        return {'id': identifier, 'tag_name': tag, 'draft': draft, 'prerelease': True}
+
+    @staticmethod
+    def listing_client(*pages):
+        return delivery.GitHub(run=mock.Mock(side_effect=[
+            subprocess.CompletedProcess([], 0, json.dumps(page), '') for page in pages]))
+
+    def test_release_listing_finds_exact_draft_on_later_page(self):
+        unrelated = [self.release_record(index + 100, 'vother-' + str(index)) for index in range(100)]
+        expected = self.release_record(7)
+        client = self.listing_client(unrelated, [self.release_record(8, 'v0.1.0-alpha.10'),
+                                                 self.release_record(9, 'V0.1.0-alpha.1'), expected])
+        self.assertEqual(client.release(expected['tag_name']), expected)
+        self.assertEqual([call.args[0] for call in client.run.call_args_list], [
+            ['gh', 'api', client.prefix + '/releases?per_page=100&page=1', '--method', 'GET'],
+            ['gh', 'api', client.prefix + '/releases?per_page=100&page=2', '--method', 'GET']])
+
+    def test_release_listing_finds_published_release_or_no_exact_match(self):
+        expected = self.release_record(draft=False)
+        client = self.listing_client([expected])
+        self.assertEqual(client.release(expected['tag_name']), expected)
+        for rows in ([], [self.release_record(tag='v0.1.0-alpha.10')]):
+            with self.subTest(rows=rows):
+                self.assertIsNone(self.listing_client(rows).release(expected['tag_name']))
+
+    def test_release_listing_scans_past_match_and_rejects_all_duplicate_policies(self):
+        original = self.release_record()
+        unrelated = [self.release_record(index + 100, 'vother-' + str(index)) for index in range(99)]
+        for duplicate in (original, self.release_record(2), self.release_record(2, draft=False)):
+            with self.subTest(duplicate=duplicate):
+                client = self.listing_client([original, *unrelated], [duplicate])
+                with self.assertRaisesRegex(ValueError, 'Multiple GitHub releases'):
+                    client.release(original['tag_name'])
+                self.assertEqual(client.run.call_count, 2)
+
+    def test_release_listing_rejects_malformed_responses_and_selected_identity(self):
+        original = self.release_record()
+        invalid = [None, {}, [None], [{}], [{**original, 'id': True}],
+                   [{**original, 'id': 0}], [{**original, 'id': '1'}],
+                   [{**original, 'draft': 'true'}], [{**original, 'prerelease': None}]]
+        for rows in invalid:
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, 'Invalid GitHub release'):
+                self.listing_client(rows).release(original['tag_name'])
+
+    def test_release_listing_api_errors_are_hard_failures_before_any_mutation(self):
+        record, _ = identity(version='0.1.0-alpha.1', status='candidate')
+        for status in (401, 403, 404, 429, 500):
+            with self.subTest(status=status):
+                client = delivery.GitHub(run=mock.Mock(return_value=
+                    subprocess.CompletedProcess([], 1, '', 'gh: request failed (HTTP %d)' % status)))
+                client.revision = mock.Mock()
+                with self.assertRaisesRegex(ValueError, 'GitHub release request failed'):
+                    client.ensure_release(record)
+                client.revision.assert_not_called()
+                self.assertEqual(client.run.call_count, 1)
+                self.assertEqual(client.run.call_args.args[0][-2:], ['--method', 'GET'])
+
+    def test_release_listing_late_api_error_cannot_hide_behind_an_earlier_match(self):
+        rows = [self.release_record(), *[self.release_record(index + 100, 'vother-' + str(index))
+                                        for index in range(99)]]
+        client = delivery.GitHub(run=mock.Mock(side_effect=[
+            subprocess.CompletedProcess([], 0, json.dumps(rows), ''),
+            subprocess.CompletedProcess([], 1, '', 'gh: request failed (HTTP 429)')]))
+        with self.assertRaisesRegex(ValueError, 'GitHub release request failed'):
+            client.release(rows[0]['tag_name'])
+
+    def test_ensure_release_reuses_unique_draft_and_rejects_ambiguity_before_ref_writes(self):
+        record, _ = identity(version='0.1.0-alpha.1', status='candidate')
+        expected = self.release_record(7)
+        client = self.listing_client([expected])
+        client.revision = mock.Mock(return_value=record['public_revision'])
+        self.assertEqual(client.ensure_release(record), expected)
+        self.assertEqual(client.run.call_count, 1)
+        client = self.listing_client([expected, self.release_record(8)])
+        client.revision = mock.Mock(return_value=None)
+        with self.assertRaisesRegex(ValueError, 'Multiple GitHub releases'):
+            client.ensure_release(record)
+        client.revision.assert_not_called()
+        self.assertEqual(client.run.call_count, 1)
+
+    def test_ensure_release_rejects_metadata_or_source_conflicts_without_writes(self):
+        record, _ = identity(version='0.1.0-alpha.1', status='candidate')
+        for changed, revision, message in (({'prerelease': False}, None, 'release metadata'),
+                                           ({}, 'f' * 40, 'different public source'),
+                                           ({'draft': False}, None, 'lost its source tag')):
+            with self.subTest(changed=changed, revision=revision):
+                client = self.listing_client([{**self.release_record(), **changed}])
+                client.revision = mock.Mock(return_value=revision)
+                with self.assertRaisesRegex(ValueError, message):
+                    client.ensure_release(record)
+                self.assertEqual(client.run.call_count, 1)
+
+    def test_listing_distinguishes_absent_candidate_from_failed_api(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            client = self.listing_client([])
+            with self.assertRaises(delivery.PendingCandidate):
+                delivery.fetch_candidate(client, 'v0.1.0-alpha.1', Path(temporary), run=mock.Mock())
+            client = delivery.GitHub(run=mock.Mock(return_value=
+                subprocess.CompletedProcess([], 1, '', 'gh: request failed (HTTP 403)')))
+            with self.assertRaises(ValueError) as raised:
+                delivery.fetch_candidate(client, 'v0.1.0-alpha.1', Path(temporary), run=mock.Mock())
+            self.assertNotIsInstance(raised.exception, delivery.PendingCandidate)
+
+    def test_completed_draft_discovery_reconciles_stage_without_rebuild_or_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            record, manifest = artifacts(root, '0.1.0-alpha.1', 'candidate')
+            memory = MemoryGitHub(root)
+            client = self.listing_client([memory.record])
+            client.revision, client.assets, client.download = memory.revision, memory.assets, memory.download
+            client.ensure_release = mock.Mock(side_effect=AssertionError('Completed draft must be reused'))
+            verifier = mock.Mock()
+            self.assertEqual(delivery.stage(client, record, root, 'f' * 40, root, run=verifier), manifest)
+            client.ensure_release.assert_not_called()
+            self.assertEqual(client.run.call_count, 1)
+            self.assertTrue(all(call.args[0][:2] == ['cosign', 'verify-blob'] for call in verifier.call_args_list))
+
     def test_alpha_draft_is_explicitly_prerelease_and_never_latest(self):
         client = delivery.GitHub()
         record, _ = identity(version='0.1.0-alpha.1', status='candidate')
