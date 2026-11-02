@@ -100,6 +100,6 @@ under the existing checks; connector-only operational rights do not grant those
 reads. Publication and execution still require their explicit authorized steps.
 
 Every previously unique operation ID is retained. Generator-specific method-name
-mappings do not change the downloadable wire contract. The reference-generation
-check compiles the complete SDK, including multipart form models; no specification
+mappings do not change the downloadable wire contract. The matching-service SDK
+acceptance check compiles the complete SDK, including multipart form models; no specification
 repair or generated-source patch is applied.
