@@ -3,6 +3,7 @@
 pub mod assignments;
 pub mod automation;
 pub mod collections;
+pub mod compatibility;
 pub mod execution;
 pub mod logs;
 pub mod management;
@@ -12,3 +13,5 @@ pub mod numeric;
 pub mod runs;
 pub mod setup;
 pub mod transfers;
+
+pub mod installation;

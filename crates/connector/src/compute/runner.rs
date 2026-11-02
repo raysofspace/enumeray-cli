@@ -16,6 +16,18 @@ use std::{
 };
 
 pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
+    // Payload fences create files; validate retained identity before taking one.
+    if !matches!(
+        &operation,
+        Operation::Identity(_)
+            | Operation::Preflight(_)
+            | Operation::Validate(_)
+            | Operation::Prepare(_)
+            | Operation::ProtectInstallations(_)
+    ) {
+        load_job(directory)?;
+        local_process::check_retained_worker_identity(directory)?;
+    }
     let _payload = if !matches!(
         &operation,
         Operation::Identity(_)
@@ -30,7 +42,9 @@ pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
         None
     };
     match operation {
-        Operation::Identity(_) => Ok(json!({"status":"ready", "execution_uid":execution_uid()?})),
+        Operation::Identity(_) => Ok(
+            json!({"status":"ready", "execution_uid":execution_uid()?, "build_identity":enumeray_contracts::compatibility::build_identity()}),
+        ),
         Operation::Preflight(request) => crate::preflight::runner(directory, request),
         Operation::ProtectInstallations(request) => {
             if request.references.len() > 128 {
@@ -171,6 +185,7 @@ pub(crate) fn run(operation: Operation, directory: &Path) -> Result<Value> {
 
 fn load_job(directory: &Path) -> Result<ComputeJob> {
     let job: ComputeJob = local_process::read_record(&directory.join("remote.json"))?;
+    job.check_identity()?;
     if job.version != 1 || directory != Path::new(&remote_directory(&job.execution, job.intent)) {
         return Err(failure("remote directory mismatch"));
     }
@@ -206,6 +221,11 @@ fn validate(directory: &Path, validation: ValidationRequest) -> Result<Value> {
 }
 
 fn prepare(directory: &Path, job: ComputeJob) -> Result<Value> {
+    job.check_identity()?;
+    local_process::check_retained_worker_identity(directory)?;
+    if directory.join("remote.json").exists() {
+        load_job(directory)?;
+    }
     if job.version != 1 || directory != Path::new(&remote_directory(&job.execution, job.intent)) {
         return Err(failure("remote job path conflicts with launch identity"));
     }
@@ -917,4 +937,114 @@ fn submission_lock(directory: &Path) -> Result<fs::File> {
     file.lock()
         .map_err(|_| failure("cannot acquire submission ownership"))?;
     Ok(file)
+}
+
+#[cfg(all(test, unix))]
+mod identity_tests {
+    use super::*;
+    use crate::compute::ExecutionSnapshot;
+    use crate::drivers::CancellationScope;
+    use crate::protocol::CancellationRequest;
+    use enumeray_contracts::execution::DriverConfig;
+    use uuid::Uuid;
+
+    #[test]
+    fn incompatible_remote_state_refuses_before_payload_locks_prepare_cancel_or_cleanup() {
+        for marker in [None, Some("sha256:another-development-source".to_owned())] {
+            let root =
+                std::env::temp_dir().join(format!("enumeray-runner-state-{}", Uuid::new_v4()));
+            local_process::create_private_directory(&root).unwrap();
+            let descriptor: Value = serde_json::from_str(include_str!(
+                "../../../../examples/local-scalar-installation.json"
+            ))
+            .unwrap();
+            let intent = Uuid::new_v4();
+            let directory = root.join(intent.to_string());
+            local_process::create_private_directory(&directory).unwrap();
+            let job = ComputeJob {
+                created_with: marker,
+                version: 1,
+                log_policy: Default::default(),
+                intent,
+                assignment: json!({}),
+                execution: ExecutionSnapshot {
+                    execution_mode: Default::default(),
+                    installation: local_process::Installation {
+                        provider_binding_id: "test".into(),
+                        installation: serde_json::from_value(descriptor["installation"].clone())
+                            .unwrap(),
+                        argv: vec!["/unused/model".into()],
+                        environment: Default::default(),
+                        file_digests: Default::default(),
+                    },
+                    work_root: root.to_string_lossy().into_owned(),
+                    driver: DriverConfig::Process { scratch: None },
+                    slurm_script: None,
+                },
+                input_digests: Default::default(),
+            };
+            local_process::write_record(&directory, "remote.json", &job).unwrap();
+            let original = fs::read(directory.join("remote.json")).unwrap();
+            let cleanup = crate::cleanup::Request {
+                terminal_result: json!({}),
+                live_logs_delivered: true,
+                archive_status: None,
+                protection: None,
+            };
+            for operation in [
+                Operation::Start(None),
+                Operation::Status(None),
+                Operation::RequestCancel(CancellationRequest {
+                    scope: CancellationScope::Running,
+                }),
+                Operation::CleanupRun(cleanup),
+            ] {
+                let error = run(operation, &directory).unwrap_err();
+                assert!(error.to_string().contains("candidate state identity"));
+            }
+            // Even a matching new prepare must not overwrite or lock the retained
+            // record belonging to the incompatible predecessor.
+            let mut incoming: ComputeJob = serde_json::from_slice(&original).unwrap();
+            incoming.created_with = crate::state_identity::current();
+            assert!(run(Operation::Prepare(incoming), &directory).is_err());
+            assert_eq!(fs::read(directory.join("remote.json")).unwrap(), original);
+            assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+            let identity = run(Operation::Identity(None), &directory).unwrap();
+            assert_eq!(
+                identity["build_identity"],
+                json!(enumeray_contracts::compatibility::build_identity())
+            );
+            // A mixed restoration must also refuse a foreign worker snapshot
+            // even when its surrounding remote record matches this candidate.
+            let mut current: ComputeJob = serde_json::from_slice(&original).unwrap();
+            current.created_with = crate::state_identity::current();
+            fs::write(
+                directory.join("remote.json"),
+                serde_json::to_vec(&current).unwrap(),
+            )
+            .unwrap();
+            let worker = json!({"version":1,"created_with":job.created_with,"launch_intent_id":intent,
+                "assignment":job.assignment,"installation":job.execution.installation});
+            local_process::write_record(&directory, "job.json", &worker).unwrap();
+            let worker_bytes = fs::read(directory.join("job.json")).unwrap();
+            for (action, payload) in [
+                ("start", Value::Null),
+                ("request-cancel", json!({"scope":"running"})),
+                (
+                    "cleanup-run",
+                    json!({"terminal_result":{},"live_logs_delivered":true,"archive_status":null}),
+                ),
+            ] {
+                let request =
+                    serde_json::to_vec(&json!({"version":1,"action":action,"payload":payload}))
+                        .unwrap();
+                let error = crate::protocol::run(action, &directory, Some(&request)).unwrap_err();
+                assert!(error.to_string().contains("candidate state identity"));
+            }
+            assert!(run(Operation::Prepare(current), &directory).is_err());
+            assert_eq!(fs::read(directory.join("job.json")).unwrap(), worker_bytes);
+            assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
 }

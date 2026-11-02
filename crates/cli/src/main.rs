@@ -4,6 +4,7 @@ mod args;
 mod candidate;
 mod collections;
 mod commands;
+mod compatibility;
 mod config;
 mod manifest;
 mod observation;

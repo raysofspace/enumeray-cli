@@ -7,7 +7,10 @@ use serde_json::Value;
 use std::fmt::Write;
 
 pub(crate) fn render(args: &Args, value: &Value) -> String {
-    if matches!(args.command, Command::Api { .. }) {
+    if matches!(
+        args.command,
+        Command::Api { .. } | Command::Compatibility(_)
+    ) {
         return serde_json::to_string_pretty(value).expect("JSON value");
     }
     let mut output = String::new();

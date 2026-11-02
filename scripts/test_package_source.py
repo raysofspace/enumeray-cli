@@ -66,6 +66,29 @@ class SourcePackageTests(unittest.TestCase):
                 self.assertFalse(any('.git/' in name or 'secret' in name for name in names))
                 identity = json.load(tar.extractfile('enumeray-0.1.0-source/release-source.json'))
                 self.assertEqual(identity, first['source'])
+                inventory = json.load(tar.extractfile('enumeray-0.1.0-source/release-source-files.json'))
+                self.assertEqual(inventory, source.artifacts.content_identity(root))
+                self.assertEqual(len(inventory['content_sha256']), 64)
+
+    def test_content_identity_changes_for_dirty_edits_additions_deletions_and_modes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _, _ = self.checkout(Path(temporary))
+            original = source.artifacts.content_identity(root)
+            main = root / 'crates/cli/src/main.rs'
+            data = main.read_bytes()
+            main.write_bytes(data + b'// changed')
+            self.assertNotEqual(source.artifacts.content_identity(root), original)
+            main.write_bytes(data)
+            self.assertEqual(source.artifacts.content_identity(root), original)
+            main.chmod(0o755)
+            self.assertNotEqual(source.artifacts.content_identity(root), original)
+            main.chmod(0o644)
+            added = root / 'new-source.rs'
+            added.write_text('new input')
+            self.assertNotEqual(source.artifacts.content_identity(root), original)
+            added.unlink()
+            main.unlink()
+            self.assertNotEqual(source.artifacts.content_identity(root), original)
 
     def test_dirty_or_wrong_revision_is_rejected_before_dependency_collection(self):
         with tempfile.TemporaryDirectory() as temporary:

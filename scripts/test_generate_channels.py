@@ -1,5 +1,7 @@
 """Qualified-source channel rendering and the documented installer-free path."""
 import copy
+import io
+import tarfile
 import hashlib
 import importlib.util
 import json
@@ -155,6 +157,79 @@ class DocumentedCopyTests(unittest.TestCase):
             self.assertEqual(list(binary.parent.glob(".enumeray.*")), [])
 
 
+class DocumentedAcquisitionTests(unittest.TestCase):
+    def recipe(self, marker):
+        guide = (ROOT / "crates/cli/INSTALL.md").read_text()
+        return re.search(r"<!-- " + marker + r" -->\n```sh\n(.*?)\n```", guide, re.DOTALL)[1]
+
+    def test_unselected_source_revision_stops_before_any_network_or_build_command(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            tools = directory / 'tools'
+            tools.mkdir()
+            calls = directory / 'calls'
+            for name in ('git', 'rustup', 'cargo'):
+                executable = tools / name
+                executable.write_text('#!/bin/sh\nprintf "%s\\n" invoked >> "$CALLS"\nexit 99\n')
+                executable.chmod(0o755)
+            result = subprocess.run(['sh', '-c', self.recipe('pinned-source-acquisition')], cwd=directory,
+                                    env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                                         'CALLS': str(calls)}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('approved full public commit', result.stderr)
+            self.assertFalse(calls.exists())
+            self.assertFalse((directory / 'enumeray-cli-evaluation').exists())
+
+    def test_archive_signature_or_checksum_failure_never_extracts_untrusted_bytes(self):
+        for signature_failure, tamper in ((True, False), (False, True), (False, False)):
+            with self.subTest(signature_failure=signature_failure, tamper=tamper), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                archive = directory / 'enumeray-fixture.tar.gz'
+                with tarfile.open(archive, 'w:gz') as stream:
+                    info = tarfile.TarInfo('extracted/enumeray')
+                    data = b'fixture binary bytes'
+                    info.size = len(data)
+                    stream.addfile(info, io.BytesIO(data))
+                checksum = archive.with_name(archive.name + '.sha256')
+                checksum.write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '  ' + archive.name + '\n')
+                if tamper:
+                    archive.write_bytes(archive.read_bytes() + b'changed after signing')
+                tools = directory / 'tools'
+                tools.mkdir()
+                cosign = tools / 'cosign'
+                cosign.write_text('#!/bin/sh\nexit ' + ('7' if signature_failure else '0') + '\n')
+                cosign.chmod(0o755)
+                result = subprocess.run(['sh', '-c', self.recipe('archive-verification')], cwd=directory,
+                                        env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                                             'ARCHIVE': archive.name, 'CHECKSUM': checksum.name,
+                                             'REPOSITORY': 'raysofspace/enumeray-cli'}, capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, not signature_failure and not tamper, result.stderr)
+                self.assertEqual((directory / 'extracted/enumeray').exists(), not signature_failure and not tamper)
+
+    def test_interrupted_staged_copy_preserves_previous_executable_and_private_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            source = directory / 'source'
+            source.mkdir()
+            (source / 'enumeray').write_text('#!/bin/sh\nexit 0\n')
+            prefix = directory / 'prefix'
+            (prefix / 'bin').mkdir(parents=True)
+            original = prefix / 'bin/enumeray'
+            original.write_bytes(b'previous installed executable')
+            private = directory / 'journal'
+            private.write_bytes(b'original private durable evidence')
+            tools = directory / 'tools'
+            tools.mkdir()
+            install = tools / 'install'
+            install.write_text('#!/bin/sh\nfor destination do :; done\nprintf partial > "$destination"\nkill -TERM "$PPID"\nexit 143\n')
+            install.chmod(0o755)
+            result = subprocess.run(['sh', '-c', self.recipe('manual-install-copy')],
+                                    env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                                         'EXTRACTED': str(source), 'PREFIX': str(prefix)}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(original.read_bytes(), b'previous installed executable')
+            self.assertEqual(private.read_bytes(), b'original private durable evidence')
+            self.assertEqual(list((prefix / 'bin').glob('.enumeray.*')), [])
 
 
 if __name__ == "__main__":

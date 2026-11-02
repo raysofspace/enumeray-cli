@@ -28,5 +28,9 @@ utoipa = { workspace = true, optional = true }
 time = { workspace = true }
 unicode-normalization = { workspace = true }
 
+[build-dependencies]
+sha2 = { workspace = true }
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

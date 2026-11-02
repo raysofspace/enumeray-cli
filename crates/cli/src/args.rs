@@ -29,6 +29,9 @@ pub struct Args {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Inspect installed build identity and compare an explicitly selected component set.
+    #[command(subcommand)]
+    Compatibility(Compatibility),
     /// Guide or resume connector setup and a first model candidate trial.
     Setup(Setup),
     #[command(flatten)]
@@ -1461,4 +1464,52 @@ mod tests {
         command.clone().debug_assert();
         check(&mut command, "enumeray");
     }
+}
+
+#[derive(Subcommand)]
+pub enum Compatibility {
+    /// Report this executable's embedded provenance without loading login profiles.
+    Inspect,
+    /// Compare selected identities without repairs, credential renewal or execution.
+    Check(Box<CompatibilityCheck>),
+}
+
+#[derive(clap::Args)]
+pub struct CompatibilityCheck {
+    /// Existing signed release-manifest.json; adjacent signature and native reports are required.
+    #[arg(long, requires = "service_receipt", required_unless_present_any = ["development_selection", "transferred_receipt"], conflicts_with_all = ["development_selection", "transferred_receipt"])]
+    pub manifest: Option<PathBuf>,
+    /// Existing service-publish.json; adjacent Sigstore bundle is required.
+    #[arg(long, requires = "manifest")]
+    pub service_receipt: Option<PathBuf>,
+    /// Explicit unsigned selected-pair JSON, including content fingerprints for dirty builds.
+    #[arg(long, conflicts_with = "transferred_receipt")]
+    pub development_selection: Option<PathBuf>,
+    /// Previously verified signed-release match receipt transferred through an authenticated channel.
+    #[arg(long, requires = "transferred_sha256")]
+    pub transferred_receipt: Option<PathBuf>,
+    /// Independently conveyed SHA-256 of the transferred receipt (not a hash downloaded beside it).
+    #[arg(long, requires = "transferred_receipt")]
+    pub transferred_sha256: Option<String>,
+    /// New private output file. Existing receipts are never overwritten.
+    #[arg(long)]
+    pub receipt: PathBuf,
+    /// Check only installed/local and explicitly supplied snapshot identities; exclude live service/daemon conclusions.
+    #[arg(long, conflicts_with = "connector")]
+    pub local_only: bool,
+    /// Saved compatibility inspect JSON; every supplied peer becomes a required comparison.
+    #[arg(long)]
+    pub peer: Vec<PathBuf>,
+    /// Documentation docs-build.json selected for this installation.
+    #[arg(long)]
+    pub docs: Option<PathBuf>,
+    /// Selected examples-manifest.json or model-examples-manifest.json.
+    #[arg(long)]
+    pub examples: Option<PathBuf>,
+    /// Read this connector's authorized diagnostics with static credentials; never renew a session.
+    #[arg(long)]
+    pub connector: Option<String>,
+    /// Saved runner identity observation with schema_version, context_id, observed_at and build_identity.
+    #[arg(long)]
+    pub context: Vec<PathBuf>,
 }

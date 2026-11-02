@@ -41,6 +41,7 @@ fn execute_value(args: &Args) -> Result<Value, Error> {
     let profiles = config::load(&config_path)?;
     let client = config::client(args, &profiles)?;
     match &args.command {
+        Command::Compatibility(_) => unreachable!("compatibility dispatch"),
         Command::Setup(_) => unreachable!("setup dispatch"),
         Command::Auth(_) => unreachable!(),
         Command::Runtime(_) => unreachable!("runtime dispatch precedes user profile access"),
@@ -102,6 +103,9 @@ impl From<serde_json::Error> for Failure {
 }
 
 pub(crate) fn execute(args: &Args) -> Result<Completion, Failure> {
+    if let Command::Compatibility(command) = &args.command {
+        return crate::compatibility::execute(args, command).map_err(Into::into);
+    }
     if let Command::Setup(command) = &args.command {
         return crate::setup::execute(args, command);
     }

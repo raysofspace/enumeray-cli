@@ -115,6 +115,7 @@ pub(crate) fn invoke(
     action: &str,
     input: Option<&[u8]>,
 ) -> Result<Value> {
+    job.check_identity()?;
     let binding: ComputeInstallation = local_process::read_record(
         &evidence_directory(journal, job.intent).join("connection.json"),
     )?;
@@ -159,6 +160,8 @@ pub(crate) fn invoke(
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ComputeJob {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) created_with: Option<String>,
     #[serde(default)]
     pub(crate) log_policy: enumeray_contracts::logs::LogPolicy,
     pub(crate) version: u32,
@@ -167,6 +170,12 @@ pub(crate) struct ComputeJob {
     pub(crate) execution: ExecutionSnapshot,
     #[serde(default)]
     input_digests: std::collections::BTreeMap<Uuid, (u64, String)>,
+}
+
+impl ComputeJob {
+    pub(crate) fn check_identity(&self) -> Result<()> {
+        crate::state_identity::check(self.created_with.as_deref())
+    }
 }
 
 pub fn prepare(config: &Path, assignment: &Value) -> Result<ComputeInstallation> {
@@ -307,6 +316,7 @@ pub fn launch(
     local_process::create_private_directory(&journal.join("compute-jobs"))?;
     local_process::create_private_directory(&directory)?;
     let job = ComputeJob {
+        created_with: crate::state_identity::current(),
         log_policy: crate::capture::policy(&local_process::job_directory(journal, intent))?,
         version: 1,
         intent,
@@ -394,12 +404,14 @@ pub(crate) fn stage_runner(
     let path = directory.join("job.json");
     let job = if path.exists() {
         let job: ComputeJob = local_process::read_record(&path)?;
+        job.check_identity()?;
         if job.intent != intent || !crate::numeric::equivalent(&job.assignment, assignment) {
             return Err(failure("prepared job conflicts with assignment"));
         }
         job
     } else {
         let job = ComputeJob {
+            created_with: crate::state_identity::current(),
             log_policy: crate::capture::policy(&local_process::job_directory(journal, intent))?,
             version: 1,
             intent,
@@ -434,6 +446,7 @@ pub(crate) fn start_prepared(
 ) -> Result<Option<local_process::Completion>> {
     let directory = evidence_directory(journal, intent);
     let job: ComputeJob = local_process::read_record(&directory.join("job.json"))?;
+    job.check_identity()?;
     if job.intent != intent || !crate::numeric::equivalent(&job.assignment, assignment) {
         return Err(failure("start conflicts with prepared assignment"));
     }
@@ -475,6 +488,7 @@ pub(crate) fn allocation_released(
 ) -> Result<bool> {
     let job: ComputeJob =
         local_process::read_record(&evidence_directory(journal, intent).join("job.json"))?;
+    job.check_identity()?;
     if job.intent != intent || !crate::numeric::equivalent(&job.assignment, assignment) {
         return Err(failure("allocation observation conflicts with assignment"));
     }
@@ -525,6 +539,7 @@ pub fn recover(
         ));
     }
     let job: ComputeJob = local_process::read_record(&path)?;
+    job.check_identity()?;
     if job.version != 1
         || job.intent != intent
         || !crate::numeric::equivalent(&job.assignment, assignment)
@@ -777,6 +792,7 @@ pub fn collect_files(
 ) -> Result<PathBuf> {
     let job: ComputeJob =
         local_process::read_record(&evidence_directory(journal, intent).join("job.json"))?;
+    job.check_identity()?;
     let binding: ComputeInstallation =
         local_process::read_record(&evidence_directory(journal, intent).join("connection.json"))?;
     if !crate::numeric::equivalent(&job.assignment, assignment) {
@@ -892,6 +908,7 @@ pub(crate) fn read_logs(
 ) -> Result<enumeray_contracts::logs::ReadLogsResponse> {
     let job: ComputeJob =
         local_process::read_record(&evidence_directory(journal, intent).join("job.json"))?;
+    job.check_identity()?;
     let input = serde_json::to_vec(request).map_err(|_| failure("invalid log read request"))?;
     serde_json::from_value(invoke(journal, &job, "read-logs", Some(&input))?)
         .map_err(|_| failure("invalid runner log response"))
@@ -903,6 +920,7 @@ pub(crate) fn collect_archive(
 ) -> Result<(PathBuf, crate::log_archive::Built)> {
     let directory = evidence_directory(journal, intent);
     let job: ComputeJob = local_process::read_record(&directory.join("job.json"))?;
+    job.check_identity()?;
     let value = invoke(journal, &job, "build-log-archive", None)?;
     let built: crate::log_archive::Built = serde_json::from_value(value["archive"].clone())
         .map_err(|_| failure("invalid finalized archive"))?;
@@ -941,6 +959,7 @@ pub(crate) fn collect_archive(
 pub(crate) fn cleanup_archive(journal: &Path, intent: Uuid) -> Result<()> {
     let directory = evidence_directory(journal, intent);
     let job: ComputeJob = local_process::read_record(&directory.join("job.json"))?;
+    job.check_identity()?;
     invoke(journal, &job, "cleanup-log-archive", None)?;
     crate::log_archive::cleanup(&directory.join("archive-copy"))
 }
@@ -953,6 +972,7 @@ pub(crate) fn cleanup_run(
 ) -> Result<Value> {
     let job: ComputeJob =
         local_process::read_record(&evidence_directory(journal, intent).join("job.json"))?;
+    job.check_identity()?;
     if job.intent != intent || !crate::numeric::equivalent(&job.assignment, assignment) {
         return Err(failure("cleanup job conflicts with archived assignment"));
     }
@@ -1020,6 +1040,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
         let intent = Uuid::new_v4();
         let assignment = json!({"attempt_id":Uuid::new_v4()});
         let job = ComputeJob {
+            created_with: crate::state_identity::current(),
             log_policy: Default::default(),
             version: 1,
             intent,
@@ -1789,6 +1810,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             let evidence = evidence_directory(&directory, file_intent);
             local_process::create_private_directory(&evidence).unwrap();
             let job = ComputeJob {
+                created_with: crate::state_identity::current(),
                 log_policy: enumeray_contracts::logs::LogPolicy {
                     archive_enabled: true,
                     ..Default::default()
@@ -2160,6 +2182,7 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
             &revoked_evidence,
             "job.json",
             &ComputeJob {
+                created_with: crate::state_identity::current(),
                 log_policy: Default::default(),
                 version: 1,
                 intent: revoked_intent,
@@ -2338,6 +2361,7 @@ print(json.dumps({'version': 1, 'payload': {'status': 'running', 'started': True
         let intent = Uuid::new_v4();
         let assignment = json!({"attempt_id":Uuid::new_v4()});
         let job = ComputeJob {
+            created_with: crate::state_identity::current(),
             log_policy: Default::default(),
             version: 1,
             intent,

@@ -80,6 +80,37 @@ def source_identity(root, revision=None, require_clean=False):
     return identity
 
 
+def content_identity(root, paths=None):
+    """Same length-framed source fingerprint embedded by the Rust build script."""
+    root = Path(root)
+    if paths is None:
+        paths = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=root).decode().split('\0')
+    paths = sorted(set(path for path in paths if path))
+    records = []
+    for relative in paths:
+        path = root / relative
+        if path.is_symlink():
+            mode, data = '120000', str(path.readlink()).encode()
+        elif path.is_dir():
+            mode = '160000'
+            data = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=path).strip()
+        elif path.is_file():
+            mode, data = ('100755' if path.stat().st_mode & 0o111 else '100644'), path.read_bytes()
+        else:
+            mode, data = 'missing', b''
+        records.append((relative, mode, data))
+    return {'files': paths, 'content_sha256': content_fingerprint(records)}
+
+
+def content_fingerprint(records):
+    digest = hashlib.sha256()
+    for relative, mode, data in sorted(records):
+        for field in (relative.encode(), mode.encode(), data):
+            digest.update(len(field).to_bytes(8, 'big'))
+            digest.update(field)
+    return digest.hexdigest()
+
+
 def rust_toolchain(root):
     document = Path(root) / 'rust-toolchain.toml'
     match = re.search(r'^\s*channel\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$', document.read_text(), re.M)

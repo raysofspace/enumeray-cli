@@ -26,8 +26,9 @@ const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
 fn heartbeat_body() -> Value {
     json!({
         "connector_version": concat!("enumeray/", env!("CARGO_PKG_VERSION")),
+        "build_identity": enumeray_contracts::compatibility::build_identity(),
         "capabilities": ["json_inputs", "json_outputs", "artifact_inputs", "artifact_outputs", "large_artifacts", "collection_inputs", "collection_outputs"],
-        "wrapper_protocol_versions": [1]
+        "wrapper_protocol_versions": enumeray_contracts::compatibility::WRAPPER_PROTOCOLS
     })
 }
 
