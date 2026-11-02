@@ -6,6 +6,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 concurrency:
   group: public-verification-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -35,20 +37,51 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - run: scripts/verify.sh validate
+      - name: Find equivalent successful source verification
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_EVIDENCE_CONTEXT: ${{ toJSON(vars) }}
+          VERIFY_PROFILE: ${{ matrix.profile }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          catalogue = json.loads(Path('scripts/test-strategy.json').read_text())
+          checks = catalogue['profiles'][os.environ['VERIFY_PROFILE']]
+          (Path(os.environ['RUNNER_TEMP']) / 'required-checks.json').write_text(json.dumps(checks))
+          PYTHON
+          python3 scripts/ci_evidence.py lookup \
+            --workflow .github/workflows/verify.yml \
+            --artifact "ci-evidence-public-${{ matrix.runner }}" \
+            --checks "$RUNNER_TEMP/required-checks.json" \
+            --output "$RUNNER_TEMP/public-evidence/receipt.json"
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        if: steps.evidence.outputs.reused != 'true'
         with:
           toolchain: 1.98.1
           components: rustfmt, clippy
       - name: Cache native Rust dependencies
+        if: steps.evidence.outputs.reused != 'true'
         uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           # Keep runner images, CPUs and selected feature sets independent.
           key: ${{ matrix.runner }}-${{ runner.arch }}-${{ matrix.profile }}
           cache-on-failure: true
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
-        with:
-          python-version: '3.12'
-      - run: scripts/verify.sh validate
       - name: Verify ${{ matrix.profile }}
+        if: steps.evidence.outputs.reused != 'true'
         run: scripts/verify.sh "${{ matrix.profile }}"
+      - name: Retain successful source verification evidence
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-evidence-public-${{ matrix.runner }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/public-evidence/receipt.json
+          if-no-files-found: error
+          retention-days: 2

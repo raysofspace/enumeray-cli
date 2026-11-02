@@ -117,6 +117,19 @@ including after test failures. It disables debug symbols and incremental builds
 and limits Rust test concurrency to two threads. Superseded pull-request runs
 are cancelled.
 
+After a merge, each native job can reuse successful checks from a same-repository
+merged pull request associated with the landed commit, whose tested merge tree
+exactly matches the landed source. Evidence
+must cover the entire requested profile and match the workflow, runner image/CPU,
+and repository configuration. The check jobs keep their existing names and report
+success only after fresh verification or validated evidence. Fork evidence is
+never reused. Upload failures leave verification successful and simply prevent
+future reuse. Missing, malformed, failed, expired or incompatible evidence runs
+fresh tests; the first rollout therefore runs normally before receipts exist.
+Receipts expire 24 hours after the original tests began, including after reuse.
+Manual runs always perform fresh verification. Source evidence does not replace
+native archive, installation or matching-service release qualification.
+
 `backends` explicitly runs the bounded real SSH/Slurm fixture; `mounts` explicitly
 runs the native Linux bind-mount regression. Register new suites and ignored
 tests in `scripts/test-strategy.json` and run `scripts/verify.sh validate` after
