@@ -7,6 +7,7 @@ fn git(root: &Path, arguments: &[&str]) -> Option<Vec<u8>> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .args(arguments)
         .output()
         .ok()?;
@@ -25,7 +26,11 @@ fn content(root: &Path, paths: &BTreeSet<String>) -> String {
     let mut digest = Sha256::new();
     for relative in paths {
         let path = root.join(relative);
-        println!("cargo:rerun-if-changed={}", path.display());
+        // A Git link is an opaque source identity, never a recursive directory
+        // watch: its ignored target/ cache may contain many GiB of build output.
+        if !fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
         let (mode, bytes) = match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() => (
                 "120000",
@@ -35,12 +40,17 @@ fn content(root: &Path, paths: &BTreeSet<String>) -> String {
                     .as_encoded_bytes()
                     .to_vec(),
             ),
-            Ok(metadata) if metadata.is_dir() => (
-                "160000",
-                text(&path, &["rev-parse", "HEAD"])
-                    .unwrap_or_default()
-                    .into_bytes(),
-            ),
+            Ok(metadata) if metadata.is_dir() => {
+                // Reuse the child's precise Git/source watchers. The derived
+                // child identity is not part of the parent's Git-link digest.
+                let _ = source_identity(&path, "");
+                (
+                    "160000",
+                    text(&path, &["rev-parse", "HEAD"])
+                        .unwrap_or_default()
+                        .into_bytes(),
+                )
+            }
             Ok(metadata) => {
                 #[cfg(unix)]
                 let executable = {
@@ -122,21 +132,31 @@ pub fn source_identity(root: &Path, repository: &str) -> Value {
         "release-source-files.json",
     ] {
         let path = root.join(name);
-        if path.exists() {
+        if path.exists() && (name != ".git" || path.is_file()) {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }
     let (revision, tree, clean, paths) = if own_git {
         // Linked worktrees' .git file is stable; watch the actual ref and index too.
-        for name in ["HEAD", "index"] {
+        for name in ["HEAD", "index", "packed-refs"] {
             if let Some(path) = text(&root, &["rev-parse", "--git-path", name]) {
-                println!("cargo:rerun-if-changed={}", root.join(path).display());
+                let path = root.join(path);
+                if path.exists() {
+                    println!("cargo:rerun-if-changed={}", path.display());
+                }
             }
         }
         if let Some(reference) = text(&root, &["symbolic-ref", "-q", "HEAD"])
             && let Some(path) = text(&root, &["rev-parse", "--git-path", &reference])
         {
-            println!("cargo:rerun-if-changed={}", root.join(path).display());
+            let path = root.join(path);
+            // A packed branch has no loose ref file. Watch its small metadata
+            // directory for a later loose ref rather than a missing path.
+            let mut existing = path.as_path();
+            while !existing.exists() {
+                existing = existing.parent().expect("existing Git metadata ancestor");
+            }
+            println!("cargo:rerun-if-changed={}", existing.display());
         }
         let paths = git(
             &root,

@@ -220,6 +220,199 @@ mod tests {
     }
 
     #[test]
+    fn cargo_gitlink_watchers_ignore_target_cache_and_refresh_source_and_refs() {
+        use std::{fs, path::Path, process::Command};
+        fn git(root: &Path, arguments: &[&str]) -> String {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().into()
+        }
+        fn check(root: &Path) -> (u32, serde_json::Value) {
+            let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+                .args(["check", "--offline", "--quiet"])
+                .current_dir(root)
+                .env("CARGO_TARGET_DIR", root.join("target"))
+                .env("CARGO_INCREMENTAL", "0")
+                .env("CARGO_PROFILE_DEV_DEBUG", "0")
+                .env("CARGO_BUILD_JOBS", "2")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let counter = fs::read_dir(root.join("target/debug/build"))
+                .unwrap()
+                .map(|entry| entry.unwrap().path().join("out/executions"))
+                .find(|path| path.is_file())
+                .expect("fixture build execution counter");
+            let executions = fs::read_to_string(&counter).unwrap().parse().unwrap();
+            let identity =
+                serde_json::from_slice(&fs::read(counter.with_file_name("identity.json")).unwrap())
+                    .unwrap();
+            (executions, identity)
+        }
+        let root = std::env::temp_dir().join(format!(
+            "enumeray-cargo-watch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child = root.join("cli");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(child.join("src")).unwrap();
+        fs::write(root.join(".gitignore"), "/target/\n").unwrap();
+        fs::write(child.join(".gitignore"), "/target/\n").unwrap();
+        fs::write(child.join("src/model.txt"), "first source\n").unwrap();
+        fs::write(
+            child.join("build_support.rs"),
+            include_str!("../build_support.rs"),
+        )
+        .unwrap();
+        fs::write(root.join("src/lib.rs"), "pub fn fixture() {}\n").unwrap();
+        fs::write(root.join("Cargo.toml"), "[package]\nname=\"source-watch-fixture\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n[build-dependencies]\nserde_json=\"1\"\nsha2=\"0.11\"\n").unwrap();
+        fs::write(root.join("build.rs"), r#"
+#[path="cli/build_support.rs"] mod provenance;
+fn main() {
+    let root=std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out=std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let counter=out.join("executions");
+    let count=std::fs::read_to_string(&counter).ok().and_then(|value|value.parse::<u32>().ok()).unwrap_or(0)+1;
+    std::fs::write(counter,count.to_string()).unwrap();
+    let identity=provenance::source_identity(&root,"fixture");
+    std::fs::write(out.join("identity.json"),serde_json::to_vec(&identity).unwrap()).unwrap();
+}
+"#).unwrap();
+        git(&root, &["init", "-q"]);
+        git(&child, &["init", "-q", "-b", "feature/watch"]);
+        let lock = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .args(["generate-lockfile", "--offline"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert!(
+            lock.status.success(),
+            "{}",
+            String::from_utf8_lossy(&lock.stderr)
+        );
+        git(&child, &["add", "."]);
+        git(
+            &child,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.org",
+                "commit",
+                "-qm",
+                "Child",
+            ],
+        );
+        let original_child = git(&child, &["rev-parse", "HEAD"]);
+        git(
+            &root,
+            &[
+                "add",
+                "Cargo.toml",
+                "Cargo.lock",
+                "build.rs",
+                "src",
+                ".gitignore",
+            ],
+        );
+        git(
+            &root,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                "160000",
+                &original_child,
+                "cli",
+            ],
+        );
+        git(
+            &root,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.org",
+                "commit",
+                "-qm",
+                "Root",
+            ],
+        );
+        let initial = check(&root);
+        assert_eq!(initial.0, 1);
+        assert_eq!(initial.1["clean"], true);
+        assert_eq!(check(&root).0, 1);
+        fs::create_dir(child.join("target")).unwrap();
+        fs::write(
+            child.join("target/ignored-cache.bin"),
+            "ignored compiler output\n",
+        )
+        .unwrap();
+        assert_eq!(
+            check(&root).0,
+            1,
+            "ignored child target writes must not rerun provenance"
+        );
+        fs::write(child.join("src/new-source.rs"), "new untracked source\n").unwrap();
+        let added = check(&root);
+        assert_eq!(
+            added.0, 2,
+            "new files in source directories must refresh provenance"
+        );
+        assert_eq!(added.1["clean"], false);
+        fs::write(child.join("src/model.txt"), "second source\n").unwrap();
+        let dirty = check(&root);
+        assert_eq!(dirty.0, 3);
+        assert_eq!(dirty.1["clean"], false);
+        assert_eq!(check(&root).0, 3);
+        git(&child, &["add", "src/model.txt"]);
+        git(
+            &child,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.org",
+                "commit",
+                "-qm",
+                "Child changed",
+            ],
+        );
+        let changed_ref = check(&root);
+        assert_eq!(changed_ref.0, 4);
+        assert_ne!(initial.1["content_sha256"], changed_ref.1["content_sha256"]);
+        git(&child, &["pack-refs", "--all"]);
+        let namespace = child.join(".git/refs/heads/feature");
+        if namespace.exists() {
+            fs::remove_dir(&namespace).unwrap();
+        }
+        assert_eq!(check(&root).0, 5);
+        assert_eq!(
+            check(&root).0,
+            5,
+            "packed refs must not leave a missing-path rebuild loop"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn compiled_identity_is_complete_and_round_trips_without_runtime_sources() {
         let identity = build_identity();
         assert_eq!(identity.wrapper_protocols, vec![1]);

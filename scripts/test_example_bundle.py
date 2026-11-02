@@ -1,5 +1,9 @@
 """The shipped inventory and tests must operate on the acquired bytes."""
 import hashlib
+import contextlib
+import io
+import sys
+import tarfile
 import importlib.util
 import json
 from pathlib import Path
@@ -20,6 +24,7 @@ def load(name, filename):
 bundle = load('example_bundle', 'example_bundle.py')
 verifier = load('verify_examples', 'verify-example-bundle.py')
 artifacts = load('release_artifacts', 'release_artifacts.py')
+producer = load('example_producer', 'example-bundle.py')
 
 
 class ExampleBundleTests(unittest.TestCase):
@@ -63,6 +68,38 @@ class ExampleBundleTests(unittest.TestCase):
         with mock.patch.object(bundle.subprocess, 'run', side_effect=generate):
             return bundle.assemble_examples(root, destination, root / 'enumeray',
                                             {'revision': 'a' * 40, 'clean': False}, '0.1.0')
+
+    def test_standalone_producer_retains_actual_content_identity_without_changing_base_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary); root = parent / 'source'; root.mkdir()
+            (root / 'Cargo.lock').write_text('version = 4\n')
+            (root / 'source.rs').write_text('selected source bytes\n')
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '-qm', 'Source'], check=True)
+            selected = producer.artifacts.source_identity(root)
+            content = producer.artifacts.content_identity(root)['content_sha256']
+            original_run = subprocess.check_output
+            def run(command, **kwargs):
+                if command[0] == 'cargo':
+                    return json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}]})
+                if Path(command[0]).name == 'enumeray':
+                    return 'enumeray 0.1.0\n'
+                return original_run(command, **kwargs)
+            def assemble(root, destination, binary, source, version, release):
+                result = {'format_version': 1, 'version': version, 'source': source, 'files': {}}
+                (destination / 'examples-manifest.json').write_text(json.dumps(result))
+                return result
+            output = io.StringIO()
+            with mock.patch.object(producer.subprocess, 'check_output', side_effect=run), mock.patch.object(producer.bundle, 'assemble_examples', side_effect=assemble), mock.patch.object(sys, 'argv', ['example-bundle.py', '--source', str(root), '--binary', str(root / 'enumeray'), '--output', str(parent / 'out'), '--revision', selected['revision'], '--release']), contextlib.redirect_stdout(output):
+                producer.main()
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['manifest']['source'], {**selected, 'content_sha256': content})
+            with tarfile.open(result['archive']) as archive:
+                embedded = json.load(archive.extractfile(result['root'] + '/examples-manifest.json'))
+            self.assertEqual(embedded['source']['content_sha256'], content)
+            self.assertEqual(producer.artifacts.source_identity(root), selected)
+            self.assertNotIn('content_sha256', selected)
 
     def test_exported_tests_run_without_the_source_tree(self):
         with tempfile.TemporaryDirectory() as temporary:

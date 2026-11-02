@@ -153,6 +153,9 @@ class UnifiedPackageTests(unittest.TestCase):
                 self.assertFalse(compatibility['requires_database'])
                 self.assertTrue(compatibility['requires_openssh_for_ssh'])
                 self.assertEqual(compatibility['source']['repository'], packaging.artifacts.REPOSITORY)
+                examples = json.load(tar.extractfile(prefix + '/examples-manifest.json'))
+                self.assertEqual(examples['source']['content_sha256'], compatibility['build_identity']['source']['content_sha256'])
+                self.assertNotIn('content_sha256', compatibility['source'])
                 for guide in ('LICENSE', 'THIRD_PARTY_NOTICES.json', 'INSTALL.md', 'CONNECTOR_GUIDE.md',
                               'EXTENDING.md', 'AUTHOR_GUIDE.md', 'ANALYSIS_GUIDE.md', 'SETUP_GUIDE.md'):
                     self.assertTrue(tar.getmember(prefix + '/' + guide).isfile())
