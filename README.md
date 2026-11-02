@@ -42,14 +42,14 @@ repository root on macOS or Linux:
 
 ```sh
 cargo build --locked --release -p enumeray-cli --bin enumeray
-mkdir -p "$HOME/.local/bin"
-install -m 755 target/release/enumeray "$HOME/.local/bin/enumeray"
-export PATH="$HOME/.local/bin:$PATH"
-enumeray --version
+./target/release/enumeray --version
 ```
 
-The current source is unreleased. Version 1 alone does not establish compatibility
-between revisions. Use a qualified published release when available; coordinate
+Follow the [installation guide](crates/cli/INSTALL.md) for pinned acquisition,
+verification and atomic installation before replacing an existing executable.
+
+The persistent compatibility baseline is provisional. Version 1 alone does not
+establish compatibility between revisions. Use a qualified published release when available; coordinate
 connector and compute-runner upgrades with service maintenance and retained job
 evidence. Each target and distribution channel needs its own qualification;
 passing local source tests does not establish package availability.

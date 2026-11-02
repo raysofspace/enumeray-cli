@@ -30,9 +30,9 @@ Obtain the approved service API origin, exact public source revision or release,
 matching service selection/receipt and responsible installation contact from the
 service or site owner. A model ID, a `persistent-v1` label, a version string and
 this guide's example `0.1.0-alpha.1` are not substitutes for that selection.
-Confirm that the selected version has published release assets and a qualified
-tap formula before choosing that channel; the examples below do not establish
-availability. If no qualified package is identified, use the pinned source
+Confirm that the selected version is published for your chosen channel;
+Homebrew additionally requires its qualified tap formula. The examples below
+do not establish availability. If no qualified package is identified, use the pinned source
 evaluation route agreed with the service owner; do not guess a revision or reuse
 an older pilot's durable state.
 
