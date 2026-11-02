@@ -293,17 +293,70 @@ agree with the embedded executable identity. The content digest identifies
 modified development sources; it does not turn that build into a signed release.
 A matching protocol number or source revision alone does not establish a match.
 
-For a qualified release, obtain and verify the release manifest and matching
-service publication receipt through the same signed release evidence chain.
-Then compare the installed executable, selected service and observed peers,
-writing a new receipt path:
+For a qualified release, acquire its complete signed evidence from the **same
+selected `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL`** used for the archive above.
+This step additionally requires `jq`, `curl` and the independently trusted
+**Cosign v3** on the connected verification host. The four native report files
+are evidence for the selected release's supported platform set; downloading them
+does not install other targets. Publication is pending, so do not assume this
+example version's release assets currently exist.
 
+Set `API_ORIGIN` to the service origin supplied by its owner. The block below
+uses the verified extracted executable for a check **before replacement**. For
+an already installed package, replace the `ENUMERAY_BIN` assignment with
+`ENUMERAY_BIN=enumeray`. `EVIDENCE` must name a new directory: an interrupted or
+failed attempt leaves its original files intact, so select a fresh directory for
+a retry instead of overwriting retained evidence.
+
+<!-- release-evidence-acquisition -->
 ```sh
-enumeray --api "$API_ORIGIN" --json compatibility check \
-  --manifest release-manifest.json \
-  --service-receipt service-publish.json \
-  --receipt installation-receipt.json
+EVIDENCE="$PWD/release-evidence-$TAG"
+ENUMERAY_BIN="$EXTRACTED/enumeray"
+(
+  set -eu
+  : "${API_ORIGIN:?Set the approved service API origin}"
+  mkdir "$EVIDENCE"
+  for file in release-manifest.json release-manifest.json.sigstore.json \
+              service-publish.json service-publish.sigstore.json; do
+    curl --fail --location --proto '=https' --tlsv1.2 \
+      --output "$EVIDENCE/$file" "$BASE_URL/$file"
+  done
+  # Authenticate the manifest before jq reads any field or selects more downloads.
+  cosign verify-blob \
+    --bundle "$EVIDENCE/release-manifest.json.sigstore.json" \
+    --certificate-identity "https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-github-workflow-repository "$REPOSITORY" \
+    --certificate-github-workflow-ref refs/heads/main \
+    --certificate-github-workflow-trigger repository_dispatch \
+    "$EVIDENCE/release-manifest.json"
+  jq -e --arg version "$VERSION" --arg tag "$TAG" --arg repository "$REPOSITORY" \
+    '.schema_version == 1 and .version == $version and .tag == $tag and .public_repository == $repository' \
+    "$EVIDENCE/release-manifest.json" >/dev/null
+  for target in aarch64-apple-darwin x86_64-apple-darwin \
+                aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+    # Exact fixed-target filenames cannot escape EVIDENCE or change download origins.
+    report=$(jq -er --arg target "$target" \
+      '.targets[$target].qualification | select(. == ("qualification-" + $target + ".json"))' \
+      "$EVIDENCE/release-manifest.json")
+    curl --fail --location --proto '=https' --tlsv1.2 \
+      --output "$EVIDENCE/$report" "$BASE_URL/$report"
+  done
+  "$ENUMERAY_BIN" --api "$API_ORIGIN" --json compatibility check \
+    --manifest "$EVIDENCE/release-manifest.json" \
+    --service-receipt "$EVIDENCE/service-publish.json" \
+    --receipt "$EVIDENCE/installation-receipt.json"
+)
 ```
+
+Any failed download, manifest verification, selected-version check or report-name
+validation stops the block before compatibility checking. The CLI then rechecks
+both workflow signatures, the exact service publication authorization and all
+manifest-bound native report digests. A downloaded publication receipt is not
+trusted merely because the manifest's signature passed. Keep this complete
+evidence directory, the archive and its verified checksum with the resulting
+installation receipt. Supply any required peer/context observations to the check
+as described below; absent live evidence must remain explicit.
 
 For a development evaluation, use the explicit service/public selection supplied
 by its owner with `--development-selection FILE` instead of the manifest and

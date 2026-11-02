@@ -180,6 +180,38 @@ class DocumentedAcquisitionTests(unittest.TestCase):
             self.assertFalse(calls.exists())
             self.assertFalse((directory / 'enumeray-cli-evaluation').exists())
 
+    def test_failed_release_manifest_signature_stops_before_parsing_reports_or_checking(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            tools = directory / 'tools'
+            tools.mkdir()
+            calls = directory / 'calls'
+            curl = tools / 'curl'
+            curl.write_text('#!/bin/sh\nfor argument do last=$argument; done\nprintf "curl %s\\n" "$last" >> "$CALLS"\nexit 0\n')
+            cosign = tools / 'cosign'
+            cosign.write_text('#!/bin/sh\nprintf "cosign\\n" >> "$CALLS"\nexit 7\n')
+            for name in ('jq', 'enumeray'):
+                executable = tools / name
+                executable.write_text('#!/bin/sh\nprintf "' + name + '\\n" >> "$CALLS"\nexit 99\n')
+            for executable in tools.iterdir():
+                executable.chmod(0o755)
+            version = '0.1.0-alpha.1'
+            tag = 'v' + version
+            base = 'https://github.com/raysofspace/enumeray-cli/releases/download/' + tag
+            result = subprocess.run(['sh', '-c', self.recipe('release-evidence-acquisition')], cwd=directory,
+                                    env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                                         'CALLS': str(calls), 'VERSION': version, 'TAG': tag,
+                                         'REPOSITORY': 'raysofspace/enumeray-cli', 'BASE_URL': base,
+                                         'EXTRACTED': str(tools), 'API_ORIGIN': 'https://service.example.invalid'},
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertEqual(calls.read_text().splitlines(), [
+                'curl ' + base + '/' + name for name in (
+                    'release-manifest.json', 'release-manifest.json.sigstore.json',
+                    'service-publish.json', 'service-publish.sigstore.json')
+            ] + ['cosign'])
+            self.assertFalse((directory / ('release-evidence-' + tag) / 'installation-receipt.json').exists())
+
     def test_archive_signature_or_checksum_failure_never_extracts_untrusted_bytes(self):
         for signature_failure, tamper in ((True, False), (False, True), (False, False)):
             with self.subTest(signature_failure=signature_failure, tamper=tamper), tempfile.TemporaryDirectory() as temporary:
