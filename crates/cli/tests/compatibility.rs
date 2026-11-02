@@ -278,6 +278,9 @@ fn incomplete_or_unsupported_development_peers_and_wrong_docs_service_do_not_mat
         ("missing-lockfile", "lockfile_sha256"),
     ] {
         let mut peer = i.clone();
+        // Exercise the same missing-evidence rule even when the test executable
+        // was built from a dirty feature checkout rather than a clean CI tree.
+        peer["source"]["clean"] = json!(true);
         if field == "target" {
             peer.as_object_mut().unwrap().remove(field);
         } else {

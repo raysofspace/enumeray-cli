@@ -94,6 +94,18 @@ pub(super) fn build(
     let parsed =
         serde_json::from_value::<enumeray_contracts::compatibility::BuildIdentity>(identity);
     match &parsed {
+        Ok(identity)
+            if identity.source.revision.is_none()
+                || identity.source.tree.is_none()
+                || identity.source.lockfile_sha256.is_none() =>
+        {
+            unavailable(
+                checks,
+                component,
+                "complete_source_identity",
+                "Source revision, tree and lockfile facts are required; absence does not establish a mismatch.",
+            );
+        }
         Ok(identity) => comparison(
             checks,
             component,
