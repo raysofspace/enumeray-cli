@@ -18,9 +18,8 @@ temporary object-store capabilities are never included.
 
 ## Compatibility and safe decisions
 
-The current alpha remains an unreleased compatibility candidate. Project-owned
-version-1 formats evolve in place until a persistent release is deliberately
-activated. A matching `schema_version` alone does not establish compatibility
+The alpha uses a provisional compatibility baseline. Project-owned version-1
+formats evolve in place until a persistent baseline is deliberately activated. A matching `schema_version` alone does not establish compatibility
 between different candidate builds: select a verified service/public source pair
 and its matching schema/transcript set. Activation of a persistent baseline
 establishes the documented subsequent compatibility obligations.

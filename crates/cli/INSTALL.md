@@ -30,10 +30,11 @@ Obtain the approved service API origin, exact public source revision or release,
 matching service selection/receipt and responsible installation contact from the
 service or site owner. A model ID, a `persistent-v1` label, a version string and
 this guide's example `0.1.0-alpha.1` are not substitutes for that selection.
-Publication is currently pending: the commands below do not imply that the
-example release assets or a qualified tap formula are available. If no qualified
-package is identified, use the pinned source evaluation route agreed with the
-service owner; do not guess a revision or reuse an older pilot's durable state.
+Confirm that the selected version is published for your chosen channel;
+Homebrew additionally requires its qualified tap formula. The examples below
+do not establish availability. If no qualified package is identified, use the pinned source
+evaluation route agreed with the service owner; do not guess a revision or reuse
+an older pilot's durable state.
 
 Use a terminal with a POSIX shell (`sh`), `curl`, `tar`, `mkdir`, `install`,
 `mktemp`, `mv`, `rm` and a SHA-256 utility (`shasum` on macOS or `sha256sum` on
@@ -298,8 +299,9 @@ selected `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL`** used for the archive ab
 This step additionally requires `jq`, `curl` and the independently trusted
 **Cosign v3** on the connected verification host. The four native report files
 are evidence for the selected release's supported platform set; downloading them
-does not install other targets. Publication is pending, so do not assume this
-example version's release assets currently exist.
+does not install other targets. Confirm that the selected version's release
+assets are published before downloading; an example version alone does not
+establish availability.
 
 Set `API_ORIGIN` to the service origin supplied by its owner. The block below
 uses the verified extracted executable for a check **before replacement**. For

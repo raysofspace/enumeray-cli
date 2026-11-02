@@ -1,9 +1,9 @@
 # TASK-104 candidate contract changes
 
 Use the service/public source pair qualified together by the service's verification
-record. The unreleased candidate keeps `/api/v1`, scientific `contract_version: 1`
-and project-owned formats at version 1. Matching a version number alone does not
-establish cross-build compatibility or activate a persistent release.
+record. The provisional compatibility baseline keeps `/api/v1`, scientific
+`contract_version: 1` and project-owned formats at version 1. Matching a version number alone does not
+establish cross-build compatibility or activate a persistent baseline.
 
 ## Generated SDK method names
 
