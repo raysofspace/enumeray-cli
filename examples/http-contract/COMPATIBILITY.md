@@ -14,7 +14,6 @@ follows (method names in a generated language may use that language's casing):
 
 | Previous ID | Method and path | New operation ID |
 | --- | --- | --- |
-| `request` | PUT `/api/v1/connectors/{connector_id}/contexts/{context_id}/preflight/{request_id}` | `request_context_preflight` |
 | `get_content` | GET `/api/v1/artifacts/{artifact_id}/content` | `get_artifact_content` |
 | `get_content` | GET `/api/v1/runs/{run_id}/provenance/content` | `get_provenance_content` |
 | `create_upload` | POST `/api/v1/uploads` | `user_create_upload` |
@@ -52,7 +51,9 @@ as `openapi.json`, plus [generator-settings.json](generator-settings.json) and
 archive also supplies those two companion files in `examples/http-contract/`.
 
 The pinned generator requires form models to be retained and JSON null to be a
-native TypeScript primitive. The published settings capture those options;
+native TypeScript primitive. Its standard operation-name mapping maps the retained
+preflight ID `request` to `requestContextPreflight`, avoiding the transport method
+`BaseAPI.request`. The published settings capture those options;
 generation consumes the downloaded specification unchanged:
 
 ```sh
@@ -98,8 +99,7 @@ Scientific reads remain available to submitters and current model administrators
 under the existing checks; connector-only operational rights do not grant those
 reads. Publication and execution still require their explicit authorized steps.
 
-The formerly unique `request` operation also changes because its generated method
-would override the TypeScript client transport method `BaseAPI.request`. Every
-other previously unique operation ID is retained. The reference-generation check
-compiles the complete SDK, including multipart form models; no specification
+Every previously unique operation ID is retained. Generator-specific method-name
+mappings do not change the downloadable wire contract. The reference-generation
+check compiles the complete SDK, including multipart form models; no specification
 repair or generated-source patch is applied.
