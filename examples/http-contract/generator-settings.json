@@ -12,5 +12,20 @@
     "--language-specific-primitives",
     "null,Null",
     "--additional-properties=modelPropertyNaming=original,importFileExtension=.js,dateLibrary=string,disallowAdditionalPropertiesIfNotPresent=false"
+  ],
+  "typescript_version": "6.0.3",
+  "typescript_options": [
+    "--ignoreConfig",
+    "--strict",
+    "--target",
+    "ES2022",
+    "--lib",
+    "ES2022,DOM",
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--outDir",
+    "compiled"
   ]
 }
