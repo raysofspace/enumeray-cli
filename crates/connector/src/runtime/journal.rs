@@ -181,10 +181,19 @@ impl PreparedAssignment {
     }
 }
 
+struct OwnershipLock(File);
+
+impl Drop for OwnershipLock {
+    fn drop(&mut self) {
+        // A concurrent fork can retain our open file description until exec.
+        // End ownership now, rather than waiting for every duplicate to close.
+        let _ = self.0.unlock();
+    }
+}
+
 pub struct Journal {
     pub directory: PathBuf,
-    // The OS releases this advisory lock when the process exits, including a crash.
-    _lock: File,
+    _lock: OwnershipLock,
     pub data: JournalData,
 }
 
@@ -447,22 +456,24 @@ impl Journal {
     pub fn open(directory: &Path) -> Result<Self> {
         check_private_path(directory, true)?;
         let lock = lock_directory(directory)?;
-        Self::load(directory, lock)
+        let data = Self::read(directory)?;
+        Ok(Self {
+            directory: directory.to_owned(),
+            _lock: lock,
+            data,
+        })
     }
 
     /// Atomic journal snapshots for inspection never create ownership files or
     /// contend with the service owner. Return data rather than a writable Journal.
     pub(crate) fn snapshot(directory: &Path) -> Result<(JournalData, Value)> {
         check_private_path(directory, true)?;
-        let path = directory.join("journal.json");
-        check_private_path(&path, false)?;
-        let file = File::open(path).map_err(|_| failure("cannot read journal snapshot"))?;
-        let journal = Self::load(directory, file)?;
-        let summary = journal.summary();
-        Ok((journal.data, summary))
+        let data = Self::read(directory)?;
+        let summary = summary(&data, directory);
+        Ok((data, summary))
     }
 
-    fn load(directory: &Path, lock: File) -> Result<Self> {
+    fn read(directory: &Path) -> Result<JournalData> {
         let data_path = directory.join("journal.json");
         check_private_path(&data_path, false)?;
         let file = File::open(data_path).map_err(|_| failure("cannot open journal"))?;
@@ -533,11 +544,7 @@ impl Journal {
                 ));
             }
         }
-        Ok(Self {
-            directory: directory.to_owned(),
-            _lock: lock,
-            data,
-        })
+        Ok(data)
     }
 
     pub fn configure_service(&mut self, exclusive_local: bool, allow_http: bool) -> Result<()> {
@@ -805,29 +812,33 @@ impl Journal {
     }
 
     pub fn summary(&self) -> Value {
-        json!({
-            "last_allow_development_execution": self.data.last_allow_development_execution,
-            "execution_policy_note": "Historical policy from the last launch-capable invocation; explicit startup opt-in is always required.",
-            "journal_id": self.data.journal_id, "connector_id": self.data.connector_id,
-            "api_base_url": self.data.api_base_url, "active_session_id": self.data.active_session_id,
-            "pending_claim_key": self.data.pending_claim_key,
-            "pending_recovery": self.data.pending_recovery,
-            "prepared_assignments": self.data.prepared_assignments.iter().map(|prepared| json!({
-                "assignment_id": prepared.assignment.decoded().assignment_id, "run_id": prepared.assignment.decoded().run_id,
-                "attempt_id": prepared.assignment.decoded().attempt_id, "launch_intent_id": prepared.launch_intent_id,
-                "submission_state": prepared.submission_state
-                ,"result_receipt": prepared.terminal_result.as_ref().map(|result| &result["receipt"]),
-                "delivery_completion":prepared.delivery_completion,
-                "delivery_blocker":super::execution::delivery_blocker(prepared, &self.directory),
-                "delivery_next_action":super::execution::delivery_blocker(prepared, &self.directory).map(super::execution::delivery_next_action),
-                "live_logs_delivered":prepared.logs.as_ref().is_some_and(|logs| logs.delivered(prepared.assignment.decoded())),
-                "logs":prepared.logs.as_ref().map(super::logs::Progress::summary),
-                "transfers":prepared.transfers.as_ref().map(crate::transfers::State::summary),
-                "log_archive":prepared.log_archive,
-                "operator_resolution": prepared.operator_resolution
-            })).collect::<Vec<_>>()
-        })
+        summary(&self.data, &self.directory)
     }
+}
+
+fn summary(data: &JournalData, directory: &Path) -> Value {
+    json!({
+        "last_allow_development_execution": data.last_allow_development_execution,
+        "execution_policy_note": "Historical policy from the last launch-capable invocation; explicit startup opt-in is always required.",
+        "journal_id": data.journal_id, "connector_id": data.connector_id,
+        "api_base_url": data.api_base_url, "active_session_id": data.active_session_id,
+        "pending_claim_key": data.pending_claim_key,
+        "pending_recovery": data.pending_recovery,
+        "prepared_assignments": data.prepared_assignments.iter().map(|prepared| json!({
+            "assignment_id": prepared.assignment.decoded().assignment_id, "run_id": prepared.assignment.decoded().run_id,
+            "attempt_id": prepared.assignment.decoded().attempt_id, "launch_intent_id": prepared.launch_intent_id,
+            "submission_state": prepared.submission_state
+            ,"result_receipt": prepared.terminal_result.as_ref().map(|result| &result["receipt"]),
+            "delivery_completion":prepared.delivery_completion,
+            "delivery_blocker":super::execution::delivery_blocker(prepared, directory),
+            "delivery_next_action":super::execution::delivery_blocker(prepared, directory).map(super::execution::delivery_next_action),
+            "live_logs_delivered":prepared.logs.as_ref().is_some_and(|logs| logs.delivered(prepared.assignment.decoded())),
+            "logs":prepared.logs.as_ref().map(super::logs::Progress::summary),
+            "transfers":prepared.transfers.as_ref().map(crate::transfers::State::summary),
+            "log_archive":prepared.log_archive,
+            "operator_resolution": prepared.operator_resolution
+        })).collect::<Vec<_>>()
+    })
 }
 
 fn validate_assignment(value: &Value, journal: &JournalData) -> Result<AssignmentReceipt> {
@@ -858,7 +869,7 @@ fn validate_assignment(value: &Value, journal: &JournalData) -> Result<Assignmen
     Ok(receipt)
 }
 
-fn lock_directory(directory: &Path) -> Result<File> {
+fn lock_directory(directory: &Path) -> Result<OwnershipLock> {
     let lock_path = directory.join("owner.lock");
     if lock_path
         .try_exists()
@@ -874,7 +885,7 @@ fn lock_directory(directory: &Path) -> Result<File> {
         .map_err(|_| failure("cannot open journal lock"))?;
     lock.try_lock()
         .map_err(|_| failure("journal is already owned by another process"))?;
-    Ok(lock)
+    Ok(OwnershipLock(lock))
 }
 
 #[cfg(unix)]
@@ -1175,6 +1186,27 @@ mod tests {
     }
 
     #[test]
+    fn dropping_journal_releases_ownership_with_a_retained_descriptor() {
+        let journal = fresh_journal("retained-owner-descriptor");
+        let path = journal.directory.clone();
+        let journal_id = journal.data.journal_id;
+        assert!(Journal::open(&path).is_err());
+        // A duplicate shares the open file description, as a concurrent
+        // subprocess can temporarily do between fork and exec.
+        let retained = journal._lock.0.try_clone().unwrap();
+        drop(journal);
+        let reopened = Journal::open(&path);
+        if let Ok(owner) = &reopened {
+            assert_eq!(owner.data.journal_id, journal_id);
+            assert!(Journal::open(&path).is_err());
+        }
+        let result = reopened.map(drop);
+        drop(retained);
+        fs::remove_dir_all(path).unwrap();
+        result.expect("journal ownership must end before inherited descriptors close");
+    }
+
+    #[test]
     fn failed_submission_save_returns_no_authority_and_blocks_in_process_retry() {
         let mut journal = fresh_journal("submission-save-failure");
         let path = journal.directory.clone();
@@ -1382,6 +1414,7 @@ mod tests {
         let (data, summary) = Journal::snapshot(&path).unwrap();
         assert_eq!(data.journal_id, owner.data.journal_id);
         assert_eq!(summary["journal_id"], json!(owner.data.journal_id));
+        assert_eq!(summary, owner.summary());
         assert!(Journal::open(&path).is_err());
         drop(owner);
         fs::remove_file(path.join("owner.lock")).unwrap();
