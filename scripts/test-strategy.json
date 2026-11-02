@@ -133,7 +133,8 @@
         ]
       ],
       "tools": [
-        "cargo"
+        "cargo",
+        "/usr/bin/install"
       ]
     },
     "connector-native": {
