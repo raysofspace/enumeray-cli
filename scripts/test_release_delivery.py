@@ -39,7 +39,10 @@ def artifacts(root, version='0.1.0', status='released'):
         minimum = {'os': 'macos', 'version': '15.0'} if 'apple' in target else {'os': 'linux', 'glibc': '2.28'}
         report = {'schema_version': 1, 'target': target, 'archive': archive,
                   'sha256': delivery.sha256(root / archive), 'source': source,
-                  'minimum_platform': minimum, 'platform_qualified': True}
+                  'minimum_platform': minimum, 'platform_qualified': True, 'binary_sha256': '0' * 64,
+                  'build_identity': {'schema_version': 1, 'package': 'enumeray-cli', 'version': version, 'target': target,
+                                     'api': 'v1', 'connector_protocol': 1, 'runner_protocol': 1, 'wrapper_protocols': [1],
+                                     'source': {**source, 'content_sha256': '1' * 64}}}
         if 'apple' in target:
             report['channel_qualification'] = {'homebrew': {
                 'schema_version': 1, 'channel': 'homebrew', 'target': target,
@@ -176,6 +179,18 @@ class ManifestTests(unittest.TestCase):
                     modified['baseline'] = {'id': 'candidate', 'sha256': 'c' * 64}
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     delivery.validate_manifest(modified, root)
+
+    def test_missing_or_mismatched_executable_identity_cannot_be_signed(self):
+        for field in ('binary_sha256', 'build_identity'):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                record, _ = artifacts(root)
+                report = next(root.glob('qualification-*.json'))
+                changed = json.loads(report.read_text())
+                changed.pop(field)
+                report.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, 'build identity or digest'):
+                    delivery.build_manifest(record, root, 'f' * 40)
 
     def test_newer_runtime_smoke_cannot_establish_minimum_platform_qualification(self):
         with tempfile.TemporaryDirectory() as temporary:

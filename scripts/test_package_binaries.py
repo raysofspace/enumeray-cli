@@ -17,6 +17,10 @@ spec = importlib.util.spec_from_file_location('package_binaries', Path(__file__)
 packaging = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packaging)
 
+qualifier_spec = importlib.util.spec_from_file_location('qualify_binary_archives', Path(__file__).with_name('qualify-binary-archives.py'))
+qualifier = importlib.util.module_from_spec(qualifier_spec)
+qualifier_spec.loader.exec_module(qualifier)
+
 
 class BundleGuideTests(unittest.TestCase):
     def test_nested_example_links_follow_the_relocated_archive_layout(self):
@@ -76,6 +80,22 @@ class BundleGuideTests(unittest.TestCase):
 
 
 class UnifiedPackageTests(unittest.TestCase):
+    @staticmethod
+    def build_identity():
+        return {'schema_version': 1, 'package': 'enumeray-cli', 'version': '0.1.0', 'target': 'test-target',
+                'api': 'v1', 'connector_protocol': 1, 'runner_protocol': 1, 'wrapper_protocols': [1],
+                'source': {'repository': packaging.artifacts.REPOSITORY, 'revision': None, 'tree': None,
+                           'lockfile_sha256': None, 'clean': False, 'content_sha256': 'a' * 64}}
+
+    def test_stale_same_version_build_cannot_be_relabeled_as_selected_source(self):
+        build = self.build_identity()
+        source = {key: value for key, value in build['source'].items() if key != 'content_sha256'}
+        with self.assertRaisesRegex(ValueError, 'stale same-version'):
+            packaging.validate_binary_identity(build, source, 'test-target', '0.1.0', 'b' * 64)
+        build['wrapper_protocols'] = [1, 2]
+        with self.assertRaisesRegex(ValueError, 'wrapper_protocols'):
+            packaging.validate_binary_identity(build, source, 'test-target', '0.1.0')
+
     def package(self, root, tree='enumeray-cli v0.1.0\nenumeray-connector v0.1.0\n', target_directory=None):
         api = root
         (api / 'scripts').mkdir(parents=True, exist_ok=True)
@@ -103,7 +123,8 @@ class UnifiedPackageTests(unittest.TestCase):
         binary.chmod(0o755)
         metadata = json.dumps({'packages': [{'name': 'enumeray-cli', 'version': '0.1.0'}],
                                'target_directory': str(target_directory)})
-        with mock.patch.object(packaging.example_bundle, 'audit_starter'), \
+        with mock.patch.object(packaging, 'read_binary_identity', return_value=self.build_identity()), \
+             mock.patch.object(packaging.example_bundle, 'audit_starter'), \
              mock.patch.object(packaging, '__file__', str(api / 'scripts/package-binaries.py')), \
              mock.patch.object(packaging.subprocess, 'check_output', side_effect=[metadata, tree]), \
              mock.patch.object(packaging.artifacts, 'source_identity', return_value={
@@ -163,6 +184,31 @@ class UnifiedPackageTests(unittest.TestCase):
             self.package(root, target_directory=target)
             self.assertFalse((root / 'target').exists())
             self.assertEqual(len(list((root / 'dist').glob('*.tar.gz'))), 1)
+
+    def test_native_qualification_keeps_observation_time_out_of_immutable_build_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / 'enumeray'
+            binary.write_bytes(b'exact extracted executable bytes')
+            build = self.build_identity()
+            binary_digest = qualifier.artifacts.sha256(binary)
+            compatibility = {'build_identity': build, 'executable_sha256': binary_digest}
+            observed = {**build, 'observed_at': '2026-11-02T10:00:00Z', 'executable_sha256': binary_digest}
+            run = mock.Mock(return_value=json.dumps(observed))
+            self.assertEqual(qualifier.inspect_build_identity(binary, compatibility, cwd=root, env={}, run=run),
+                             (binary_digest, build))
+            observed['observed_at'] = '2026-11-03T10:00:00Z'
+            run.return_value = json.dumps(observed)
+            self.assertEqual(qualifier.inspect_build_identity(binary, compatibility, cwd=root, env={}, run=run),
+                             (binary_digest, build))
+            observed['source'] = {**build['source'], 'content_sha256': 'f' * 64}
+            run.return_value = json.dumps(observed)
+            with self.assertRaisesRegex(SystemExit, 'differs from packaged build identity'):
+                qualifier.inspect_build_identity(binary, compatibility, cwd=root, env={}, run=run)
+            run.return_value = json.dumps({**build, 'observed_at': '2026-11-02T10:00:00Z'})
+            binary.write_bytes(b'changed executable bytes')
+            with self.assertRaisesRegex(SystemExit, 'differs from packaged build identity'):
+                qualifier.inspect_build_identity(binary, compatibility, cwd=root, env={}, run=run)
 
     def test_qualification_rejects_a_second_archive(self):
         with tempfile.TemporaryDirectory() as temporary:

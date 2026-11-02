@@ -27,6 +27,9 @@ const MAX_PREPARED_ASSIGNMENTS: usize = 64;
 #[serde(deny_unknown_fields)]
 pub struct JournalData {
     version: u32,
+    /// Immutable writer identity; absence permits historical inspection only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_with: Option<String>,
     pub journal_id: Uuid,
     pub connector_id: String,
     pub api_base_url: String,
@@ -423,6 +426,33 @@ impl Journal {
                 "connector ID must be 1–100 ASCII letters, digits, underscores, or hyphens",
             ));
         }
+        // An initialization attempt must not create ownership evidence beside
+        // retained incompatible or markerless state, even when owner.lock is gone.
+        if directory
+            .join("journal.json")
+            .try_exists()
+            .map_err(|_| failure("cannot inspect journal"))?
+        {
+            check_private_path(directory, true)?;
+            crate::state_identity::check(Self::read(directory)?.created_with.as_deref())?;
+            return Err(failure("journal already exists; use inspect or claim-once"));
+        }
+        if directory
+            .try_exists()
+            .map_err(|_| failure("cannot inspect journal directory"))?
+        {
+            check_private_path(directory, true)?;
+            for entry in fs::read_dir(directory)
+                .map_err(|_| failure("cannot inspect retained journal directory"))?
+            {
+                let entry = entry.map_err(|_| failure("cannot inspect retained journal entry"))?;
+                if entry.file_name() != "owner.lock" {
+                    return Err(failure(
+                        "journal is missing from a nonempty retained state directory; preserve all evidence and original matching binaries, stop and use the release recovery procedure; initialize fresh evaluation in a separate empty directory",
+                    ));
+                }
+            }
+        }
         create_private_directory(directory)?;
         let lock = lock_directory(directory)?;
         if directory
@@ -437,6 +467,7 @@ impl Journal {
             _lock: lock,
             data: JournalData {
                 version: 1,
+                created_with: crate::state_identity::current(),
                 journal_id: Uuid::new_v4(),
                 connector_id,
                 api_base_url,
@@ -455,8 +486,12 @@ impl Journal {
 
     pub fn open(directory: &Path) -> Result<Self> {
         check_private_path(directory, true)?;
+        // Refuse incompatible evidence before creating an ownership file. Reread
+        // after locking because a live predecessor may have replaced the snapshot.
+        crate::state_identity::check(Self::read(directory)?.created_with.as_deref())?;
         let lock = lock_directory(directory)?;
         let data = Self::read(directory)?;
+        crate::state_identity::check(data.created_with.as_deref())?;
         Ok(Self {
             directory: directory.to_owned(),
             _lock: lock,
@@ -675,6 +710,7 @@ impl Journal {
     }
 
     fn save_bytes(&self, bytes: &[u8]) -> Result<()> {
+        crate::state_identity::check(self.data.created_with.as_deref())?;
         let staging_path = self
             .directory
             .join(format!(".journal-{}.tmp", Uuid::new_v4()));
@@ -818,6 +854,8 @@ impl Journal {
 
 fn summary(data: &JournalData, directory: &Path) -> Value {
     json!({
+        "created_with": data.created_with,
+        "state_identity_matches": data.created_with.as_deref() == crate::state_identity::current().as_deref(),
         "last_allow_development_execution": data.last_allow_development_execution,
         "execution_policy_note": "Historical policy from the last launch-capable invocation; explicit startup opt-in is always required.",
         "journal_id": data.journal_id, "connector_id": data.connector_id,
@@ -957,9 +995,10 @@ mod tests {
 
     #[test]
     fn persistent_v1_journal_and_archive_preserve_execution_evidence() {
-        let document: Value =
+        let mut document: Value =
             serde_json::from_str(include_str!("../../../../release/fixtures/journal-v1.json"))
                 .unwrap();
+        document["created_with"] = json!(enumeray_contracts::compatibility::state_identity());
         let archive: Value =
             serde_json::from_str(include_str!("../../../../release/fixtures/archive-v1.json"))
                 .unwrap();
@@ -1040,6 +1079,115 @@ mod tests {
             assignment[field] = json!(Uuid::new_v4());
         }
         assignment
+    }
+
+    #[test]
+    fn incompatible_candidate_journals_remain_inspectable_without_ownership_writes() {
+        for marker in [None, Some("sha256:another-development-source".to_owned())] {
+            let mut journal = fresh_journal("candidate-state-refusal");
+            let path = journal.directory.clone();
+            let session = journal.begin_session().unwrap();
+            let claim = journal.begin_claim(session).unwrap();
+            let original = serde_json::to_value(&journal.data).unwrap();
+            drop(journal);
+            let mut retained = original.clone();
+            if let Some(marker) = marker {
+                retained["created_with"] = json!(marker);
+            } else {
+                retained.as_object_mut().unwrap().remove("created_with");
+            }
+            let bytes = serde_json::to_vec_pretty(&retained).unwrap();
+            fs::write(path.join("journal.json"), &bytes).unwrap();
+            fs::remove_file(path.join("owner.lock")).unwrap();
+            let (historical, summary) = Journal::snapshot(&path).unwrap();
+            assert_eq!(historical.active_session_id, Some(session));
+            assert_eq!(historical.pending_claim_key, Some(claim));
+            assert_eq!(summary["state_identity_matches"], false);
+            assert!(
+                Journal::initialize(
+                    &path,
+                    "http://127.0.0.1:8080".into(),
+                    "test-connector".into()
+                )
+                .is_err()
+            );
+            assert!(!path.join("owner.lock").exists());
+            let error = Journal::open(&path)
+                .err()
+                .expect("incompatible candidate refused");
+            assert!(error.to_string().contains("original matching binary"));
+            assert!(!path.join("owner.lock").exists());
+            assert_eq!(fs::read(path.join("journal.json")).unwrap(), bytes);
+            // Restoring the original matching bytes permits only the existing
+            // recovery path: it preserves the unresolved session and claim.
+            fs::write(
+                path.join("journal.json"),
+                serde_json::to_vec(&original).unwrap(),
+            )
+            .unwrap();
+            let restarted = Journal::open(&path).unwrap();
+            assert_eq!(restarted.data.active_session_id, Some(session));
+            assert_eq!(restarted.data.pending_claim_key, Some(claim));
+            drop(restarted);
+            fs::remove_dir_all(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn lost_journal_cannot_bootstrap_over_retained_state_but_empty_init_can_retry() {
+        let mut journal = fresh_journal("lost-journal-bootstrap");
+        let path = journal.directory.clone();
+        let session = journal.begin_session().unwrap();
+        journal.begin_claim(session).unwrap();
+        let original = fs::read(path.join("journal.json")).unwrap();
+        drop(journal);
+        fs::remove_file(path.join("journal.json")).unwrap();
+        let evidence = path.join("uncertain-launch.json");
+        fs::write(&evidence, &original).unwrap();
+        let lock = fs::read(path.join("owner.lock")).unwrap();
+        for service in [false, true] {
+            let result = if service {
+                Journal::initialize_service(
+                    &path,
+                    "http://127.0.0.1:8080".into(),
+                    "test-connector".into(),
+                    true,
+                    false,
+                )
+            } else {
+                Journal::initialize(
+                    &path,
+                    "http://127.0.0.1:8080".into(),
+                    "test-connector".into(),
+                )
+            };
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("nonempty retained state")
+            );
+            assert!(!path.join("journal.json").exists());
+            assert_eq!(fs::read(&evidence).unwrap(), original);
+            assert_eq!(fs::read(path.join("owner.lock")).unwrap(), lock);
+            assert_eq!(fs::read_dir(&path).unwrap().count(), 2);
+        }
+        // A permanently empty initialization that only created its lock has no
+        // execution history to replace and may retry through normal ownership.
+        let empty = std::env::temp_dir().join(format!("enumeray-empty-init-{}", Uuid::new_v4()));
+        create_private_directory(&empty).unwrap();
+        drop(lock_directory(&empty).unwrap());
+        let initialized = Journal::initialize(
+            &empty,
+            "http://127.0.0.1:8080".into(),
+            "test-connector".into(),
+        )
+        .unwrap();
+        assert!(initialized.data.active_session_id.is_none());
+        drop(initialized);
+        fs::remove_dir_all(empty).unwrap();
+        fs::remove_dir_all(path).unwrap();
     }
 
     #[test]

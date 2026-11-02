@@ -2,14 +2,9 @@
 FROM rust:1.98.1-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 procps && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
-COPY Cargo.toml ./Cargo.toml
-COPY Cargo.lock rust-toolchain.toml ./
-COPY crates/contracts crates/contracts
-COPY crates/connector crates/connector
-COPY crates/client crates/client
-COPY crates/cli crates/cli
-COPY examples examples
-COPY release release
+# Preserve the complete public source fingerprint and optional prepared metadata.
+# Git, targets, caches and local secrets are excluded by the context ignore file.
+COPY . .
 # A copied source snapshot can predate outputs from another cached build.
 # Rebuild this package while retaining its dependency cache.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \

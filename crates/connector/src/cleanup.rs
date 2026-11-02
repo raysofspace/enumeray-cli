@@ -477,6 +477,7 @@ pub(crate) fn pin_references(references: &[ReleaseReference]) -> Result<Vec<File
                     continue;
                 }
                 let job: crate::compute::ComputeJob = local_process::read_record(&record)?;
+                job.check_identity()?;
                 if job.version != 1
                     || job.intent != intent
                     || resolved_path(ancestor)?

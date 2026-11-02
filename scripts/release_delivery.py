@@ -204,6 +204,20 @@ class GitHub:
                     raise ValueError('Immutable release asset conflicts: ' + name)
 
 
+def validate_build_report(report, target, version, source):
+    build = report.get('build_identity', {})
+    if (not qualification.full_hash(report.get('binary_sha256')) or build.get('schema_version') != 1
+            or build.get('package') != 'enumeray-cli' or build.get('version') != version or build.get('target') != target
+            or build.get('api') != 'v1' or build.get('connector_protocol') != 1 or build.get('runner_protocol') != 1
+            or build.get('wrapper_protocols') != [1] or not isinstance(build.get('source'), dict)
+            or any(build['source'].get(key) != value for key, value in source.items())
+            or not qualification.full_hash(build['source'].get('content_sha256'))):
+        raise ValueError('Native executable build identity or digest differs: ' + target)
+    homebrew = report.get('channel_qualification', {}).get('homebrew')
+    if homebrew is not None and homebrew.get('binary_sha256') != report['binary_sha256']:
+        raise ValueError('Homebrew executable differs from native archive digest: ' + target)
+
+
 def validate_manifest(manifest, directory=None, identity=None, require_signatures=True):
     if not isinstance(manifest, dict) or manifest.get('schema_version') != 1:
         raise ValueError('Invalid release manifest schema')
@@ -300,6 +314,7 @@ def validate_manifest(manifest, directory=None, identity=None, require_signature
                     report.get('source') != source or report.get('minimum_platform') != platform or
                     report.get('platform_qualified') is not True):
                 raise ValueError('Native minimum-platform qualification failed: ' + target)
+            validate_build_report(report, target, version, source)
             validate_homebrew(report, target, version, item['archive'], files[item['archive']]['sha256'])
     if identity:
         for field in ('version', 'public_revision', 'public_repository', 'baseline'):
@@ -433,6 +448,7 @@ def build_manifest(identity, artifacts, workflow_revision, signed=True):
                 report.get('source') != source or report.get('minimum_platform') != platform or
                 report.get('platform_qualified') is not True):
             raise ValueError('Native minimum-platform qualification failed: ' + target)
+        validate_build_report(report, target, version, source)
         validate_homebrew(report, target, version, archive, report['sha256'])
         targets[target] = {**minimum, 'archive': archive, 'qualification': name}
     if not (artifacts / source_archive).is_file():

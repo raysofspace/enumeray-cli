@@ -24,6 +24,40 @@ clear credentials, configuration or connector journals. The persistent baseline
 remains provisional. Alpha labeling does not relax execution, authorization or
 recovery checks.
 
+## Before choosing a package
+
+Obtain the approved service API origin, exact public source revision or release,
+matching service selection/receipt and responsible installation contact from the
+service or site owner. A model ID, a `persistent-v1` label, a version string and
+this guide's example `0.1.0-alpha.1` are not substitutes for that selection.
+Publication is currently pending: the commands below do not imply that the
+example release assets or a qualified tap formula are available. If no qualified
+package is identified, use the pinned source evaluation route agreed with the
+service owner; do not guess a revision or reuse an older pilot's durable state.
+
+Use a terminal with a POSIX shell (`sh`), `curl`, `tar`, `mkdir`, `install`,
+`mktemp`, `mv`, `rm` and a SHA-256 utility (`shasum` on macOS or `sha256sum` on
+Linux). Source acquisition additionally needs Git, a trusted Rustup installation
+and the platform's native compiler/linker. Obtain these tools through your
+institution's approved package or toolchain process. Signature verification
+requires **Cosign v3 on a trusted connected host**, obtained independently of the
+Enumeray download; an unverified tool shipped beside an archive cannot establish
+its trust. Confirm tools with `command -v TOOL` and `cosign version` before
+following a recipe. Python 3.9+ is needed only for supplied author examples, and
+`jq` only for scripted JSON/HTTP workflows.
+
+Confirm the host's CPU and minimum system before downloading: `uname -m` reports
+`arm64`/`aarch64` or `x86_64`; `sw_vers -productVersion` reports macOS, and
+`getconf GNU_LIBC_VERSION` reports glibc on Linux. Stop for an unknown architecture,
+missing glibc or an older system. A different target's binary is not an upgrade
+route. Slurm/OpenSSH versions and institutional storage/runtime behavior require
+the site's selected backend evidence; the package matrix alone does not qualify
+them or native systemd/launchd service management.
+
+Work in a new download directory you control. Keep the verified archives,
+metadata and receipt after installation; the executable alone cannot recover
+all verification evidence.
+
 ## Homebrew on macOS
 
 Once the project tap's qualified formula is published:
@@ -55,6 +89,8 @@ replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
 `x86_64-unknown-linux-gnu` as appropriate:
 
 ```sh
+mkdir -p "$HOME/enumeray-downloads/alpha-evaluation"
+cd "$HOME/enumeray-downloads/alpha-evaluation"
 VERSION=0.1.0-alpha.1
 TARGET=aarch64-apple-darwin
 REPOSITORY=raysofspace/enumeray-cli
@@ -71,18 +107,27 @@ Verify on a trusted connected host with a separately trusted Cosign v3. The
 qualified-release workflow signs from `main`; the requested version is bound by
 the signed checksum filename and the release/source metadata:
 
+<!-- archive-verification -->
 ```sh
-cosign verify-blob \
-  --bundle "$CHECKSUM.sigstore.json" \
-  --certificate-identity "https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "$CHECKSUM"
-# Linux: sha256sum --check "$CHECKSUM"
-# macOS (also works on Linux with Perl):
-shasum -a 256 --check "$CHECKSUM"
-tar -xzf "$ARCHIVE"
-EXTRACTED="$PWD/${ARCHIVE%.tar.gz}"
+(
+  set -eu
+  cosign verify-blob \
+    --bundle "$CHECKSUM.sigstore.json" \
+    --certificate-identity "https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    "$CHECKSUM"
+  case "$(uname -s)" in
+    Darwin) shasum -a 256 --check "$CHECKSUM" ;;
+    Linux) sha256sum --check "$CHECKSUM" ;;
+    *) echo 'Unsupported verification host' >&2; exit 1 ;;
+  esac
+  # Extraction is unreachable when either verification command fails.
+  tar -xzf "$ARCHIVE"
+)
 ```
+
+After that block succeeds, set `EXTRACTED="$PWD/${ARCHIVE%.tar.gz}"`.
+
 
 Stop immediately if either verification command fails. Keep the signed checksum
 and archive together. Read `compatibility.json` and the source identity before
@@ -94,6 +139,12 @@ stage beside the destination and rename on the same filesystem, so an interrupte
 copy leaves the previous executable in place. Use a prefix you manage directly;
 use Homebrew to update executables owned by that package manager.
 Coordinate connector/runner maintenance before replacing an existing package.
+Run `"$EXTRACTED/enumeray" --json compatibility inspect` before replacement and
+compare it with the package metadata and selected service as described below;
+invoke that extracted binary for the pre-install compatibility check. Stop on a
+wrong target, mismatch or missing required evidence before replacing a working
+executable. `--local-only` establishes only its declared installed-file scope,
+not permission to reuse an incompatible journal.
 
 <!-- manual-install-copy -->
 ```sh
@@ -124,10 +175,20 @@ configuration, credentials, connector journal and scientific work untouched.
 ## Offline and SSH/HPC hosts
 
 Verify the signature and archive checksum on a trusted connected host first.
-Transfer the verified archive, signed checksum and compatibility/source metadata
-through your approved authenticated SSH transfer. Recheck the archive's SHA-256
-at the destination using that verified checksum, then extract and install as
-above. Cosign is needed on the verification host; the offline execution host
+Transfer the verified archive, signed checksum, signature bundle,
+release/service receipts, compatibility/source metadata and installation receipt
+through your approved authenticated SSH transfer. Record which connected host
+verified them, the artifact SHA-256 and how the recipient authenticated that
+handoff. Recheck the archive's SHA-256 at the destination using that verified
+checksum, then extract and install as above. A successful local checksum only
+checks the transfer against that trusted handoff; it does not independently
+repeat online signature verification. The connected verifier can give the
+recipient a prior matching signed-release installation receipt and its SHA-256
+through an independently authenticated channel. On the offline recipient, use
+`compatibility check --transferred-receipt FILE --transferred-sha256 SHA256
+--local-only --receipt NEWFILE` to compare the installed bytes within that
+explicit local scope. The resulting trust is `authenticated_transfer`, not a
+claim of freshly repeated online signing or observation of a live service. Cosign is needed on the verification host; the offline execution host
 needs no Python, installer or network access for installation. Retain the
 verification evidence with the downloads for later reuse.
 
@@ -175,18 +236,166 @@ build needs the toolchain and those dependencies already available locally.
 Locally rebuilding a release does not replace its published archive qualification
 or establish compatibility with another service release.
 
-## Build from the checkout
+## Build from a pinned checkout
 
-Use the repository's pinned Rust toolchain. From the repository root:
+Use this development evaluation route when no qualified release package has
+been supplied. The service owner must provide the **full 40-character public
+commit** matching the selected service, not `main`, a guessed tag or an abbreviated
+commit. Replace the deliberate placeholder below before running the block. Use
+a new destination directory; Git refuses to clone over an existing checkout.
+The public repository is sufficient: no private API checkout, database or API
+credentials are needed to build the client.
 
+<!-- pinned-source-acquisition -->
 ```sh
-cargo build --locked -p enumeray-cli --bin enumeray
-install -m 755 target/debug/enumeray "$HOME/.local/bin/enumeray"
+(
+  set -eu
+  PUBLIC_REVISION=REPLACE_WITH_APPROVED_40_HEX_PUBLIC_REVISION
+  case "$PUBLIC_REVISION" in
+    *[!0-9a-f]*) echo 'Set the approved full public commit before acquisition' >&2; exit 1 ;;
+  esac
+  test "${#PUBLIC_REVISION}" -eq 40
+  git clone --no-checkout https://github.com/raysofspace/enumeray-cli.git enumeray-cli-evaluation
+  cd enumeray-cli-evaluation
+  git checkout --detach "$PUBLIC_REVISION"
+  test "$(git rev-parse HEAD)" = "$PUBLIC_REVISION"
+  rustup toolchain install 1.98.1 --profile minimal
+  cargo build --locked --release -p enumeray-cli --bin enumeray
+  ./target/release/enumeray --version
+  ./target/release/enumeray --json compatibility inspect
+)
 ```
 
-Create the destination directory and configure `PATH` as above. The build
-needs no running service. Authors need Python 3.9+ for supplied starters; scripted
-recipes use `jq`, and raw HTTP recipes additionally use `curl`.
+Run this from the **parent directory** of the new checkout. The subshell returns
+there when complete; then set `EXTRACTED="$PWD/enumeray-cli-evaluation/target/release"`
+and use the atomic installation block above. The checkout's `rust-toolchain.toml`
+selects Rust 1.98.1. Cargo downloads the locked dependencies and needs network
+access on the build host; an offline build needs that toolchain and the complete
+locked dependency cache provisioned first. A source build records its actual
+source identity and is **unsigned development evidence**, not a qualified release.
+Keep the checkout or matching source archive, lockfile and build identity with
+its selected service pair. Check out a different commit in a separate directory;
+do not overwrite the matching executable needed to drain an earlier pilot.
+
+## Inspect the selected installation
+
+`enumeray --version` confirms an executable starts. Use the machine-readable
+identity to inspect what was actually built:
+
+```sh
+enumeray --json compatibility inspect
+```
+
+The identity names the package/version/target, public repository and exact
+revision/tree/lockfile/content digest, source cleanliness and API, connector,
+runner and wrapper protocol versions. The archive's `compatibility.json` must
+agree with the embedded executable identity. The content digest identifies
+modified development sources; it does not turn that build into a signed release.
+A matching protocol number or source revision alone does not establish a match.
+
+For a qualified release, acquire its complete signed evidence from the **same
+selected `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL`** used for the archive above.
+This step additionally requires `jq`, `curl` and the independently trusted
+**Cosign v3** on the connected verification host. The four native report files
+are evidence for the selected release's supported platform set; downloading them
+does not install other targets. Publication is pending, so do not assume this
+example version's release assets currently exist.
+
+Set `API_ORIGIN` to the service origin supplied by its owner. The block below
+uses the verified extracted executable for a check **before replacement**. For
+an already installed package, replace the `ENUMERAY_BIN` assignment with
+`ENUMERAY_BIN=enumeray`. `EVIDENCE` must name a new directory: an interrupted or
+failed attempt leaves its original files intact, so select a fresh directory for
+a retry instead of overwriting retained evidence.
+
+<!-- release-evidence-acquisition -->
+```sh
+EVIDENCE="$PWD/release-evidence-$TAG"
+ENUMERAY_BIN="$EXTRACTED/enumeray"
+(
+  set -eu
+  : "${API_ORIGIN:?Set the approved service API origin}"
+  mkdir "$EVIDENCE"
+  for file in release-manifest.json release-manifest.json.sigstore.json \
+              service-publish.json service-publish.sigstore.json; do
+    curl --fail --location --proto '=https' --tlsv1.2 \
+      --output "$EVIDENCE/$file" "$BASE_URL/$file"
+  done
+  # Authenticate the manifest before jq reads any field or selects more downloads.
+  cosign verify-blob \
+    --bundle "$EVIDENCE/release-manifest.json.sigstore.json" \
+    --certificate-identity "https://github.com/$REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-github-workflow-repository "$REPOSITORY" \
+    --certificate-github-workflow-ref refs/heads/main \
+    --certificate-github-workflow-trigger repository_dispatch \
+    "$EVIDENCE/release-manifest.json"
+  jq -e --arg version "$VERSION" --arg tag "$TAG" --arg repository "$REPOSITORY" \
+    '.schema_version == 1 and .version == $version and .tag == $tag and .public_repository == $repository' \
+    "$EVIDENCE/release-manifest.json" >/dev/null
+  for target in aarch64-apple-darwin x86_64-apple-darwin \
+                aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+    # Exact fixed-target filenames cannot escape EVIDENCE or change download origins.
+    report=$(jq -er --arg target "$target" \
+      '.targets[$target].qualification | select(. == ("qualification-" + $target + ".json"))' \
+      "$EVIDENCE/release-manifest.json")
+    curl --fail --location --proto '=https' --tlsv1.2 \
+      --output "$EVIDENCE/$report" "$BASE_URL/$report"
+  done
+  "$ENUMERAY_BIN" --api "$API_ORIGIN" --json compatibility check \
+    --manifest "$EVIDENCE/release-manifest.json" \
+    --service-receipt "$EVIDENCE/service-publish.json" \
+    --receipt "$EVIDENCE/installation-receipt.json"
+)
+```
+
+Any failed download, manifest verification, selected-version check or report-name
+validation stops the block before compatibility checking. The CLI then rechecks
+both workflow signatures, the exact service publication authorization and all
+manifest-bound native report digests. A downloaded publication receipt is not
+trusted merely because the manifest's signature passed. Keep this complete
+evidence directory, the archive and its verified checksum with the resulting
+installation receipt. Supply any required peer/context observations to the check
+as described below; absent live evidence must remain explicit.
+
+For a development evaluation, use the explicit service/public selection supplied
+by its owner with `--development-selection FILE` instead of the manifest and
+service-receipt pair. The selection records `schema_version: 1`,
+`service_repository` (`raysofspace/enumeray`), `public_repository`
+(`raysofspace/enumeray-cli`), full `service_revision` and `public_revision`,
+`version` and `baseline` (`id`, `sha256`, `status`). Modified builds additionally
+require the independently selected `public_content_sha256` and/or
+`service_content_sha256`; record their actual fingerprints, not just `clean:
+false`. That result remains unsigned development evidence. Do not
+create a selection by copying the current executable's fields just to make a
+mismatch disappear. Supply retained peer build observations with repeated
+`--peer FILE`, documentation identity with `--docs docs-build.json`, and the
+served examples manifest with `--examples model-examples-manifest.json`. An
+optional `--connector ID` checks its authenticated build observation; `--context
+FILE` checks a saved read-only runner observation tied to the selected context.
+A peer file is the saved inspect identity plus a top-level RFC3339
+`observed_at` timestamp. A context observation has `schema_version: 1`, the exact
+`context_id`, `observed_at` and `build_identity` from the runner identity command.
+The site owner must authenticate that host/context association. Live observations
+must be recent (at most 60 seconds); older files remain historical snapshots and
+cannot satisfy a live check. Inspecting compatibility never launches a scientific
+job or proves journal ownership. Obtain observations from the responsible host owner; API/client
+identity cannot attest an author-declared runtime, dataset or institutional site.
+
+Read the receipt's selected inputs, expected/observed check values and limits.
+`match` means the supplied evidence agrees within those checks; `mismatch` means
+stop before reuse; `missing_evidence` means the installation is not fully
+established. An unreachable API, absent runner observation or stale heartbeat is
+not a successful whole-installation verdict. Preserve the receipt and evidence,
+resolve missing observations with the owner and repeat to a new receipt file.
+The check exits 0 only when required comparisons in its declared scope match,
+1 for mismatch, missing evidence or verification failure, and 2 for invalid
+command arguments. With `--local-only`, the receipt explicitly excludes live API
+and daemon observation and must not be presented as whole-installation proof.
+Do not overwrite historical receipts or credentials to bypass a failed check.
+The website exposes `/docs-build.json` and a footer stamp for its root/public
+source pair and build time; download it from the same selected documentation
+site as its examples, not from an unrelated current site.
 
 ## Login and profiles
 
@@ -271,16 +480,68 @@ service. Managed execution continues to require a separate model account.
 
 ## Upgrade deliberately
 
-Fresh WIP installations use only `enumeray`; the old `enumeray-connector`
-executable and its command paths are not supported. DSM demo recreation starts
-from fresh state. Read the archive's `compatibility.json`. The proposed persistent baseline is still
-a candidate; version 1 does not prove compatibility between unreleased revisions.
-Use the exact matching component set approved for your service. Infrastructure
-owners stop the previous daemon before replacing a connector/runner binary or
-credential and preserve the complete private state and original execution evidence.
-Follow the [connector recovery guidance](https://github.com/raysofspace/enumeray-cli/blob/main/crates/connector/README.md#enrollment-and-service-operation)
-for an interrupted service. Installation readiness and successful fixture trials
-do not establish scientific validity or qualification of every production site.
+The current alpha supports fresh evaluations and recovery with the **same
+selected build**, not in-place migration between arbitrary development revisions.
+`persistent-v1` is still a candidate. Legacy record readers and login-profile
+conversion handle their explicitly supported formats; they do not establish
+binary, database, connector-journal or compute-session migration. A model
+publication rollback is also separate from rolling back Enumeray itself.
+
+Before any binary, credential or service change, prepare this inventory with the
+service, connector and execution-host owners:
+
+| Record | Preserve before changing anything |
+| --- | --- |
+| Existing and proposed software | Exact service/public pair, executable identities and hashes, target/minimum host, package/source metadata, docs/examples and verification receipts; retain the old executables. |
+| Configuration and authority | Private profile/configuration and credential locations, owning OS account, API origin, connector ID, context/grant identities and approved executable paths. Keep secret bytes out of shared receipts. |
+| Durable work | Original connector journal/owner identity, compute launch/session records, analysis and saved-release directories, immutable installations, pending delivery/cleanup evidence and backend execution identities. |
+| Service and storage | Current schema/candidate identity, coordinated database/object/connector/compute backup boundary and responsible recovery owner; existing immutable receipts/history remain unchanged. |
+
+Follow these go/no-go steps in order:
+
+1. Compare existing and proposed identities before stopping anything. If the
+   proposed state/schema relationship is unsupported, choose a separate fresh
+   evaluation with new state/identities, or stop and retain the matching old set.
+   Do not copy a journal into a fresh installation and rename it a migration.
+2. Stop admitting new work and use the **old matching binary and original owner
+   account** to observe and drain accepted allocations, delivery and cleanup.
+   Keep original execution identities. A missing journal, uncertain launch,
+   unfinished cancellation or unprovable drain is a **stop/escalate condition**:
+   preserve all evidence and ask the service/site owner to resolve it. Starting a
+   replacement connector or deleting the evidence is not a drain procedure.
+3. Establish the coordinated backup boundary before a supported change. Preserve
+   private configuration, credentials, original journals, compute records and
+   valuable scientific data with their ownership/permissions. A binary-only copy
+   cannot restore a changed database or recover a live backend execution.
+4. Stop the old daemon and verify that no second process owns its journal. Install
+   to the managed path using the atomic direct-copy or package-manager operation.
+   Check identities before reopening; mismatched or markerless durable state must
+   remain unchanged and refused for mutation, with read-only inspection available.
+5. Reopen only with the selected matching state and responsible owner. Recheck the
+   API, connector and runner observations, original assignments/results and
+   absence of duplicate launches. Retain the new installation receipt and the
+   old evidence even after reopening succeeds.
+
+If a replacement cannot open the retained state, keep it stopped. Use the
+retained **matching binary and coordinated state** for recovery only when the
+recorded compatibility/reopening checks allow it; do not point an older binary
+at newer evidence or restore an older backup over newer surviving compute
+records. Unsupported rollback requires escalation, not deleting marker fields,
+forcing a format version, recreating the database or re-enrolling over the old
+connector. A fresh disposable evaluation has separate state and explicit new
+identities, while valuable old state stays intact and readable with its matching
+software. A real cross-release upgrade/rollback pair needs its own selected,
+supported release-policy rehearsal before it can be advertised.
+
+Fresh WIP installations use only `enumeray`; the former `enumeray-connector`
+executable is not supported. Installation and removal do not alter privately
+managed state. The [connector recovery guidance](../connector/README.md#enrollment-and-service-operation)
+explains same-build interruption recovery. Service operators coordinate schema,
+backup and restore decisions under their service runbook. Package installation,
+matched build evidence and successful fixtures are separate from scientific
+validation, native service lifecycle and production-site qualification.
 
 The [documentation project](https://doc.enumeray.com/)
-provides role-based pages and current command/API references.
+provides role-based pages and current command/API references. Its current site
+may describe a newer build; use its visible source stamp and identity download
+before combining it with retained historical evidence.

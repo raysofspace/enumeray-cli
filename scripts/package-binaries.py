@@ -30,6 +30,30 @@ def assert_source_unchanged(root, revision, original):
         raise ValueError('Public source identity changed during binary packaging')
 
 
+def read_binary_identity(executable):
+    try:
+        return json.loads(subprocess.check_output([str(executable), 'compatibility', 'inspect', '--json'], text=True))
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        raise ValueError('Executable cannot report its compiled build identity; rebuild it from selected source') from error
+
+
+def validate_binary_identity(build, source, target, version, content_sha256=None):
+    expected = {'schema_version': 1, 'package': 'enumeray-cli', 'version': version, 'target': target,
+                'api': 'v1', 'connector_protocol': 1, 'runner_protocol': 1, 'wrapper_protocols': [1]}
+    for field, value in expected.items():
+        if build.get(field) != value:
+            raise ValueError('Built CLI identity differs from selected source: ' + field + '; rebuild it')
+    actual_source = build.get('source', {})
+    for field, value in source.items():
+        if actual_source.get(field) != value:
+            raise ValueError('Built CLI source identity differs: ' + field + '; rebuild it')
+    if not re.fullmatch('[0-9a-f]{64}', actual_source.get('content_sha256', '')):
+        raise ValueError('Built CLI has no complete source content identity')
+    if content_sha256 is not None and actual_source['content_sha256'] != content_sha256:
+        raise ValueError('Built CLI has stale same-version source contents; rebuild it')
+    return {key: build[key] for key in (*expected, 'source')}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
@@ -82,23 +106,33 @@ def main():
     if not executable.is_file():
         raise SystemExit(f"Build the independent target binary first: {executable}")
     artifacts.validate_version(version)
+    try:
+        binary_digest = artifacts.sha256(executable)
+        content_sha256 = artifacts.content_identity(root)['content_sha256'] if source_identity['revision'] is not None else None
+        build_identity = validate_binary_identity(read_binary_identity(executable), source_identity, args.target, version, content_sha256)
+    except ValueError as error:
+        parser.error(str(error))
     archive_name = f"{binary}-{version}-{args.target}"
     with tempfile.TemporaryDirectory(prefix="enumeray-package-") as temporary:
         contents = Path(temporary) / archive_name
         contents.mkdir()
         shutil.copy2(executable, contents / binary)
         (contents / binary).chmod(0o755)
+        if artifacts.sha256(contents / binary) != binary_digest:
+            parser.error("Executable changed during packaging; rebuild and retry")
         shutil.copy2(root / "LICENSE", contents / "LICENSE")
         artifacts.write_json(contents / 'THIRD_PARTY_NOTICES.json', notices)
         example_bundle.assemble_examples(root, contents, contents / binary, source_identity, version, release=args.release)
         protocol = {
             "package": package, "binary": binary, "version": version,
             "target": args.target, "api": "v1", "connector_protocol": 1,
-            "wrapper_protocols": [1, 2], "requires_database": False,
+            "wrapper_protocols": build_identity["wrapper_protocols"], "requires_database": False,
             "capabilities": ["cli", "connector", "compute_runner"],
             "requires_openssh_for_ssh": True,
             "source": source_identity,
             "minimum_platform": artifacts.MINIMUM_PLATFORMS.get(args.target),
+            "build_identity": build_identity,
+            "executable_sha256": binary_digest,
         }
         artifacts.write_json(contents / 'compatibility.json', protocol)
         archive = output / f"{archive_name}.tar.gz"

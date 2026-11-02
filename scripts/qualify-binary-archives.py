@@ -37,6 +37,17 @@ def check_guide_links(root, guides):
                 raise SystemExit(f"Broken bundled guide link in {guide}: {target}")
 
 
+def inspect_build_identity(binary, compatibility, *, cwd, env, run=subprocess.check_output):
+    """Compare immutable compiled facts separately from timestamped observations."""
+    binary_digest = artifacts.sha256(binary)
+    observed_build = json.loads(run([str(binary), 'compatibility', 'inspect', '--json'], cwd=cwd, env=env, text=True))
+    for field in ('executable_sha256', 'observed_at'):
+        observed_build.pop(field, None)
+    if observed_build != compatibility.get('build_identity') or binary_digest != compatibility.get('executable_sha256'):
+        raise SystemExit('Extracted executable differs from packaged build identity or digest')
+    return binary_digest, observed_build
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--archives", required=True, type=Path)
@@ -74,11 +85,12 @@ def main():
     if (compatibility["target"] != args.target or compatibility["requires_database"]
             or compatibility["package"] != "enumeray-cli"
             or compatibility["api"] != "v1" or compatibility["connector_protocol"] != 1
-            or compatibility["wrapper_protocols"] != [1, 2]
+            or compatibility["wrapper_protocols"] != [1]
             or not compatibility["requires_openssh_for_ssh"]
             or archive.name != f"enumeray-{compatibility['version']}-{args.target}.tar.gz"):
         raise SystemExit("Package compatibility contract mismatch")
     binary = contents / name
+    binary_digest, observed_build = inspect_build_identity(binary, compatibility, cwd=fresh, env=environment)
     minimum = artifacts.MINIMUM_PLATFORMS.get(args.target)
     if minimum is None or compatibility.get('minimum_platform') != minimum:
         raise SystemExit('Package lacks the supported minimum-platform contract')
@@ -95,7 +107,7 @@ def main():
     if args.require_minimum_platform and not platform_report['platform_qualified']:
         raise SystemExit('This host does not provide native execution on the supported minimum platform')
     result.update(archive=archive.name, sha256=expected, version=compatibility['version'],
-                  source=source, minimum_platform=minimum, **platform_report)
+                  source=source, minimum_platform=minimum, binary_sha256=binary_digest, build_identity=observed_build, **platform_report)
     executables = sorted(p.name for p in contents.iterdir() if p.is_file() and p.stat().st_mode & 0o111)
     if executables != ["enumeray"]:
         raise SystemExit("Expected exactly one installed executable")

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 use uuid::Uuid;
 
-pub(crate) const VERSION: u32 = 1;
+pub(crate) const VERSION: u32 = enumeray_contracts::compatibility::RUNNER_PROTOCOL;
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Request {

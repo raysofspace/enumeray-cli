@@ -127,7 +127,9 @@
           "--test",
           "host_preflight",
           "--test",
-          "setup"
+          "setup",
+          "--test",
+          "compatibility"
         ]
       ],
       "tools": [
@@ -369,7 +371,8 @@
     "examples/scalar_model/test_protocol.py": "python",
     "examples/collections/test_protocol.py": "python",
     "scripts/test_collection_identity.py": "python",
-    "scripts/test_http_workflows.py": "python"
+    "scripts/test_http_workflows.py": "python",
+    "crates/cli/tests/compatibility.rs": "client-cli"
   },
   "ignored": {
     "crates/connector/src/compute.rs::real_ssh_and_slurm": {

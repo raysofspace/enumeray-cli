@@ -35,6 +35,7 @@ mod setup;
 mod spool;
 #[path = "runtime/state.rs"]
 mod state;
+mod state_identity;
 mod transfers;
 
 use std::{fmt, path::PathBuf, process::ExitCode};

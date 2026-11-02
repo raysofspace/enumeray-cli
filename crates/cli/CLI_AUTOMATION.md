@@ -8,9 +8,9 @@ results retain their model-defined JSON shapes. A model inspection is the
 underlying HTTP management projection, not an analysis summary.
 
 The downloadable [CLI output schemas](https://doc.enumeray.com/contracts/cli-output-v1.json)
-contain four independently usable JSON Schema documents, keyed
-`analysis-summary`, `analysis-collection-summary`, `release-summary` and
-`runtime-error`. They are exported from the Rust types used by the CLI rather
+contain five independently usable JSON Schema documents, keyed
+`analysis-summary`, `analysis-collection-summary`, `release-summary`,
+`compatibility-receipt` and `runtime-error`. They are exported from the Rust types used by the CLI rather
 than separately maintained examples. The complete transcripts linked below are
 captured through actual CLI processes and disposable HTTP fixtures. Only local
 paths, API origins and generated release identities are normalized; tokens and
@@ -41,6 +41,32 @@ responses must select these schemas and check required fields. Stored analysis,
 release, upload and bundle formats remain version 1; this is not a supported
 cross-release upgrade or a reason to discard retained operation identity.
 
+## Installation comparison receipts
+
+`enumeray compatibility inspect --json` reports the executing build's embedded
+identity and a separate observation of the executable file. It reads no login
+profile. `compatibility check --json` writes a new private receipt using the
+`compatibility-receipt` contract; see the [installation procedure](INSTALL.md#inspect-the-selected-installation)
+for release, unsigned development and authenticated offline transfer inputs.
+
+Check `schema_version`, `status` and `trust` before using the receipt. `status`
+is `match`, `mismatch` or `missing_evidence`. Only `match` exits 0; the latter two
+exit 1 with the receipt on stdout and in the requested new file. Invalid CLI
+arguments exit 2. Malformed input or an existing output path produces the normal
+runtime error without replacing retained evidence. `trust` is `signed_release`,
+`unsigned_development`, `authenticated_transfer` or `unverified`; identity
+agreement never upgrades unsigned or unavailable evidence into release trust.
+
+Each check retains its component, field, expected/observed values and reason.
+`selected` retains the exact selected service/public identity and evidence
+hashes; `limits` describes unchecked scope. `--local-only` excludes live service
+and connector conclusions. Stale/unavailable required observations stop a live
+comparison. A connector heartbeat identifies the reported build, not journal
+ownership or an independent attestation of executable bytes. Documentation and
+example manifests identify selected sources; this command does not execute or
+verify every example file. Receipt success grants no execution authority,
+scientific approval, state migration or site qualification.
+
 ## Streams, errors and exits
 
 | Result | stdout | stderr and exit |
@@ -50,6 +76,7 @@ cross-release upgrade or a reason to discard retained operation identity.
 | Invalid arguments | Empty | Plain-text parser diagnostic; exit 2 even with `--json` |
 | `analysis wait --check-outcome` | Terminal run observation before scientific outcome exit | Succeeded 0, failed 3, cancelled 4; local observation deadline 5, interruption 130 |
 | `analysis collect` | Collection summary, including a successful partial result | Exit 0 means this requested collection step succeeded; inspect `complete` separately |
+| `compatibility check` | Versioned identity comparison receipt | Match 0; mismatch or missing evidence 1; no repair or credential refresh |
 | `model release resume` with a known blocker | Versioned release summary | Exit 1; retain the directory and inspect its blockers |
 
 Default analysis wait exits 0 for every terminal scientific state; without

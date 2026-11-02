@@ -2,6 +2,7 @@
 use enumeray_contracts::automation::{
     AnalysisCollectionSummary, AnalysisSummary, CliRuntimeError, ReleaseSummary,
 };
+use enumeray_contracts::installation::CompatibilityReceipt;
 use serde_json::{Value, json};
 use utoipa::OpenApi;
 
@@ -10,7 +11,8 @@ use utoipa::OpenApi;
     AnalysisSummary,
     AnalysisCollectionSummary,
     ReleaseSummary,
-    CliRuntimeError
+    CliRuntimeError,
+    CompatibilityReceipt
 )))]
 struct AutomationSchemas;
 
@@ -43,6 +45,7 @@ fn main() {
         ("analysis-collection-summary", "AnalysisCollectionSummary"),
         ("release-summary", "ReleaseSummary"),
         ("runtime-error", "CliRuntimeError"),
+        ("compatibility-receipt", "CompatibilityReceipt"),
     ] {
         documents.insert(
             name.into(),

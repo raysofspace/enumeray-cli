@@ -559,7 +559,7 @@ async fn heartbeat(
     check_authorization(&headers);
     assert_eq!(
         body,
-        json!({"connector_version": format!("enumeray/{}", env!("CARGO_PKG_VERSION")), "capabilities": ["json_inputs", "json_outputs", "artifact_inputs", "artifact_outputs", "large_artifacts", "collection_inputs", "collection_outputs"], "wrapper_protocol_versions": [1]})
+        json!({"build_identity": enumeray_contracts::compatibility::build_identity(), "connector_version": format!("enumeray/{}", env!("CARGO_PKG_VERSION")), "capabilities": ["json_inputs", "json_outputs", "artifact_inputs", "artifact_outputs", "large_artifacts", "collection_inputs", "collection_outputs"], "wrapper_protocol_versions": [1]})
     );
     state.lock().unwrap().calls.push("heartbeat");
     StatusCode::OK

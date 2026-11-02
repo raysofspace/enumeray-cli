@@ -145,7 +145,7 @@ fn scalar_job(root: &Path, intent: Uuid) -> Value {
     assignment["requirements"]["driver"] = json!("process");
     let wrapper =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/scalar_model/wrapper.py");
-    json!({"version":1,"intent":intent,"assignment":assignment,"execution":{"installation":{"provider_binding_id":"test","installation":binding["installation"],"argv":["/usr/bin/python3",wrapper,"execute"],"environment":{}},"work_root":root,"driver":{"kind":"process"}}})
+    json!({"version":1,"created_with":enumeray_contracts::compatibility::state_identity(),"intent":intent,"assignment":assignment,"execution":{"installation":{"provider_binding_id":"test","installation":binding["installation"],"argv":["/usr/bin/python3",wrapper,"execute"],"environment":{}},"work_root":root,"driver":{"kind":"process"}}})
 }
 
 fn cleanup_proof(job: &Value, completion: &Value) -> Value {

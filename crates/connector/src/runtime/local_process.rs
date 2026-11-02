@@ -40,6 +40,8 @@ pub struct Installation {
 #[serde(deny_unknown_fields)]
 struct Job {
     version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    created_with: Option<String>,
     launch_intent_id: Uuid,
     assignment: Value,
     installation: Installation,
@@ -309,6 +311,20 @@ pub(crate) fn recover_worker(
     }
 }
 
+/// Read-only preflight before remote payload locks or preparation writes.
+pub(crate) fn check_retained_worker_identity(directory: &Path) -> Result<()> {
+    let path = directory.join("job.json");
+    if path
+        .try_exists()
+        .map_err(|_| failure("cannot inspect retained worker identity"))?
+    {
+        journal::check_private_path(directory, true)?;
+        let job: Job = read_record(&path)?;
+        crate::state_identity::check(job.created_with.as_deref())?;
+    }
+    Ok(())
+}
+
 pub(crate) fn inspect_worker(
     directory: &Path,
     intent: Uuid,
@@ -335,6 +351,7 @@ fn inspect_worker_ownership(
 ) -> Result<WorkerRecovery> {
     journal::check_private_path(directory, true)?;
     let job: Job = read_record(&directory.join("job.json"))?;
+    crate::state_identity::check(job.created_with.as_deref())?;
     if job.version != 1
         || job.launch_intent_id != intent
         || !numeric::equivalent(&job.assignment, assignment)
@@ -426,6 +443,7 @@ pub(crate) fn read_completion(
 pub fn worker(directory: &Path) -> Result<()> {
     journal::check_private_path(directory, true)?;
     let job: Job = read_record(&directory.join("job.json"))?;
+    crate::state_identity::check(job.created_with.as_deref())?;
     if job.version != 1 || job.launch_intent_id.is_nil() {
         return Err(failure("invalid local job snapshot"));
     }
@@ -695,6 +713,7 @@ mod tests {
                 file_digests: BTreeMap::new(),
             };
             Job {
+                created_with: crate::state_identity::current(),
                 version: 1,
                 launch_intent_id: Uuid::new_v4(),
                 assignment,
@@ -985,6 +1004,29 @@ mod tests {
             );
             assert!(!directory.join("wrapper-started.json").exists());
             assert!(!workspace.join(".wrapper-exit").exists());
+        }
+    }
+
+    #[test]
+    fn incompatible_worker_state_refuses_before_locks_launch_and_replay() {
+        for marker in [None, Some("sha256:another-development-source".to_owned())] {
+            let scratch = Scratch::new();
+            let mut job = scratch.job(None);
+            job.created_with = marker;
+            create_private_directory(&scratch.0.join("local-jobs")).unwrap();
+            let directory = job_directory(&scratch.0, job.launch_intent_id);
+            create_private_directory(&directory).unwrap();
+            write_record(&directory, "job.json", &job).unwrap();
+            let original = fs::read(directory.join("job.json")).unwrap();
+            assert!(worker(&directory).is_err());
+            assert!(spawn_worker(&directory).is_err());
+            assert!(inspect_worker(&directory, job.launch_intent_id, &job.assignment).is_err());
+            assert_eq!(fs::read(directory.join("job.json")).unwrap(), original);
+            let files = fs::read_dir(&directory)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect::<Vec<_>>();
+            assert_eq!(files, vec![std::ffi::OsString::from("job.json")]);
         }
     }
 
@@ -1346,6 +1388,8 @@ mod tests {
 }
 
 pub(crate) fn spawn_worker(directory: &Path) -> Result<()> {
+    let job: Job = read_record(&directory.join("job.json"))?;
+    crate::state_identity::check(job.created_with.as_deref())?;
     spawn_worker_program(
         directory,
         &std::env::current_exe().map_err(|_| failure("cannot locate local supervisor"))?,
@@ -1386,6 +1430,7 @@ pub(crate) fn prepare_worker(
     scratch: Option<enumeray_contracts::execution::ProcessScratchPolicy>,
 ) -> Result<()> {
     let job = Job {
+        created_with: crate::state_identity::current(),
         version: 1,
         launch_intent_id: intent,
         assignment: assignment.clone(),

@@ -53,6 +53,7 @@ def package_source(root, output, revision, version=None):
     members = [(prefix, None, False)]
     required = {'Cargo.toml', 'Cargo.lock', 'LICENSE', 'rust-toolchain.toml', 'crates/cli/Cargo.toml'}
     cursor = 0
+    source_records = []
     for mode, identifier, name in entries:
         header_end = blobs.index(b'\n', cursor)
         reported_id, kind, length = blobs[cursor:header_end].split()
@@ -62,13 +63,15 @@ def package_source(root, output, revision, version=None):
         cursor += size + 1
         if reported_id != identifier or kind != b'blob' or len(data) != size:
             raise ValueError('Git returned an inconsistent source blob')
-        if name in ('release-source.json', 'THIRD_PARTY_NOTICES.json'):
+        if name in ('release-source.json', 'release-source-files.json', 'THIRD_PARTY_NOTICES.json'):
             raise ValueError('Tracked source conflicts with generated release identity files')
         required.discard(name)
+        source_records.append((name, mode.decode(), data))
         members.append((prefix + '/' + name, data, mode == b'100755'))
     if required:
         raise ValueError('Public source lacks required build/license files: ' + ', '.join(sorted(required)))
     members.extend([
+        (prefix + '/release-source-files.json', (json.dumps({'files': sorted(name for name, _, _ in source_records), 'content_sha256': artifacts.content_fingerprint(source_records)}, indent=2, sort_keys=True) + '\n').encode(), False),
         (prefix + '/release-source.json', (json.dumps(identity, indent=2, sort_keys=True) + '\n').encode(), False),
         (prefix + '/THIRD_PARTY_NOTICES.json', (json.dumps(notices, indent=2, sort_keys=True) + '\n').encode(), False),
     ])

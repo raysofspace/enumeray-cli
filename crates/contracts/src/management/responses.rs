@@ -636,7 +636,20 @@ pub struct ConfigurationCapacity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ConnectorBuildObservation {
+    pub identity: crate::compatibility::BuildIdentity,
+    pub received_at: String,
+    pub credential_current: bool,
+    pub recent: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ConnectorDiagnostics {
+    /// Credential-authenticated self-report; neither recency nor identity proves
+    /// current journal ownership or scientific runtime suitability.
+    #[serde(default)]
+    pub build_observation: Option<ConnectorBuildObservation>,
     #[serde(flatten)]
     pub snapshot: ConnectorLifecycleStatus,
     pub unfinished_assignments: i64,
