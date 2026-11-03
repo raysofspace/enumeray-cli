@@ -184,7 +184,8 @@ impl PreparedAssignment {
     }
 }
 
-struct OwnershipLock(File);
+/// Release ownership even if a concurrent subprocess retained the descriptor.
+pub(crate) struct OwnershipLock(pub(crate) File);
 
 impl Drop for OwnershipLock {
     fn drop(&mut self) {

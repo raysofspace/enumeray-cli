@@ -158,7 +158,7 @@ pub(crate) fn source_directory(directory: &Path, source: LogSource) -> PathBuf {
 }
 /// Capturers and archive readers share the same stable ownership inode.
 /// Holding this descriptor prevents an archive snapshot racing final capture.
-pub(crate) fn source_lock(directory: &Path, source: LogSource) -> Result<File> {
+pub(crate) fn source_lock(directory: &Path, source: LogSource) -> Result<journal::OwnershipLock> {
     local_process::create_private_directory(&directory.join("log-captures"))?;
     let root = source_directory(directory, source);
     local_process::create_private_directory(&root)?;
@@ -175,7 +175,7 @@ pub(crate) fn source_lock(directory: &Path, source: LogSource) -> Result<File> {
     owner.try_lock().map_err(|_| {
         failure("log capture still owns its source").with_kind(crate::ErrorKind::Retry)
     })?;
-    Ok(owner)
+    Ok(journal::OwnershipLock(owner))
 }
 
 fn segment_path(directory: &Path, epoch: i64, offset: u64) -> PathBuf {
@@ -728,6 +728,34 @@ fn collect_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dropping_source_owner_releases_ownership_with_a_retained_descriptor() {
+        let root = std::env::temp_dir().join(format!("enumeray-capture-owner-{}", Uuid::new_v4()));
+        local_process::create_private_directory(&root).unwrap();
+        let source = LogSource::model("solver").unwrap();
+        let owner = source_lock(&root, source).unwrap();
+        assert_eq!(
+            source_lock(&root, source).err().unwrap().kind,
+            crate::ErrorKind::Retry
+        );
+        // A duplicate shares the open file description, just as a concurrent
+        // subprocess can temporarily do between fork and exec.
+        let retained = owner.0.try_clone().unwrap();
+        drop(owner);
+        let reacquired = source_lock(&root, source);
+        drop(retained);
+        if reacquired.is_ok() {
+            assert_eq!(
+                source_lock(&root, source).err().unwrap().kind,
+                crate::ErrorKind::Retry
+            );
+        }
+        let result = reacquired.map(drop);
+        fs::remove_dir_all(root).unwrap();
+        result.expect("source ownership must end before inherited descriptors close");
+    }
+
     fn named_fixture() -> (PathBuf, serde_json::Value, LogPolicy) {
         let root = std::env::temp_dir().join(format!("enumeray-named-capture-{}", Uuid::new_v4()));
         local_process::create_private_directory(&root).unwrap();
@@ -812,12 +840,7 @@ mod tests {
             .unwrap()
             .write_all(b" next")
             .unwrap();
-        let held = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(source_directory(&root, source).join("owner.lock"))
-            .unwrap();
-        held.lock().unwrap();
+        let held = source_lock(&root, source).unwrap();
         collect_named(&root, &assignment, &policy, false).unwrap();
         let read_at = |epoch| {
             read(
@@ -965,12 +988,7 @@ mod tests {
         fs::write(root.join("workspace/logs/solver.log"), b"safe").unwrap();
         collect_named(&root, &assignment, &policy, false).unwrap();
         let source = source_directory(&root, LogSource::model("solver").unwrap());
-        let owner = File::options()
-            .read(true)
-            .write(true)
-            .open(source.join("owner.lock"))
-            .unwrap();
-        owner.lock().unwrap();
+        let owner = source_lock(&root, LogSource::model("solver").unwrap()).unwrap();
         collect_named(&root, &assignment, &policy, true).unwrap();
         assert!(!manifest(&source).unwrap().unwrap().closed);
         drop(owner);

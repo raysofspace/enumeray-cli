@@ -319,6 +319,7 @@ pub(crate) fn build(
     lock.try_lock().map_err(|_| {
         failure("prior archive worker owns finalization").with_kind(crate::ErrorKind::Retry)
     })?;
+    let _owner = crate::journal::OwnershipLock(lock);
     if target.join("archive.json").exists() {
         let built: Built = local_process::read_record(&target.join("archive.json"))?;
         crate::artifacts::verify_file(
@@ -349,7 +350,7 @@ pub(crate) fn build(
     // A Slurm final read and archive worker can finalize named files at the
     // same time. Retry while a capturer owns any source; never freeze a transient
     // partial manifest or read segments while that capturer can rotate them.
-    let _source_owners: Vec<File> = sources
+    let _source_owners: Vec<crate::journal::OwnershipLock> = sources
         .iter()
         .filter(|source| matches!(source, LogSource::Model(_)))
         .map(|source| capture::source_lock(directory, *source))
