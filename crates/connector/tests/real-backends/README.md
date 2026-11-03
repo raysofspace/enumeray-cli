@@ -41,6 +41,43 @@ qualify power-loss durability or persistent-storage throughput. Startup polls
 MariaDB, accounting and the Slurm node with finite readiness deadlines. Keep
 Docker available until cleanup completes.
 
+## File-wrapper workload profiles
+
+`file-wrapper.py` accepts an optional `inputs.fixture_profile` in its request.
+Omitting it keeps the standalone driver's full `coverage` workload. Profiles
+change test payload size and synchronization; they do not relax execution-account,
+credential-isolation, output-confinement or exact-result checks.
+
+| Profile | Capture and scratch workload | Completion |
+| --- | --- | --- |
+| `coverage` (default) | More than 2 MiB each on stdout and stderr; when scratch coverage is enabled, a 4 MiB intermediate file, 600 small files, nested directories and a symlink. | Uses the descriptor's configured delay, then writes the result. |
+| `coverage-controlled` | The same full workload. | Waits for an explicit continuation marker. |
+| `functional` | Small stdout/stderr captures and no bulk scratch files. | Writes the result without an artificial delay. |
+| `controlled` | The same small workload. | Waits for an explicit continuation marker. |
+
+Controlled profiles write `.acceptance-ready` in the execution workspace only
+after their logs and scratch setup are ready. The harness observes that marker
+before exercising maintenance, disconnect/recovery or cancellation. Normal
+completion requires `.acceptance-continue` in that same workspace; cancellation
+must stop the waiting execution without releasing it. The gate fails after
+180 seconds by default, rather than waiting indefinitely.
+
+The service acceptance harness uses `coverage-controlled` for its normal
+process/direct, process/SSH, Slurm/direct and Slurm/SSH cases. All four retain
+large-log retention, complete log archive and bounded multi-pass cleanup checks.
+Candidate trials use `functional`; cancellation cases use `controlled` and retain
+their cancellation, recovery and single-launch assertions. Avoid adding a full
+capture workload or fixed sleep to a scenario unless its assertions need them.
+
+Fixture-only environment overrides can bound log bytes, scratch bytes, scratch
+entry count and the gate deadline. Invalid or excessive values fail the wrapper;
+they are not production model tuning options. The service repository may also
+prepare fixture images once and share their immutable image IDs across isolated
+Compose projects. That reuse verifies the selected service/public sources,
+image identity and Docker daemon/platform before suppressing builds. Standalone
+commands retain their normal build and source checks when no prepared manifest
+is supplied.
+
 Service authentication, API/database persistence, object-storage conformance and
 coordinated service restoration are qualified separately by the service operator.
 These require an authorized service installation and are not prerequisites for

@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.98.1-bookworm AS build
+ARG ENUMERAY_BUILD_DRIVER_TESTS=1
 RUN apt-get update && apt-get install -y --no-install-recommends python3 procps && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 # Preserve the complete public source fingerprint and optional prepared metadata.
@@ -11,8 +12,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=enumeray-real-backend-target,target=/build/target,sharing=locked \
     cargo clean --release -p enumeray-connector -p enumeray-cli \
  && cargo build --locked --release -p enumeray-cli --bin enumeray \
- && (cargo test --locked --release -p enumeray-connector --lib --no-run --message-format=json > /tmp/test-artifacts.json || { cat /tmp/test-artifacts.json; exit 1; }) \
  && mkdir /out && cp target/release/enumeray /out/ \
+ && if [ "$ENUMERAY_BUILD_DRIVER_TESTS" = 1 ]; then \
+      (cargo test --locked --release -p enumeray-connector --lib --no-run --message-format=json > /tmp/test-artifacts.json || { cat /tmp/test-artifacts.json; exit 1; }) \
  && cp "$(sed -n 's/.*"executable":"\([^"]*\)".*/\1/p' /tmp/test-artifacts.json)" /out/driver-tests \
  && target/release/enumeray model init generated-json --directory /out/generated-json --driver slurm \
  && target/release/enumeray model init generated-files --directory /out/generated-files --io files --driver slurm \
@@ -20,9 +22,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
  && for context in process-direct process-ssh slurm-direct slurm-ssh; do \
       target/release/enumeray model init "context-$context" --directory "/out/context-releases/context-$context" --driver slurm || exit 1; \
     done \
- && sed -i '/#SBATCH --nodes/i #SBATCH --account=research\n#SBATCH --partition=debug\n#SBATCH --clusters=enumeray-acceptance' /out/generated-*/model.sbatch /out/context-releases/*/model.sbatch
+ && sed -i '/#SBATCH --nodes/i #SBATCH --account=research\n#SBATCH --partition=debug\n#SBATCH --clusters=enumeray-acceptance' /out/generated-*/model.sbatch /out/context-releases/*/model.sbatch; \
+    fi
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS driver
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     slurm-wlm slurmdbd mariadb-server munge openssh-server openssh-client python3 procps sudo ca-certificates systemd \
  && rm -rf /var/lib/apt/lists/* \

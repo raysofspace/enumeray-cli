@@ -155,6 +155,17 @@ change. It requires Docker Compose and actual Slurm/OpenSSH in its disposable
 container; mock scheduler replies alone do not qualify a driver. Large scientific
 workload, capacity and site-specific qualification remain separate activities.
 
+The file wrapper defaults to its full coverage workload, including large stdout
+and stderr captures and, when enabled, scratch files for bounded cleanup. The
+service acceptance harness keeps that coverage on all four backend paths. It
+holds each normal run at an explicit readiness gate while checking lifecycle
+and recovery behavior, then releases the original execution to finish. Candidate
+trials use small functional workloads; cancellation cases use small workloads
+held at the same gate until cancelled. Credential isolation, cancellation,
+exactly-once launch and recovery assertions remain required. See the fixture's
+[workload profiles](crates/connector/tests/real-backends/README.md#file-wrapper-workload-profiles)
+before changing a scenario's workload.
+
 The service operator retains authenticated service/database/storage acceptance,
 coordinated restoration and service upgrades. Supply the exact client revision
 and binary checksums for that integration gate; a public unit-test pass does not
