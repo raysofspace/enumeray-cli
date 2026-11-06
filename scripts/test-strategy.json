@@ -220,6 +220,16 @@
           "examples/collections",
           "-p",
           "test_*.py"
+        ],
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "examples/scientific",
+          "-p",
+          "test_runtime.py"
         ]
       ],
       "tools": [
@@ -297,6 +307,18 @@
       ],
       "explicit": true,
       "external_runner": "scripts/build-release-native.sh"
+    },
+    "scientific-models": {
+      "commands": [
+        [
+          "python3",
+          "scripts/verify-scientific.py"
+        ]
+      ],
+      "tools": [
+        "python3"
+      ],
+      "explicit": true
     }
   },
   "profiles": {
@@ -334,6 +356,9 @@
     ],
     "mounts": [
       "mounts"
+    ],
+    "scientific-models": [
+      "scientific-models"
     ]
   },
   "suites": {
@@ -375,7 +400,9 @@
     "scripts/test_http_workflows.py": "python",
     "crates/cli/tests/compatibility.rs": "client-cli",
     "scripts/test_ci_evidence.py": "python",
-    "scripts/test_backend_fixture.py": "python"
+    "scripts/test_backend_fixture.py": "python",
+    "examples/scientific/test_runtime.py": "python",
+    "examples/scientific/test_models.py": "scientific-models"
   },
   "ignored": {
     "crates/connector/src/compute.rs::real_ssh_and_slurm": {

@@ -17,8 +17,22 @@ import tempfile
 PROJECTS = ('examples/scalar_model', 'examples/collections',
             'starter-kit/python-json', 'starter-kit/python-files',
             'starter-kit/executable-json', 'starter-kit/executable-files',
-            'examples/http-contract')
+            'examples/http-contract', 'examples/scientific')
 HTTP_PROJECT = 'examples/http-contract'
+
+
+def verify_public_content(root):
+    """Published guides/examples must not advertise retired or private material."""
+    private = re.compile(r'https?://github\.com/raysofspace/enumeray(?=[/#?\s)"\'>]|$)', re.IGNORECASE)
+    for path in Path(root).rglob('*'):
+        if path.is_file() and path.suffix.lower() in ('.md', '.html', '.json'):
+            # Top-level compatibility/source manifests can retain machine identity;
+            # authored guides and example JSON are the public presentation boundary.
+            if path.suffix.lower() == '.json' and path.parent == Path(root):
+                continue
+            content = path.read_text(encoding='utf-8')
+            if re.search('euhforia', content, re.IGNORECASE) or private.search(content):
+                raise ValueError('Retired or private source advertised in public material: ' + path.name)
 
 
 def verify_manifest(root):
@@ -58,6 +72,7 @@ def verify_manifest(root):
             continue
         if not any((root / project).glob('test_*.py')):
             raise ValueError('Missing executable tests: ' + project)
+    verify_public_content(root)
     return manifest
 
 
@@ -78,8 +93,11 @@ def verify_examples(root):
                 if json.loads(result.stdout).get('verified_vectors') != 4:
                     raise ValueError('HTTP identity verification must exercise all four published vectors')
                 continue
+            # Numerical solver qualification uses the separately locked scientific
+            # runtime; ordinary native packages need no scientific dependencies.
+            pattern = 'test_runtime.py' if name == 'examples/scientific' else 'test_*.py'
             subprocess.run([sys.executable, '-B', '-m', 'unittest', 'discover', '-s', '.',
-                            '-p', 'test_*.py'], cwd=project, env=environment, check=True)
+                            '-p', pattern], cwd=project, env=environment, check=True)
     return {'format_version': 1, 'source': manifest['source'],
             'projects': list(PROJECTS), 'file_count': len(manifest['files'])}
 

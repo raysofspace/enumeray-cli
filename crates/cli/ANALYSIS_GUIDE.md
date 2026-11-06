@@ -4,6 +4,28 @@ Keep one intended execution, its reviewed inputs, exact retries and verified res
 
 **Role:** Model user, candidate author/reviewer or authorized run reader. **Prerequisites:** An authenticated CLI profile for remote commands. New work requires access to the selected publication and upload/artifact scopes when using files; fresh candidate trials also require current model administration, execution access and the captured grant or an exact named delegation. Accepted-run recovery uses existing run-read authority; local prepared-operation import needs no credentials. **Files:** A private directory for one intended execution; original local input bytes remain external.
 
+## Try the hosted scientific models
+
+Run `enumeray auth login` to sign in to https://enumeray.com; no separate service
+configuration or connector is required. The
+[first-run walkthrough](https://doc.enumeray.com/start/first-run/) supplies a
+complete hosted HUXt or REBOUND analysis. For example:
+
+```sh
+enumeray model get demo-rebound
+enumeray analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
+# Review the scientific inputs, execution location and disclosure before submitting.
+enumeray analysis submit orbit-analysis
+enumeray analysis wait orbit-analysis --check-outcome
+enumeray analysis collect orbit-analysis
+```
+
+Use `demo-huxt` with example `fast-stream` and a new directory for the solar-wind
+example. Collection writes scientific JSON to `results/outputs.json` and maps
+the CSV and PNG outputs to local files in `bundle.json`. These bounded models
+let you try the workflow before planning a scientific pilot with your own model
+and compute owners. They are distinct from the contract fixtures below.
+
 ## Initialize and review
 
 Inspect `enumeray model get MODEL` for its schema, named examples, availability, execution location and scientific-data access disclosure. Initialize from one of its examples or your own inputs:

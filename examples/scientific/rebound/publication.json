@@ -1,0 +1,138 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "demo-rebound",
+    "name": "REBOUND isolated two-body orbit",
+    "description": "A bounded Newtonian Sun and Earth-mass planet calculation, without other planets or ephemeris fitting."
+  },
+  "identities": {
+    "model": "rebound@5.2.2:sun-planet:1",
+    "wrapper": "enumeray-scientific-demo-wrapper@1",
+    "runtime": "enumeray-demo:python3.12.16:locked-v1"
+  },
+  "execution": {
+    "context_id": "local-process",
+    "release_path": "/opt/enumeray/models/scientific/r1",
+    "entrypoint": [
+      "wrapper.py",
+      "execute",
+      "--model",
+      "rebound"
+    ],
+    "environment": {}
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "semimajor_axis_au",
+      "eccentricity",
+      "orbits"
+    ],
+    "properties": {
+      "semimajor_axis_au": {
+        "type": "number",
+        "minimum": 0.1,
+        "maximum": 5,
+        "description": "Initial relative semimajor axis (AU)."
+      },
+      "eccentricity": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 0.8,
+        "description": "Initial dimensionless eccentricity."
+      },
+      "orbits": {
+        "type": "number",
+        "minimum": 0.25,
+        "maximum": 10,
+        "description": "Simulated duration in initial orbital periods."
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "period_years",
+      "periapse_au",
+      "apoapse_au",
+      "max_relative_energy_error",
+      "max_relative_angular_momentum_error",
+      "trajectory_csv",
+      "orbit_plot_png"
+    ],
+    "properties": {
+      "period_years": {
+        "type": "number",
+        "description": "Analytic orbital period from the declared masses and initial axis (years)."
+      },
+      "periapse_au": {
+        "type": "number",
+        "description": "Initial analytic periapse distance (AU)."
+      },
+      "apoapse_au": {
+        "type": "number",
+        "description": "Initial analytic apoapse distance (AU)."
+      },
+      "max_relative_energy_error": {
+        "type": "number",
+        "description": "Maximum relative specific orbital energy drift over 361 samples."
+      },
+      "max_relative_angular_momentum_error": {
+        "type": "number",
+        "description": "Maximum relative specific angular momentum drift over 361 samples."
+      },
+      "trajectory_csv": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "description": "361 relative-position/velocity samples.",
+        "x-enumeray-file": {
+          "media_types": [
+            "text/csv"
+          ],
+          "max_bytes": 8388608
+        }
+      },
+      "orbit_plot_png": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "description": "Planar planet trajectory relative to the Sun.",
+        "x-enumeray-file": {
+          "media_types": [
+            "image/png"
+          ],
+          "max_bytes": 8388608
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "earth-like-orbit",
+      "inputs": {
+        "semimajor_axis_au": 1,
+        "eccentricity": 0.0167,
+        "orbits": 2
+      }
+    }
+  ]
+}

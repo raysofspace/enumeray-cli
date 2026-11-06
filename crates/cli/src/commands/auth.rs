@@ -69,18 +69,7 @@ pub(crate) fn auth(args: &Args, command: &Auth, path: &Path) -> Result<Value, Er
             no_browser,
         } => {
             let (profiles, binding) = session::login_snapshot(path, &args.profile)?;
-            let api = args
-                .api
-                .as_deref()
-                .or_else(|| {
-                    profiles
-                        .profiles
-                        .get(&args.profile)
-                        .map(|p| p.api_url.as_str())
-                })
-                .ok_or_else(|| {
-                    Error::Invalid("Use --api or auth configure before login.".into())
-                })?;
+            let api = config::api_origin(args, profiles.profiles.get(&args.profile));
             let anonymous = EnumerayClient::new(api, None, Duration::from_secs(args.timeout))?;
             let mut profile = config::Profile::new(anonymous.base_url().to_owned());
             if *token_stdin {

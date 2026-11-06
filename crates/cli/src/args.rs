@@ -8,7 +8,7 @@ use std::path::PathBuf;
     about = "Model execution and connector management"
 )]
 pub struct Args {
-    /// User API origin override; credentials never cross origins. Host/runner commands use explicit configuration.
+    /// User API origin override; defaults to the selected profile or https://enumeray.com. Credentials never cross origins. Host/runner commands use explicit configuration.
     #[arg(long, global = true)]
     pub api: Option<String>,
     /// Named local user API/login profile; host/runner commands use explicit configuration.

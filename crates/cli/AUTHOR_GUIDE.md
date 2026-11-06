@@ -14,12 +14,18 @@ before installing a CLI or obtaining publication access.
 Examples demonstrate contracts; replace their scientific calculation and assert
 results appropriate to your model before publishing.
 
+To try a deployed scientific model first, sign in with `enumeray auth login`
+and follow the [hosted HUXt and REBOUND trial](https://doc.enumeray.com/start/first-run/).
+It uses managed demo compute without a connector of your own. A scientific pilot
+still requires an agreed model mapping, validation and execution environment.
+
 Commands run in a terminal, usually from the generated project. `example` is the
 scalar model ID; `csv-example` is a separate file model. Choose your own IDs before
 scaffolding and keep them consistent through installation and registration.
 Replace uppercase values such as `RUN_UUID`, `USER_UUID` and `TRANSFER_ID` with
-actual service response values. Replace the example API origin, context IDs and
-release paths with values supplied by your site. New release/analysis operations
+actual service response values. The CLI defaults to https://enumeray.com;
+configure a separate profile for another service. Replace the example context IDs
+and release paths with values supplied by your site. New release/analysis operations
 need new directories, and independent upload/download operations need new
 destinations; retain the original directories and state for exact retries.
 
@@ -81,8 +87,8 @@ declaration; it is not the filename of the supplied Python wrapper. Start with a
 complete starter when you need a ready local project. The
 [file/download chooser](https://doc.enumeray.com/reference/manifests/#choose-the-file-for-your-command)
 distinguishes author declarations, scientific inputs, wrapper envelopes and
-collection manifests. EUHFORIA examples are illustrative integration layouts
-requiring real scientific mapping, rather than runnable solver projects.
+collection manifests. The hosted scientific models have their own documented
+inputs and outputs; contract fixtures are separate from those runnable offerings.
 
 ## Responsibilities and execution choices
 
@@ -467,7 +473,6 @@ must be available on compute nodes. Add `execution.slurm_script: "model.sbatch"`
 for Slurm; omit it for process. Local tests do not submit a scheduler job.
 
 ```sh
-enumeray auth configure https://enumeray.example.org
 enumeray auth login
 enumeray connector grant available
 ```
@@ -488,11 +493,9 @@ module and container setup. The runner supplies workspace `HOME` and
 `PYTHONDONTWRITEBYTECODE=1`.
 
 The [complete process and Slurm examples](https://doc.enumeray.com/reference/manifests/)
-use the same author format for direct and SSH execution. The
-[heliosphere-only EUHFORIA layout](https://doc.enumeray.com/authors/euhforia-layout/)
-illustrates `publication.json`, `wrapper.py` and `model.sbatch`, with native
-configuration generated inside each job workspace and shared infrastructure
-configured separately. It is a layout example, not a scientific model port.
+use the same author format for direct and SSH execution. For runnable scientific
+examples, follow the [hosted HUXt and REBOUND walkthrough](https://doc.enumeray.com/start/first-run/)
+and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 

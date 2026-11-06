@@ -28,6 +28,20 @@ producer = load('example_producer', 'example-bundle.py')
 
 
 class ExampleBundleTests(unittest.TestCase):
+    def test_retired_and_private_advertised_content_is_rejected(self):
+        for text in ('EUHFORIA', 'eUhFoRiA', '[source](https://github.com/raysofspace/enumeray)',
+                     '<a href="https://github.com/raysofspace/enumeray/blob/main/README.md">source</a>',
+                     'https://github.com/raysofspace/enumeray/releases/tag/v1'):
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as temporary:
+                (Path(temporary) / 'README.md').write_text(text)
+                with self.assertRaisesRegex(ValueError, 'Retired or private'):
+                    verifier.verify_public_content(Path(temporary))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'README.md').write_text('[source](https://github.com/raysofspace/enumeray-cli)')
+            (root / 'compatibility.json').write_text('{"repository":"https://github.com/raysofspace/enumeray"}')
+            verifier.verify_public_content(root)
+
     def assemble(self, root, destination):
         for relative in bundle.GUIDES:
             guide = root / relative
@@ -45,6 +59,8 @@ class ExampleBundleTests(unittest.TestCase):
                 ' def test_local_import(self):\n  self.assertEqual(value.ANSWER, 42)\n')
         shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/http-contract',
                         root / 'examples/http-contract', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/scientific',
+                        root / 'examples/scientific', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         (root / 'examples/http-contract/README.md').write_text(
             '[workflow](HTTP_WORKFLOWS.md)\n[inputs](digest-vectors/)\n[automation](../../crates/cli/CLI_AUTOMATION.md)\n')
         (root / 'LICENSE').write_text('License\n')
