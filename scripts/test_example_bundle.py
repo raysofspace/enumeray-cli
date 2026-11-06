@@ -29,7 +29,8 @@ producer = load('example_producer', 'example-bundle.py')
 
 class ExampleBundleTests(unittest.TestCase):
     def test_retired_and_private_advertised_content_is_rejected(self):
-        for text in ('EUHFORIA', 'eUhFoRiA', '[source](https://github.com/raysofspace/enumeray)',
+        retired = ''.join(('euh', 'foria'))
+        for text in (retired.upper(), retired.title(), '[source](https://github.com/raysofspace/enumeray)',
                      '<a href="https://github.com/raysofspace/enumeray/blob/main/README.md">source</a>',
                      'https://github.com/raysofspace/enumeray/releases/tag/v1'):
             with self.subTest(text=text), tempfile.TemporaryDirectory() as temporary:
@@ -41,6 +42,41 @@ class ExampleBundleTests(unittest.TestCase):
             (root / 'README.md').write_text('[source](https://github.com/raysofspace/enumeray-cli)')
             (root / 'compatibility.json').write_text('{"repository":"https://github.com/raysofspace/enumeray"}')
             verifier.verify_public_content(root)
+
+    def test_retired_names_are_rejected_in_decoded_programs_and_machine_provenance(self):
+        retired = ''.join(('euh', 'foria'))
+        for filename in ('verify-examples.py', 'examples/scientific/program.py',
+                         'examples/opaque.data', 'compatibility.json'):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                target = root / filename
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('# ' + retired.upper() + '\n')
+                with self.assertRaisesRegex(ValueError, 'Retired or private'):
+                    verifier.verify_public_content(root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shutil.copyfile(Path(__file__).with_name('verify-example-bundle.py'), root / 'verify-examples.py')
+            (root / 'binary.bin').write_bytes(bytes((255, 254, 0)))
+            verifier.verify_public_content(root)
+
+    def test_assembly_checks_the_copied_verifier_before_returning(self):
+        retired = ''.join(('euh', 'foria'))
+        original = bundle.shutil.copy2
+
+        def altered_copy(source, target, *args, **kwargs):
+            result = original(source, target, *args, **kwargs)
+            if Path(target).name == 'verify-examples.py':
+                with Path(target).open('a') as output:
+                    output.write('# ' + retired + '\n')
+            return result
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            root.mkdir()
+            with mock.patch.object(bundle.shutil, 'copy2', side_effect=altered_copy):
+                with self.assertRaisesRegex(ValueError, 'Retired or private'):
+                    self.assemble(root, Path(temporary) / 'bundle')
 
     def assemble(self, root, destination):
         for relative in bundle.GUIDES:

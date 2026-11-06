@@ -181,7 +181,6 @@ def assemble_examples(root, destination, binary, source, version, release=False)
                                                           Path(__file__).with_name('verify-example-bundle.py'))
     verifier = importlib.util.module_from_spec(verifier_spec)
     verifier_spec.loader.exec_module(verifier)
-    verifier.verify_public_content(destination)
     shutil.copy2(root / 'LICENSE', destination / 'LICENSE')
     shutil.copy2(root / 'scripts/verify-example-bundle.py', destination / 'verify-examples.py')
     starters = destination / 'starter-kit'
@@ -202,4 +201,5 @@ def assemble_examples(root, destination, binary, source, version, release=False)
     manifest = {'format_version': 1, 'version': version, 'source': source,
                 'projects': list(PROJECTS), 'files': dict(sorted(files.items()))}
     (destination / 'examples-manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    verifier.verify_public_content(destination)
     return manifest
