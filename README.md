@@ -27,7 +27,7 @@ or running API.
 
 ## Install a qualified package
 
-**Alpha: 0.1.0-alpha.1.** Commands and APIs may change. Alpha updates may require
+**Alpha.** Commands and APIs may change. Alpha updates may require
 fresh installations; in-place upgrade compatibility is not promised. Preserve
 an existing installation's state and matching binaries before changing versions.
 
