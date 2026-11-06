@@ -32,6 +32,8 @@ class ExampleBundleTests(unittest.TestCase):
         retired = ''.join(('euh', 'foria'))
         for text in (retired.upper(), retired.title(), '[source](https://github.com/raysofspace/enumeray)',
                      '<a href="https://github.com/raysofspace/enumeray/blob/main/README.md">source</a>',
+                     'https://github.com/raysofspace/enumeray.git',
+                     'https://www.github.com/raysofspace/enumeray',
                      'https://github.com/raysofspace/enumeray/releases/tag/v1'):
             with self.subTest(text=text), tempfile.TemporaryDirectory() as temporary:
                 (Path(temporary) / 'README.md').write_text(text)

@@ -25,7 +25,7 @@ def verify_public_content(root):
     """Check all decoded files for retired names and documents for private links."""
     root = Path(root)
     retired = re.compile(''.join(('euh', 'foria')), re.IGNORECASE)
-    private = re.compile(r'https?://github\.com/raysofspace/enumeray(?=[/#?\s)"\'>]|$)', re.IGNORECASE)
+    private = re.compile(r'https?://(?:www\.)?github\.com/raysofspace/enumeray(?:\.git)?(?=[/#?\s)"\'>]|$)', re.IGNORECASE)
     for path in root.rglob('*'):
         if not path.is_file():
             continue
