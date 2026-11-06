@@ -1,0 +1,128 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "demo-huxt",
+    "name": "HUXt synthetic fast stream",
+    "description": "A bounded offline illustration of ambient solar wind propagation, not an operational forecast."
+  },
+  "identities": {
+    "model": "huxt@5.0.3:ambient-fast-stream:1",
+    "wrapper": "enumeray-scientific-demo-wrapper@1",
+    "runtime": "enumeray-demo:python3.12.16:locked-v1"
+  },
+  "execution": {
+    "context_id": "local-process",
+    "release_path": "/opt/enumeray/models/scientific/r1",
+    "entrypoint": [
+      "wrapper.py",
+      "execute",
+      "--model",
+      "huxt"
+    ],
+    "environment": {}
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "slow_speed_kms",
+      "fast_speed_kms",
+      "stream_width_deg"
+    ],
+    "properties": {
+      "slow_speed_kms": {
+        "type": "number",
+        "minimum": 250,
+        "maximum": 450,
+        "description": "Inner-boundary slow wind speed (km/s)."
+      },
+      "fast_speed_kms": {
+        "type": "number",
+        "minimum": 500,
+        "maximum": 900,
+        "description": "Inner-boundary fast wind speed (km/s)."
+      },
+      "stream_width_deg": {
+        "type": "number",
+        "minimum": 10,
+        "maximum": 45,
+        "description": "Fast sector angular width (degrees), discretized on 128 bins."
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "min_speed_1au_kms",
+      "peak_speed_1au_kms",
+      "peak_time_days",
+      "wind_field_csv",
+      "wind_plot_png"
+    ],
+    "properties": {
+      "min_speed_1au_kms": {
+        "type": "number",
+        "description": "Minimum modeled speed at 1 AU (km/s)."
+      },
+      "peak_speed_1au_kms": {
+        "type": "number",
+        "description": "Maximum modeled speed at 1 AU (km/s)."
+      },
+      "peak_time_days": {
+        "type": "number",
+        "description": "Elapsed time of first maximum at 1 AU (days)."
+      },
+      "wind_field_csv": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "description": "Complete time/radius/speed grid.",
+        "x-enumeray-file": {
+          "media_types": [
+            "text/csv"
+          ],
+          "max_bytes": 8388608
+        }
+      },
+      "wind_plot_png": {
+        "type": "object",
+        "properties": {
+          "artifact_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "additionalProperties": false,
+        "description": "Radius-time heatmap and 1-AU speed series.",
+        "x-enumeray-file": {
+          "media_types": [
+            "image/png"
+          ],
+          "max_bytes": 8388608
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "fast-stream",
+      "inputs": {
+        "slow_speed_kms": 350,
+        "fast_speed_kms": 700,
+        "stream_width_deg": 30
+      }
+    }
+  ]
+}

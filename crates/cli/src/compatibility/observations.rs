@@ -403,31 +403,31 @@ pub(super) fn service(
     checks: &mut Vec<CompatibilityCheck>,
 ) -> Result<(), Error> {
     let profile = if args.api.is_none() || options.connector.is_some() {
-        read_profile(args).ok().flatten()
+        match read_profile(args) {
+            Ok(profile) => profile,
+            Err(_) if args.api.is_none() => {
+                unavailable(
+                    checks,
+                    "service",
+                    "observation",
+                    "The selected profile file is unreadable or invalid; no default service was contacted.",
+                );
+                if options.connector.is_some() {
+                    unavailable(
+                        checks,
+                        "connector",
+                        "observation",
+                        "The selected service profile is unavailable for authorized connector diagnostics.",
+                    );
+                }
+                return Ok(());
+            }
+            Err(_) => None,
+        }
     } else {
         None
     };
-    let Some(origin) = args
-        .api
-        .as_deref()
-        .or(profile.as_ref().map(|p| p.api_url.as_str()))
-    else {
-        unavailable(
-            checks,
-            "service",
-            "observation",
-            "No API origin selected; specify --api or use --local-only for an explicitly local comparison.",
-        );
-        if options.connector.is_some() {
-            unavailable(
-                checks,
-                "connector",
-                "observation",
-                "No service origin is available for authorized connector diagnostics.",
-            );
-        }
-        return Ok(());
-    };
+    let origin = config::api_origin(args, profile.as_ref());
     let client = match EnumerayClient::new(origin, None, Duration::from_secs(args.timeout)) {
         Ok(client) => client,
         Err(_) => {

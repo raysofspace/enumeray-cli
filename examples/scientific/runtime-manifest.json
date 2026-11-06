@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "python": "3.12.16",
+  "solvers": {
+    "huxt": "5.0.3",
+    "rebound": "5.2.2"
+  },
+  "requirements_sha256": "3800e6df453d20171a031be4f65726c2bd773b696a23023f139ae0943ad9edb8",
+  "huxt_ephemeris_sha256": "82d604c31c9ea86e663e46c75d6e076e5a43862a0bca53f43dfb344c45fab87f",
+  "upstream_commits": {
+    "huxt": "4d5b60bedb4b30ad140a8ea4972c4f5396c687ff",
+    "rebound": "c34134716cd484ed9cdb9f7d54ef8d859bdf547d"
+  },
+  "network": "none required; solver worker rejects socket connections",
+  "max_file_bytes": 8388608,
+  "wall_timeout_seconds": {
+    "huxt": 180,
+    "rebound": 60
+  },
+  "threads": 1,
+  "qualification_peak_rss_bytes": 1073741824,
+  "build_requirements_sha256": "317fc22d1ad19a30aa4b73f94898c155e28c8f035821b71389a924bb40064f6c",
+  "max_output_bytes_per_run": 8388608
+}

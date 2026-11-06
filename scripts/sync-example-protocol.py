@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "crates/cli/starter-kit"
 COPIES = [(SOURCES / filename, ROOT / "examples" / name / filename)
           for filename in ("protocol.py", "test_protocol.py") for name in ("scalar_model", "collections")]
+COPIES.append((SOURCES / "protocol.py", ROOT / "examples/scientific/protocol.py"))
 
 
 def main():

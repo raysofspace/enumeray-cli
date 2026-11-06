@@ -1,5 +1,6 @@
 """One assembly boundary for public examples in web and native archives."""
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,8 +21,8 @@ GUIDES = {
 PROJECTS = ("examples/scalar_model", "examples/collections",
             "starter-kit/python-json", "starter-kit/python-files",
             "starter-kit/executable-json", "starter-kit/executable-files",
-            "examples/http-contract")
-STANDALONE_PROJECTS = ("examples/scalar_model", "examples/collections", "examples/http-contract")
+            "examples/http-contract", "examples/scientific")
+STANDALONE_PROJECTS = ("examples/scalar_model", "examples/collections", "examples/http-contract", "examples/scientific")
 
 def bundle_guide(source, destination, repository, guide_names, revision=None):
     """Keep packaged guides navigable without their original checkout layout."""
@@ -176,6 +177,11 @@ def assemble_examples(root, destination, binary, source, version, release=False)
             shutil.copy2(guide, destination / output)
         else:
             bundle_guide(guide, destination / output, root, bundled_names, revision=source['revision'])
+    verifier_spec = importlib.util.spec_from_file_location('public_example_materials',
+                                                          Path(__file__).with_name('verify-example-bundle.py'))
+    verifier = importlib.util.module_from_spec(verifier_spec)
+    verifier_spec.loader.exec_module(verifier)
+    verifier.verify_public_content(destination)
     shutil.copy2(root / 'LICENSE', destination / 'LICENSE')
     shutil.copy2(root / 'scripts/verify-example-bundle.py', destination / 'verify-examples.py')
     starters = destination / 'starter-kit'

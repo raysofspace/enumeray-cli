@@ -1,0 +1,5 @@
+{
+  "slow_speed_kms": 350,
+  "fast_speed_kms": 700,
+  "stream_width_deg": 30
+}

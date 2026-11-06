@@ -13,10 +13,13 @@ Package availability follows the matching service's release qualification.
 Until a qualified release is published, build from source below. Direct downloads
 and the project Homebrew tap are the supported distribution channels.
 
-After installation, use [guided connector setup](SETUP_GUIDE.md) to select a mode,
-prepare the host, establish readiness and trial a first model with saved progress.
+After installation, sign in and follow the
+[hosted trial](https://doc.enumeray.com/start/first-run/) to run the supplied HUXt
+or REBOUND model without operating a connector. For your own compute, use
+[guided connector setup](SETUP_GUIDE.md) to select a mode, prepare the host,
+establish readiness and trial a first model with saved progress.
 
-**Alpha: 0.1.0-alpha.1.** Commands and APIs may change. Alpha updates may require
+**Alpha: 0.1.0-alpha.2.** Commands and APIs may change. Alpha updates may require
 a separate fresh installation; no in-place upgrade compatibility is promised.
 Read the target release's instructions before upgrading. Keep valuable existing
 state with its matching binaries; installation and removal never recreate or
@@ -26,10 +29,10 @@ recovery checks.
 
 ## Before choosing a package
 
-Obtain the approved service API origin, exact public source revision or release,
+Obtain the approved public source revision or release,
 matching service selection/receipt and responsible installation contact from the
 service or site owner. A model ID, a `persistent-v1` label, a version string and
-this guide's example `0.1.0-alpha.1` are not substitutes for that selection.
+this guide's example `0.1.0-alpha.2` are not substitutes for that selection.
 Confirm that the selected version is published for your chosen channel;
 Homebrew additionally requires its qualified tap formula. The examples below
 do not establish availability. If no qualified package is identified, use the pinned source
@@ -92,7 +95,7 @@ replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
 ```sh
 mkdir -p "$HOME/enumeray-downloads/alpha-evaluation"
 cd "$HOME/enumeray-downloads/alpha-evaluation"
-VERSION=0.1.0-alpha.1
+VERSION=0.1.0-alpha.2
 TARGET=aarch64-apple-darwin
 REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
@@ -206,7 +209,7 @@ explicit release version as the service and download these three files from the
 public release:
 
 ```sh
-VERSION=0.1.0-alpha.1
+VERSION=0.1.0-alpha.2
 TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-source.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"
@@ -401,26 +404,43 @@ site as its examples, not from an unrelated current site.
 
 ## Login and profiles
 
-Obtain the actual API origin from your service administrator:
+The CLI connects to https://enumeray.com without separate service configuration:
 
 ```sh
-enumeray auth configure https://enumeray.example.org
 enumeray auth login
 enumeray auth whoami
 ```
 
+Login discovers the service's identity provider automatically; the hosted service
+uses auth.enumeray.com. Choose registration in the browser if you need an account,
+then complete email verification and sign in. If onboarding exceeds the login
+wait, finish registration and run `enumeray auth login` again. Continue with the
+[hosted trial](https://doc.enumeray.com/start/first-run/) to run HUXt or REBOUND
+on the supplied connector.
+
+For another service, save its administrator-supplied origin in a separate profile:
+
+```sh
+enumeray --profile research auth configure https://research.example.org
+enumeray --profile research auth login
+```
+
 Browser login uses PKCE and a temporary loopback callback. `--no-browser` prints
 the URL for a browser on the **same host**; a laptop browser cannot complete a
-login waiting on an SSH/HPC host's loopback listener. For remote CLI use, create a
-scoped personal token from a signed-in account and import it privately:
+login waiting on an SSH/HPC host's loopback listener. For remote CLI use with the
+hosted service, create a scoped personal token from a signed-in account and import
+it privately:
 
 ```sh
 enumeray auth token-create analysis-script \
   --scopes models:read,runs:create,runs:read,me:read --output token.json
-enumeray --profile analysis auth configure https://enumeray.example.org
 jq -er '.token' token.json | enumeray --profile analysis auth login --token-stdin
 enumeray --profile analysis auth whoami
 ```
+
+For another service, configure the `analysis` profile with that same service's
+origin before importing its token. An unconfigured named profile uses
+https://enumeray.com even when a different profile selects another service.
 
 Import only the `token` value. Add artifact/upload scopes for files and
 `runs:cancel` for cancellation. Tokens retain the account's resource restrictions;
@@ -431,8 +451,12 @@ than browser refresh. Inspect `auth token-list` and revoke unused tokens with
 and revoke uncertain credentials before deliberately creating another.
 
 Profiles and credential state are private. `--profile` selects a named service
-(default `default`); `--config` selects another profiles file. API origin changes
-clear saved credentials, and `--api` never forwards a profile token to a different
+(default `default`); `--config` selects another profiles file. Origin selection
+uses `--api` first, then the selected saved profile, then https://enumeray.com
+when that profile has not been configured. Existing profiles, including
+api.enumeray.com, keep their saved origins. A failed connection never selects a
+different service. Configure an alternate origin before importing its token.
+API origin changes clear saved credentials, and `--api` never forwards a profile token to a different
 origin. An explicit `ENUMERAY_TOKEN` takes precedence over the selected profile;
 pair it with its intended origin. Saved browser sessions renew automatically
 before expiry while commands are active; `auth refresh` remains available for

@@ -115,6 +115,9 @@ class UnifiedPackageTests(unittest.TestCase):
         shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/http-contract',
                         api / 'examples/http-contract', dirs_exist_ok=True,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'examples/scientific',
+                        api / 'examples/scientific', dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         (api / 'scripts/verify-example-bundle.py').write_text('Standalone verifier\n')
         target_directory = target_directory or api / 'target'
         binary = target_directory / 'test-target/release/enumeray'
@@ -145,9 +148,13 @@ class UnifiedPackageTests(unittest.TestCase):
             self.assertEqual(name, archive.name)
             self.assertEqual(checksum, hashlib.sha256(archive.read_bytes()).hexdigest())
             with tarfile.open(archive) as tar:
-                executables = [m for m in tar.getmembers() if m.isfile() and m.mode & 0o111]
-                self.assertEqual([Path(m.name).name for m in executables], ['enumeray'])
                 prefix = archive.name.removesuffix('.tar.gz')
+                # Scientific examples include their reviewed executable Python
+                # entrypoint; the package still has exactly one native tool.
+                executables = [m for m in tar.getmembers() if m.isfile() and m.mode & 0o111
+                               and not m.name.startswith(prefix + '/examples/')]
+                self.assertEqual([Path(m.name).name for m in executables], ['enumeray'])
+                self.assertTrue(tar.getmember(prefix + '/examples/scientific/wrapper.py').mode & 0o111)
                 compatibility = json.load(tar.extractfile(prefix + '/compatibility.json'))
                 self.assertEqual(compatibility['capabilities'], ['cli', 'connector', 'compute_runner'])
                 self.assertFalse(compatibility['requires_database'])

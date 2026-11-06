@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpListener,
     path::Path,
     process::{Command, Stdio},
@@ -1988,6 +1988,81 @@ fn expired_legacy_profile_requires_one_explicit_refresh_and_environment_tokens_s
     assert_eq!(requests.len(), 1);
     assert!(requests[0].contains("Bearer environment-token"));
     assert_eq!(saved_session(&path)["refresh_token"], "previous-refresh");
+}
+
+#[test]
+fn fresh_browser_login_discovers_its_provider_without_auth_configure() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("profiles.json");
+    let user = uuid::Uuid::new_v4();
+    let (provider, token_worker) = server(json!({
+        "access_token":"fresh-browser-access", "refresh_token":"fresh-browser-refresh",
+        "token_type":"Bearer", "expires_in":300
+    }));
+    let api = PolicyServer::new(vec![
+        (
+            200,
+            json!({"issuer":provider,"client_id":"selected-cli","audience":"selected-api",
+            "authorization_endpoint":format!("{provider}authorize"),
+            "token_endpoint":format!("{provider}token"), "scopes":["openid","offline_access"]}),
+        ),
+        (200, json!({"user_id":user,"label":"New researcher"})),
+    ]);
+    let mut child = cli(&path)
+        .args([
+            "--api",
+            &api.origin,
+            "--profile",
+            "fresh",
+            "auth",
+            "login",
+            "--no-browser",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut line = String::new();
+    stderr.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "Complete login in your browser:");
+    line.clear();
+    stderr.read_line(&mut line).unwrap();
+    let authorization = url::Url::parse(line.trim()).unwrap();
+    assert_eq!(authorization.path(), "/authorize");
+    let query = authorization
+        .query_pairs()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(query.get("client_id").unwrap(), "selected-cli");
+    assert_eq!(query.get("code_challenge_method").unwrap(), "S256");
+    let mut callback = url::Url::parse(query.get("redirect_uri").unwrap()).unwrap();
+    callback
+        .query_pairs_mut()
+        .append_pair("code", "selected-provider-code")
+        .append_pair("state", query.get("state").unwrap());
+    assert!(
+        reqwest::blocking::get(callback)
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    let output = child.wait_with_output().unwrap();
+    let mut diagnostics = String::new();
+    stderr.read_to_string(&mut diagnostics).unwrap();
+    assert!(output.status.success(), "{diagnostics}");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("fresh-browser-access"));
+    let request = token_worker.join().unwrap();
+    assert!(request.starts_with("POST /token "));
+    assert!(request.contains("code=selected-provider-code"));
+    let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(saved["profiles"]["fresh"]["api_url"], api.origin);
+    assert_eq!(saved["profiles"]["fresh"]["oauth"]["issuer"], provider);
+    assert_eq!(saved["profiles"].as_object().unwrap().len(), 1);
+    let requests = api.finish();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].starts_with("GET /api/v1/auth/config "));
+    assert!(!requests[0].to_ascii_lowercase().contains("authorization:"));
+    assert!(requests[1].contains("Bearer fresh-browser-access"));
 }
 
 #[test]

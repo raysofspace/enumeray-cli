@@ -86,15 +86,7 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
     let profiles = config::load(&profile_path(args)?)?;
     let api = ask(
         "API origin",
-        args.api
-            .as_deref()
-            .or_else(|| {
-                profiles
-                    .profiles
-                    .get(&args.profile)
-                    .map(|p| p.api_url.as_str())
-            })
-            .unwrap_or("https://enumeray.example.org"),
+        config::api_origin(args, profiles.profiles.get(&args.profile)),
     )?;
     let api = EnumerayClient::new(&api, None, Duration::from_secs(args.timeout))?
         .base_url()

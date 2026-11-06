@@ -11,6 +11,7 @@ use std::{
 };
 
 const MAX_JSON_BYTES: usize = 1024 * 1024;
+pub(crate) const DEFAULT_API_ORIGIN: &str = "https://enumeray.com";
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -234,15 +235,16 @@ pub(crate) fn create_private_dir(path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn client(args: &Args, profiles: &Profiles) -> Result<EnumerayClient, Error> {
-    let profile = profiles.profiles.get(&args.profile);
-    let api = args
-        .api
+pub(crate) fn api_origin<'a>(args: &'a Args, profile: Option<&'a Profile>) -> &'a str {
+    args.api
         .as_deref()
         .or_else(|| profile.map(|p| p.api_url.as_str()))
-        .ok_or_else(|| {
-            Error::Invalid("Configure an API using `auth configure URL` or supply --api.".into())
-        })?;
+        .unwrap_or(DEFAULT_API_ORIGIN)
+}
+
+pub(crate) fn client(args: &Args, profiles: &Profiles) -> Result<EnumerayClient, Error> {
+    let profile = profiles.profiles.get(&args.profile);
+    let api = api_origin(args, profile);
     let canonical = EnumerayClient::new(api, None, Duration::from_secs(args.timeout))?;
     let profile_token = profile
         .filter(|p| p.api_url == canonical.base_url())
@@ -266,6 +268,50 @@ pub(crate) fn client(args: &Args, profiles: &Profiles) -> Result<EnumerayClient,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn unconfigured_default_and_named_profiles_use_the_public_service_without_saving() {
+        let profiles = Profiles::default();
+        for name in ["default", "analysis"] {
+            let args = Args::parse_from(["enumeray", "--profile", name, "model", "list"]);
+            assert!(args.api.is_none());
+            assert_eq!(api_origin(&args, None), "https://enumeray.com");
+            assert_eq!(
+                client(&args, &profiles).unwrap().base_url(),
+                "https://enumeray.com/"
+            );
+        }
+        assert!(profiles.profiles.is_empty());
+    }
+
+    #[test]
+    fn origin_precedence_preserves_existing_profiles_and_explicit_overrides() {
+        let saved = Profile::new("https://api.enumeray.com/".into());
+        let args = Args::parse_from(["enumeray", "auth", "login"]);
+        assert_eq!(api_origin(&args, Some(&saved)), "https://api.enumeray.com/");
+        let args = Args::parse_from([
+            "enumeray",
+            "--api",
+            "https://research.example/",
+            "auth",
+            "login",
+        ]);
+        assert_eq!(api_origin(&args, Some(&saved)), "https://research.example/");
+    }
+
+    #[test]
+    fn invalid_selected_origins_fail_without_falling_back_to_the_public_service() {
+        let mut profiles = Profiles::default();
+        profiles
+            .profiles
+            .insert("default".into(), Profile::new("invalid-origin".into()));
+        let args = Args::parse_from(["enumeray", "model", "list"]);
+        assert!(client(&args, &profiles).is_err());
+        profiles.profiles.get_mut("default").unwrap().api_url = "https://api.enumeray.com/".into();
+        let args = Args::parse_from(["enumeray", "--api", "invalid-origin", "model", "list"]);
+        assert!(client(&args, &profiles).is_err());
+    }
 
     #[cfg(unix)]
     #[test]

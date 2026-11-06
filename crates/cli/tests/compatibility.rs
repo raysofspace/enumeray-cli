@@ -116,14 +116,18 @@ fn mismatched_source_unknown_fingerprint_and_unavailable_service_never_pass() {
         "mismatch",
     );
     let mut s = selection(&i);
+    let (origin, worker) = server(vec![json!({})]);
     failed(
         check(d.path(), &s, "service")
+            .arg("--api")
+            .arg(origin)
             .arg("--config")
             .arg(d.path().join("absent"))
             .output()
             .unwrap(),
         "missing_evidence",
     );
+    assert_eq!(worker.join().unwrap().len(), 1);
     if i["source"]["clean"] == false {
         s.as_object_mut().unwrap().remove("public_content_sha256");
         failed(
@@ -134,6 +138,38 @@ fn mismatched_source_unknown_fingerprint_and_unavailable_service_never_pass() {
             "missing_evidence",
         );
     }
+}
+
+#[test]
+fn an_unreadable_profile_never_falls_back_to_contacting_the_public_service() {
+    let d = TempDir::new().unwrap();
+    let path = d.path().join("profiles.json");
+    fs::write(&path, b"not-json").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let result = failed(
+        check(d.path(), &selection(&inspect()), "invalid-profile")
+            .args(["--connector", "selected"])
+            .arg("--config")
+            .arg(&path)
+            .output()
+            .unwrap(),
+        "missing_evidence",
+    );
+    assert!(result["checks"].as_array().unwrap().iter().any(|check| {
+        check["component"] == "service"
+            && check["reason"]
+                .as_str()
+                .unwrap()
+                .contains("no default service was contacted")
+    }));
+    assert!(result["checks"].as_array().unwrap().iter().any(|check| {
+        check["component"] == "connector" && check["status"] == "missing_evidence"
+    }));
+    assert_eq!(fs::read(path).unwrap(), b"not-json");
 }
 #[test]
 fn every_supplied_peer_docs_and_context_is_required() {
