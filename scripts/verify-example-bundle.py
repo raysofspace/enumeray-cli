@@ -22,17 +22,27 @@ HTTP_PROJECT = 'examples/http-contract'
 
 
 def verify_public_content(root):
-    """Published guides/examples must not advertise retired or private material."""
-    private = re.compile(r'https?://github\.com/raysofspace/enumeray(?=[/#?\s)"\'>]|$)', re.IGNORECASE)
-    for path in Path(root).rglob('*'):
-        if path.is_file() and path.suffix.lower() in ('.md', '.html', '.json'):
-            # Top-level compatibility/source manifests can retain machine identity;
-            # authored guides and example JSON are the public presentation boundary.
-            if path.suffix.lower() == '.json' and path.parent == Path(root):
-                continue
+    """Check all decoded files for retired names and documents for private links."""
+    root = Path(root)
+    retired = re.compile(''.join(('euh', 'foria')), re.IGNORECASE)
+    private = re.compile(r'https?://(?:www\.)?github\.com/raysofspace/enumeray(?:\.git)?(?=[/#?\s)"\'>]|$)', re.IGNORECASE)
+    for path in root.rglob('*'):
+        if not path.is_file():
+            continue
+        if retired.search(path.relative_to(root).as_posix()):
+            raise ValueError('Retired or private source advertised in public material: ' + path.name)
+        try:
             content = path.read_text(encoding='utf-8')
-            if re.search('euhforia', content, re.IGNORECASE) or private.search(content):
-                raise ValueError('Retired or private source advertised in public material: ' + path.name)
+        except UnicodeDecodeError:
+            continue
+        if retired.search(content):
+            raise ValueError('Retired or private source advertised in public material: ' + path.name)
+        # Top-level compatibility/source manifests retain machine identity; their
+        # provenance is not an advertised link. Retired-name checks still apply.
+        document = path.suffix.lower() in ('.md', '.html', '.json')
+        provenance = path.suffix.lower() == '.json' and path.parent == root
+        if document and not provenance and private.search(content):
+            raise ValueError('Retired or private source advertised in public material: ' + path.name)
 
 
 def verify_manifest(root):
