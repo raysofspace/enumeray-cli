@@ -30,7 +30,7 @@ def check_guide_links(root, guides):
         if not document.is_file():
             raise SystemExit(f"Archive lacks the workflow guide {guide}")
         for target in re.findall(r"\[[^\]\n]+\]\(([^\s)]+)\)", document.read_text()):
-            if target.startswith(("https:", "http:", "#")):
+            if target.startswith(("https:", "http:", "mailto:", "#")):
                 continue
             destination = (document.parent / target.split("#", 1)[0]).resolve()
             if not destination.is_relative_to(root.resolve()) or not destination.is_file():

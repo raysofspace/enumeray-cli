@@ -23,6 +23,32 @@ qualifier_spec.loader.exec_module(qualifier)
 
 
 class BundleGuideTests(unittest.TestCase):
+    def test_archive_guide_checker_accepts_mail_web_anchor_and_local_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            guide = root / 'examples/scientific/huxt/README.md'
+            guide.parent.mkdir(parents=True)
+            guide.write_text('[maintainer](mailto:enumeray@raysofspace.com)\n'
+                             '[secure](https://example.org/help)\n'
+                             '[web](http://example.org/help)\n'
+                             '[section](#usage)\n'
+                             '[installation](../../../INSTALL.md#login)\n')
+            (root / 'INSTALL.md').write_text('Installation guide.\n')
+            qualifier.check_guide_links(root, ['examples/scientific/huxt/README.md'])
+
+    def test_archive_guide_checker_still_rejects_missing_and_escaping_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'archive'
+            root.mkdir()
+            (Path(temporary) / 'outside.md').write_text('Outside the archive.\n')
+            for target in ('missing.md', '../outside.md'):
+                with self.subTest(target=target):
+                    (root / 'GUIDE.md').write_text('[maintainer](mailto:enumeray@raysofspace.com)\n'
+                                                   f'[invalid]({target})\n')
+                    with self.assertRaises(SystemExit) as raised:
+                        qualifier.check_guide_links(root, ['GUIDE.md'])
+                    self.assertEqual(str(raised.exception), f'Broken bundled guide link in GUIDE.md: {target}')
+
     def test_nested_example_links_follow_the_relocated_archive_layout(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'source'
