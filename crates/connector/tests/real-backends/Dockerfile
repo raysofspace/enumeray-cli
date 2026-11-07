@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.98.1-bookworm AS build
 ARG ENUMERAY_BUILD_DRIVER_TESTS=1
+ARG ENUMERAY_CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${ENUMERAY_CARGO_BUILD_JOBS}
 RUN apt-get update && apt-get install -y --no-install-recommends python3 procps && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 # Preserve the complete public source fingerprint and optional prepared metadata.
 # Git, targets, caches and local secrets are excluded by the context ignore file.
 COPY . .
 # A copied source snapshot can predate outputs from another cached build.
-# Rebuild this package while retaining its dependency cache.
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+# Rebuild this package while retaining its dependency cache on the same daemon.
+# Its registry lock is separate from the service builder's registry lock.
+RUN --mount=type=cache,id=enumeray-public-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=enumeray-real-backend-target,target=/build/target,sharing=locked \
     cargo clean --release -p enumeray-connector -p enumeray-cli \
  && cargo build --locked --release -p enumeray-cli --bin enumeray \
