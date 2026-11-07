@@ -9,18 +9,34 @@ directory. Start a new directory when you intend another execution.
 
 ## Try the hosted scientific models
 
-For an optional hosted trial, run `enumeray auth login` to sign in to
-https://enumeray.com. The trial supplies the installed models and connector. The
-[first-run walkthrough](https://doc.enumeray.com/start/first-run/) supplies a
-complete hosted HUXt or REBOUND analysis. For example:
+For an optional hosted trial, use a separate profile for https://enumeray.com.
+Run `enumeray auth profiles` to check the API origin of any existing `demo`
+profile. If it points to another service, choose an unused name and substitute
+it for `demo` throughout this example. If the profile is absent, configure it:
 
 ```sh
-enumeray model get demo-rebound
-enumeray analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
+enumeray --profile demo auth configure https://enumeray.com
+```
+
+Sign in with the selected profile:
+
+```sh
+enumeray --profile demo auth login
+enumeray --profile demo auth whoami
+```
+
+Confirm your account before continuing. The trial supplies the installed
+models and connector. Follow the
+[first-run walkthrough](https://doc.enumeray.com/start/first-run/) for a full
+HUXt or REBOUND walkthrough, or use this REBOUND recipe:
+
+```sh
+enumeray --profile demo model get demo-rebound
+enumeray --profile demo analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
 # Review the scientific inputs, execution location and disclosure before submitting.
-enumeray analysis submit orbit-analysis
-enumeray analysis wait orbit-analysis --check-outcome
-enumeray analysis collect orbit-analysis
+enumeray --profile demo analysis submit orbit-analysis
+enumeray --profile demo analysis wait orbit-analysis --check-outcome
+enumeray --profile demo analysis collect orbit-analysis
 ```
 
 Use `demo-huxt` with example `fast-stream` and a new directory for the solar-wind

@@ -7,7 +7,7 @@ the Python standard library and preserves number tokens. It needs no checkout,
 installed CLI, credentials or service.
 
 Acquire the [complete examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
-and its [checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256),
+and its [model examples archive checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256),
 then use `examples/http-contract/` inside the extracted versioned root. Direct
 downloads: [independent implementation](collection-identity.py),
 [vector catalogue](digest-vectors/vectors.json), exact

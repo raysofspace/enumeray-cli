@@ -17,9 +17,9 @@ choices offline and separates the backend developer reference.
 
 ## Prepare configuration and check host prerequisites
 
-Start from [Linux managed](../cli/examples/host-setup-linux.json),
-[macOS managed](../cli/examples/host-setup-macos.json), or
-[single-user development](../cli/examples/host-setup-development.json). Edit the
+Start from the [Linux managed host specification](../cli/examples/host-setup-linux.json),
+[macOS managed host specification](../cli/examples/host-setup-macos.json), or
+[single-user development host specification](../cli/examples/host-setup-development.json). Edit the
 identifiers, accounts, absolute site paths and limits. macOS numeric IDs are
 examples; the administrator must check name and UID/GID collisions first.
 
@@ -934,7 +934,7 @@ Retrieval runs asynchronously during service observation and cancellation.
 ## Rotating logs and optional archives
 
 `run` and `execute-once` accept `--log-policy-file PATH`, a bounded JSON object
-such as [the default policy](../../examples/log-policy.json). The connector reads
+such as [the default log archive policy](../../examples/log-policy.json). The connector reads
 this policy at startup and persists the effective policy before each launch.
 Restarting with another policy affects new launches; recovery uses each launch's
 retained policy.

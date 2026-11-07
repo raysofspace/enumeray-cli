@@ -162,13 +162,13 @@ working `sbatch`, `squeue`, `sacct` and `scancel`, including accounting. The aut
 adds the foreground `model.sbatch` described above to each release; scheduler
 resources/routing belong in that script, not in the context JSON.
 
-Complete alternatives are available in
-[process/direct](../cli/examples/process-direct-context.json),
-[process/SSH](../cli/examples/process-ssh-context.json),
-[Slurm/direct](../cli/examples/slurm-direct-context.json) and
-[Slurm/SSH](../cli/examples/slurm-ssh-context.json) manifests. Successful registration
-is followed by an installed publication reaching ready and a disposable run
-completing on the actual site backend.
+Use the complete
+[process/direct context](../cli/examples/process-direct-context.json),
+[process/SSH context](../cli/examples/process-ssh-context.json),
+[Slurm/direct context](../cli/examples/slurm-direct-context.json) or
+[Slurm/SSH context](../cli/examples/slurm-ssh-context.json) as a template. After
+registration, confirm that an installed publication reaches ready and that a
+disposable run completes on the actual site backend.
 
 ## A site-controlled launcher wrapper
 

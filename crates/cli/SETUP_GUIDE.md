@@ -175,9 +175,9 @@ The model author can check the scientific result and
 Provide a version-1 JSON input with `host` (the existing `HostSetupSpec`), `connector`
 (`id`, `label`, `max_outstanding_assignments`), `startup` (`foreground` or `background`)
 and optional `first_model`. Start from the existing
-[development](examples/host-setup-development.json),
-[Linux](examples/host-setup-linux.json) or [macOS](examples/host-setup-macos.json)
-host specification and replace all example accounts and absolute paths.
+[development host specification](examples/host-setup-development.json),
+[Linux host specification](examples/host-setup-linux.json) or
+[macOS host specification](examples/host-setup-macos.json) and replace all example accounts and absolute paths.
 
 For background operation set `host.install_service` to `true`; otherwise leave it
 `false`. Managed executable copying needs `executable_source` and
