@@ -423,7 +423,11 @@ For another service, save its administrator-supplied origin in a separate profil
 ```sh
 enumeray --profile research auth configure https://research.example.org
 enumeray --profile research auth login
+enumeray --profile research auth whoami
 ```
+
+Check the account in `auth whoami` before accepting an invitation or requesting
+access. Use the same profile for the [model access workflow](https://doc.enumeray.com/users/discovery-access/).
 
 Browser login uses PKCE and a temporary loopback callback. `--no-browser` prints
 the URL for a browser on the **same host**; a laptop browser cannot complete a
@@ -474,7 +478,8 @@ revoking provider sessions or server-side personal tokens.
 | Script with structured output | [Complete JSON recipe](ANALYSIS_GUIDE.md#script-with-structured-output) |
 | Create, install, trial and publish a model | [Author guide](AUTHOR_GUIDE.md) |
 | Work through supplied publications and inputs | [Example walkthrough](examples/README.md) |
-| Enroll and operate compute | [Connector guide](https://github.com/raysofspace/enumeray-cli/blob/main/crates/connector/README.md) |
+| Connect compute and trial a model | [Guided connector setup](SETUP_GUIDE.md) |
+| Operate an existing connector | [Complete connector guide](../connector/README.md) |
 
 The archive includes standalone connector and driver guides; their local links
 work after extraction without a checkout. It includes complete

@@ -1,20 +1,19 @@
 # Enumeray connector
 
-The [web documentation](https://doc.enumeray.com/) adds role-based guides,
-generated command/API reference and troubleshooting, with local preview instructions.
+Start with [guided connector setup](../cli/SETUP_GUIDE.md) to prepare approved
+hosts, enroll a connector, check readiness and trial a model. Use this complete
+guide for operation, manual preparation and offline reference.
 
 The connector is a library used by the unified `enumeray` executable. Its normal
 dependency graph contains the
 shared contracts and HTTP/runtime libraries; it needs neither PostgreSQL access nor
 server-side storage credentials. The API is reached through outbound HTTP(S).
 
-Choose driver and access independently: `process` or `slurm`, combined with
-`direct` or `ssh`. See [configuration and extension guide](EXTENDING.md) for the
-four context templates, deployment choices and module contracts.
-
-For an installation-to-first-trial journey, start with
-[guided connector setup](../cli/SETUP_GUIDE.md). It saves selections and progress,
-applies reviewed host preparation explicitly and reuses the operations below.
+Choose the job driver and the connection independently. The
+[execution context guide](https://doc.enumeray.com/infrastructure/contexts/)
+explains `process` and `slurm` over `direct` or `ssh`. The included
+[driver and connection guide](EXTENDING.md#choosing-a-context) covers the same
+choices offline and separates the backend developer reference.
 
 ## Prepare configuration and check host prerequisites
 
@@ -649,7 +648,7 @@ The API rejects additional candidates or contexts with
 and retire unused configuration before choosing another connector/context. Retain
 the original connector while accepted work references its installations.
 
-Local contexts and local Slurm submission hosts must provide an site-controlled
+Local contexts and local Slurm submission hosts must provide a site-controlled
 restricted launcher. Its complete command includes the unified executable, for example:
 
 ```json
@@ -998,9 +997,8 @@ retention at 30 days. Reads enforce expiry before maintenance runs. Existing inp
 pins preserve stored versions needed by accepted consumers; expired attachments
 cannot acquire new pins.
 
-Operators run bounded, repeatable retirement separately from scientific artifacts:
-
-Contact Enumeray support to arrange service-side archive retention and cleanup.
+For service-side archive retention and cleanup, contact Enumeray support. Include
+the run ID and the archive publication status so support can identify the record.
 
 Cleanup addresses only the archive's reserved object key and explicit stored
 version IDs, respects dependency pins, and retries unavailable storage. Verified

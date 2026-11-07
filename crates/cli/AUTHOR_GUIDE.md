@@ -1,10 +1,10 @@
 # Model author guide
 
-Use this guide as the complete author walkthrough; the
-[web documentation](https://doc.enumeray.com/authors/overview/) also offers focused
-task pages, contracts and troubleshooting. The included
-[analysis guide](ANALYSIS_GUIDE.md) covers the shared execution,
-recovery, copied-folder and noninteractive JSON workflow.
+Use this complete guide to work from a local starter to a shared model. Define
+and test the science, agree on an installation with the connector owner, then
+save a release and trial its exact candidate. Review the trial before activating
+and sharing the publication. Use the [analysis guide](ANALYSIS_GUIDE.md) for
+execution, recovery and automation.
 
 The independently distributed `enumeray` CLI creates editable Python 3.9+ projects
 with one editable publication declaration without an API checkout or credentials.
@@ -14,10 +14,10 @@ before installing a CLI or obtaining publication access.
 Examples demonstrate contracts; replace their scientific calculation and assert
 results appropriate to your model before publishing.
 
-To try a deployed scientific model first, sign in with `enumeray auth login`
+For an optional trial as a model user, sign in with `enumeray auth login`
 and follow the [hosted HUXt and REBOUND trial](https://doc.enumeray.com/start/first-run/).
-It uses managed demo compute without a connector of your own. A scientific pilot
-still requires an agreed model mapping, validation and execution environment.
+The demo supplies its own installation and compute. Publishing your model starts
+with the local tests and needs an agreed model mapping and execution environment.
 
 Commands run in a terminal, usually from the generated project. `example` is the
 scalar model ID; `csv-example` is a separate file model. Choose your own IDs before
@@ -431,7 +431,7 @@ failure annotation.
 
 ## Install an immutable release and select compute
 
-Coordinate installation under an site-approved release directory, such
+Coordinate installation under a site-approved release directory, such
 as `/opt/enumeray/models/example/r1`. Copy the complete project and your solver,
 runtime requirements and datasets. Ensure the execution account can traverse
 directories, read all resources and execute `wrapper.py`. Set read-only release
@@ -499,7 +499,9 @@ and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 
-After local scientific tests and installation, create the model once and save a release:
+After local scientific tests and installation, create the model once and save a
+release. Use this directory to keep the candidate, readiness checks, trial evidence
+and activation review tied to the same publication.
 
 ```sh
 enumeray model validate --file publication.json
@@ -609,6 +611,10 @@ enumeray model get example
 ```
 
 Review captures the observed current publication, including no current publication on first activation. If it changes, inspect the competing update and run review again before explicit activation. Initialization and registration never activate or share.
+
+Check that `model get example` shows the candidate as the current publication.
+Accepted runs retain their original publication. Set access explicitly before
+handing the model ID and its scientific examples to a user.
 
 ## Choose visibility and access explicitly
 
@@ -975,9 +981,9 @@ requires its protocol helper and matching fixtures.
 
 ## Maintainer verification mapping
 
-Repository fixture coverage is described in the
-[contributor guide](https://github.com/raysofspace/enumeray-cli/blob/main/CONTRIBUTING.md#model-and-connector-fixture-coverage).
 Authors maintain scientific tests for their own model and installation.
+If you maintain the public CLI or its fixtures, follow the
+[documentation and contribution guide](https://doc.enumeray.com/maintaining/).
 
 ## Hand a candidate to another administrator
 
