@@ -31,8 +31,8 @@ destinations; retain the original directories and state for exact retries.
 
 ## Run the downloaded model examples offline
 
-Download the [archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
-and its [SHA-256 file](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
+Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
+and its [model examples archive checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
 into a new directory, keeping those filenames. Python 3.9+ and `tar` are required
 for these commands; no API, credentials or source checkout is needed:
 

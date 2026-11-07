@@ -9,9 +9,10 @@ each on x86-64 and ARM64. Alpine/musl, Windows and older systems are outside thi
 matrix. Each platform must pass its own oldest-supported-environment checks before
 publication. A build on a newer system alone does not qualify that minimum.
 
-Package availability follows the matching service's release qualification.
-Until a qualified release is published, build from source below. Direct downloads
-and the project Homebrew tap are the supported distribution channels.
+Use the qualified package for your service when available. Direct downloads
+and the project Homebrew tap are the supported distribution channels. For
+development evaluation when your selected service has no qualified package,
+[build from the public revision supplied by the service owner](#build-from-a-pinned-checkout).
 
 After installation, sign in and follow the
 [hosted trial](https://doc.enumeray.com/start/first-run/) to run the supplied HUXt
