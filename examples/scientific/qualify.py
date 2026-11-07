@@ -12,7 +12,7 @@ import tempfile
 import time
 
 from runtime import FILES, PARAMETERS, run_model, worker_environment
-from verify_collected import verify_science, load_model
+from verify_collected import verify_science
 
 ROOT = Path(__file__).resolve().parent
 
@@ -40,6 +40,7 @@ def environment_receipt():
     if hashlib.sha256(ephemeris.read_bytes()).hexdigest() != manifest["huxt_ephemeris_sha256"]:
         raise ValueError("Bundled HUXt ephemeris differs from runtime manifest")
     return {"python": "3.12.16", "solvers": manifest["solvers"],
+            "huxt_numba_jit_enabled": manifest["huxt_numba_jit_enabled"],
             "requirements_sha256": manifest["requirements_sha256"],
             "build_requirements_sha256": manifest["build_requirements_sha256"],
             "huxt_ephemeris_sha256": manifest["huxt_ephemeris_sha256"]}
@@ -47,7 +48,7 @@ def environment_receipt():
 
 def uniform_wind_check():
     with tempfile.TemporaryDirectory(prefix="enumeray-analytic-") as temporary:
-        environment = worker_environment(temporary)
+        environment = worker_environment(temporary, "huxt")
         previous = dict(os.environ)
         try:
             os.environ.update(environment)
@@ -90,8 +91,13 @@ def qualify(models=("huxt", "rebound"), extrema=False):
                 outputs, files = run_model(model, inputs, Path(temporary))
                 elapsed = time.monotonic() - started
                 metrics = json.loads((Path(temporary) / ".scientific/metrics.json").read_text())
-                if metrics["peak_rss_bytes"] > 1024 ** 3 or elapsed > (60 if name == "example" else 120):
-                    raise ValueError("Scientific case exceeds qualification resource budget")
+                elapsed_limit = 60 if name == "example" else 120
+                rss = metrics["peak_rss_bytes"]
+                rss_limit = 1024 ** 3
+                if elapsed > elapsed_limit or rss > rss_limit:
+                    raise ValueError(f"{model}/{name} exceeds qualification resource budget "
+                                     f"(elapsed {elapsed:.3f} s, limit {elapsed_limit} s; "
+                                     f"peak RSS {rss} bytes, limit {rss_limit} bytes)")
                 science = verify_science(model, inputs, outputs,
                                          {slot: Path(temporary) / value["path"] for slot, value in files.items()})
                 checks.append({"model": model, "case": name, "elapsed_seconds": round(elapsed, 3),
