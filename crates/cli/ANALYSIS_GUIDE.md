@@ -1,13 +1,16 @@
 # Analysis directories
 
-Keep one intended execution, its reviewed inputs, exact retries and verified results in one private directory. This guide ships with the CLI and is the source for the web analysis guide.
+Keep one intended execution, its reviewed inputs, exact retries and verified
+results in one private analysis directory. Initialize it, review the inputs and
+execution disclosure, submit deliberately, then observe and collect using that
+directory. Start a new directory when you intend another execution.
 
 **Role:** Model user, candidate author/reviewer or authorized run reader. **Prerequisites:** An authenticated CLI profile for remote commands. New work requires access to the selected publication and upload/artifact scopes when using files; fresh candidate trials also require current model administration, execution access and the captured grant or an exact named delegation. Accepted-run recovery uses existing run-read authority; local prepared-operation import needs no credentials. **Files:** A private directory for one intended execution; original local input bytes remain external.
 
 ## Try the hosted scientific models
 
-Run `enumeray auth login` to sign in to https://enumeray.com; no separate service
-configuration or connector is required. The
+For an optional hosted trial, run `enumeray auth login` to sign in to
+https://enumeray.com. The trial supplies the installed models and connector. The
 [first-run walkthrough](https://doc.enumeray.com/start/first-run/) supplies a
 complete hosted HUXt or REBOUND analysis. For example:
 
@@ -28,7 +31,10 @@ and compute owners. They are distinct from the contract fixtures below.
 
 ## Initialize and review
 
-Inspect `enumeray model get MODEL` for its schema, named examples, availability, execution location and scientific-data access disclosure. Initialize from one of its examples or your own inputs:
+Use your supplied service profile and model access when working outside the
+trial. Inspect `enumeray model get MODEL` for its schema, named examples,
+availability, execution location and scientific-data access disclosure.
+Initialize from one of its examples or your own inputs:
 
 ```sh
 enumeray analysis init example --directory analysis --example starter-example
@@ -289,3 +295,9 @@ Inspect `bundle.json` and `results/outputs.json` after complete collection. Keep
 Do not edit frozen inputs, saved request keys or acceptance evidence to make a retry succeed. Protect scientific records and private state when copying or backing them up. Credentials and temporary storage capabilities are not retained in analysis state; renew access explicitly. If unfinished sources are unavailable, preserve the original operation and investigate its outcome before requesting new work.
 
 A copied or attached folder continues an existing execution. Deliberately new work uses `analysis init` and a new directory with a fresh review. Historical reruns against old contracts and parameter sweeps are outside the current release.
+
+After collection, use `bundle.json` to check completeness and locate outputs.
+Interpret them against the model's scientific guide and retain the directory
+with any original input files you need. Use run history by ID for authorized
+investigation. [Independent HTTP integrations](https://doc.enumeray.com/reference/http-integrations/)
+manage their own disclosure review, saved request identity and transfer recovery.

@@ -1,7 +1,11 @@
 # Connector drivers and connections
 
-This reference also appears in the [web documentation](https://doc.enumeray.com/).
-See that entry point for local preview and connector guides.
+If you operate an existing connector, start with
+[execution contexts](https://doc.enumeray.com/infrastructure/contexts/) or use
+[Choosing a context](#choosing-a-context) in the offline guide.
+If you develop a backend, start with the [runner protocol](#exercise-the-runner-protocol),
+then use the [interface boundaries](#code-boundaries),
+[compatibility rules](#recovery-and-compatibility) and [verification](#verification).
 
 An execution context combines a **driver**, which owns the job lifecycle, with a
 **connection**, which reaches the compute runner. Model wrappers own scientific
@@ -25,11 +29,9 @@ hide `sbatch` in a process wrapper and return immediately: that would track the
 submission script instead of the scientific job. SSH describes access, never job
 ownership. Containers are a wrapper/runtime choice in this initial implementation.
 
-Start with a complete CLI manifest in `../cli/examples/`:
-`process-direct-context.json`, `process-ssh-context.json`,
-`slurm-direct-context.json`, or `slurm-ssh-context.json`. Edit paths,
-site descriptions, then register using the existing context
-CLI. Shared validation rejects unsupported combinations and fields. Publication
+Choose the matching [context template](#register-a-context-without-reading-the-code).
+Edit the paths and site settings, then register the context with the CLI.
+Shared validation rejects unsupported combinations and fields. Publication
 validation checks the installed entrypoint and required Slurm batch file, their digests, execution identity and driver
 readiness before the model can be activated.
 
@@ -244,10 +246,12 @@ observation. Cancellation has its own outcome; inspect status afterward to estab
 termination. File reads are limited to 256 KiB chunks and protocol envelopes to
 4 MiB. Transfer probes hash at most 64 MiB, return typed source evidence and never
 accept arbitrary filesystem paths. Input chunk replays must match retained bytes.
-Backend extensions must preserve those ownership, replay and verification
-boundaries described below.
+Backend extensions must preserve the ownership, replay and verification rules
+in the [interface boundaries](#code-boundaries).
 
 ## Code boundaries
+
+This section is for backend developers changing the connector or runner.
 
 - `contracts/src/execution.rs`: tagged driver and connection configuration,
   access and path validation. Publication requirements derive `process` or `slurm` from the context.
