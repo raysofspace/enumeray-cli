@@ -18,6 +18,7 @@
     "rebound": 60
   },
   "threads": 1,
+  "huxt_numba_jit_enabled": false,
   "qualification_peak_rss_bytes": 1073741824,
   "build_requirements_sha256": "317fc22d1ad19a30aa4b73f94898c155e28c8f035821b71389a924bb40064f6c",
   "max_output_bytes_per_run": 8388608

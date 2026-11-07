@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 import uuid
 
+import qualify
 from runtime import ExecutionFailure, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
 
 ROOT = Path(__file__).resolve().parent
@@ -38,12 +39,35 @@ class RuntimeTests(unittest.TestCase):
 
     def test_worker_environment_confines_writes_and_drops_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
-            env = worker_environment(directory)
+            env = worker_environment(directory, "huxt")
             self.assertNotIn("ENUMERAY_TOKEN", env)
             self.assertNotIn("AWS_SECRET_ACCESS_KEY", env)
             for key in ("HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "MPLCONFIGDIR", "NUMBA_CACHE_DIR", "TMPDIR"):
                 self.assertTrue(Path(env[key]).is_relative_to(directory))
             self.assertEqual(env["OPENBLAS_NUM_THREADS"], "1")
+            self.assertEqual(env["NUMBA_DISABLE_JIT"], "1")
+            manifest = json.loads((ROOT / "runtime-manifest.json").read_text())
+            self.assertIs(manifest["huxt_numba_jit_enabled"], False)
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertNotIn("NUMBA_DISABLE_JIT", worker_environment(directory, "rebound"))
+
+    def test_qualification_reports_case_and_both_resource_measurements(self):
+        rss_limit = 1024 ** 3
+        for elapsed, rss in ((61, rss_limit), (60, rss_limit + 1)):
+            with self.subTest(elapsed=elapsed, rss=rss):
+                def run_case(_model, _inputs, workspace):
+                    metrics = workspace / ".scientific" / "metrics.json"
+                    metrics.parent.mkdir()
+                    metrics.write_text(json.dumps({"peak_rss_bytes": rss, "offline": True}))
+                    return {}, {}
+
+                with mock.patch.object(qualify, "environment_receipt", return_value={}), \
+                        mock.patch.object(qualify, "run_model", side_effect=run_case), \
+                        mock.patch.object(qualify.time, "monotonic", side_effect=[0, elapsed]), \
+                        self.assertRaisesRegex(ValueError,
+                            rf"huxt/example .*elapsed {elapsed}\.000 s, limit 60 s.*"
+                            rf"peak RSS {rss} bytes, limit {rss_limit} bytes"):
+                    qualify.qualify(("huxt",))
 
     def test_timeout_reaps_the_original_scientific_child(self):
         with tempfile.TemporaryDirectory() as directory:
