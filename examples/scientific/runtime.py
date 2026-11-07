@@ -46,13 +46,17 @@ def validate_inputs(model, inputs):
     return values
 
 
-def worker_environment(workspace):
+def worker_environment(workspace, model):
     private = Path(workspace) / ".scientific"
     private.mkdir(mode=0o700)
     result = {"PATH": os.path.dirname(sys.executable) + ":/usr/bin:/bin", "LANG": "C.UTF-8",
               "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "MPLBACKEND": "Agg",
               "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
               "NUMBA_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1", "VECLIB_MAXIMUM_THREADS": "1"}
+    if model == "huxt":
+        # This one-meridian case is faster without compiling the solver in each
+        # fresh worker. The locked HUXt functions still execute the same case.
+        result["NUMBA_DISABLE_JIT"] = "1"
     for name, directory in (("HOME", "home"), ("XDG_DATA_HOME", "data"),
                             ("XDG_CACHE_HOME", "cache"), ("MPLCONFIGDIR", "matplotlib"),
                             ("NUMBA_CACHE_DIR", "numba"), ("TMPDIR", "tmp")):
@@ -102,7 +106,7 @@ def supervise(command, *, cwd, env, timeout):
 def run_model(model, inputs, workspace):
     values = validate_inputs(model, inputs)
     workspace = Path(workspace).resolve()
-    environment = worker_environment(workspace)
+    environment = worker_environment(workspace, model)
     private = workspace / ".scientific"
     source = private / "inputs.json"
     source.write_text(json.dumps(values, allow_nan=False))

@@ -43,13 +43,15 @@ python3 -B -m unittest discover -s . -p test_runtime.py
 Scientific tests and `qualify.py` execute the installed solvers. Qualification
 compares numerical outputs, exercises all eight parameter-range corners per model
 when `--extrema` is supplied, and emits JSON with wall time, peak solver RSS and
-the tested identities. Its acceptance budgets are under 60 seconds for each
-default example, under 120 seconds for a corner case, and under 1 GiB peak solver
+the tested identities. Its acceptance budgets are 60 seconds for each
+default example, 120 seconds for a corner case, and 1 GiB peak solver
 RSS. Actual site qualification must pass on the deployment hardware.
 
 The wrapper enforces 180 seconds for HUXt and 60 seconds for REBOUND, including
-imports and just-in-time compilation. CSV and PNG files together are at most
-8 MiB per run (with the same upper bound on each file). It bounds CPU
+interpreter startup and imports. The bounded one-meridian HUXt case runs the
+locked solver with Numba compilation disabled to reduce cold-start time.
+CSV and PNG files together are at most 8 MiB per run (with the same upper bound
+on each file). The wrapper bounds CPU
 time, disables core dumps, caps native threads, rejects outbound socket connections
 in the scientific child and confines runtime data/cache writes to its workspace.
 Timeout and cancellation terminate and reap that child; Linux additionally binds
