@@ -99,16 +99,17 @@ before renewing credentials or recovering from a lost reply.
 ## Script with structured output
 
 This walkthrough saves the result of one run so another program can use it.
-You need `jq`, the [signed-in profile](https://doc.enumeray.com/start/login/)
-for your team service and run access to `example`. This is the scalar starter
-an author [publishes and shares](https://doc.enumeray.com/authors/publication/#review-and-activate)
-on that service. If you have access to another model, substitute its ID,
-inputs and expected result. The commands use `research` for the profile.
-Replace it throughout if yours has a different name.
+You need `jq`, an [Enumeray sign-in](https://doc.enumeray.com/start/login/)
+and run access to the scalar starter an author
+[publishes and shares](https://doc.enumeray.com/authors/publication/#review-and-activate).
+The tutorial uses `example` as its model ID. Set `MODEL_ID` below to the
+published ID the author gives you. If you use another model, adapt the inputs
+and expected result.
 
 ### Prepare one run
 
 ```sh
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
 WORK_DIR=$(mktemp -d "$PWD/enumeray-script.XXXXXX") &&
   cd "$WORK_DIR" &&
   pwd &&
@@ -116,10 +117,10 @@ WORK_DIR=$(mktemp -d "$PWD/enumeray-script.XXXXXX") &&
     set -eu
     umask 077
     printf '%s\n' '{"value":2}' > inputs.json
-    enumeray --profile research --json model get example > model.json
-    enumeray --profile research --json analysis init example --inputs inputs.json \
+    enumeray --json model get "$MODEL_ID" > model.json
+    enumeray --json analysis init "$MODEL_ID" --inputs inputs.json \
       --directory scripted-analysis > initialized.json
-    enumeray --profile research --json analysis status scripted-analysis > reviewed-analysis.json
+    enumeray --json analysis status scripted-analysis > reviewed-analysis.json
   )
 ```
 
@@ -138,8 +139,8 @@ interruption, repeat it from that directory.
   set -eu
   umask 077
   ANALYSIS=scripted-analysis
-  enumeray --profile research --json analysis submit "$ANALYSIS" > submission.json
-  if enumeray --profile research --json analysis wait "$ANALYSIS" \
+  enumeray --json analysis submit "$ANALYSIS" > submission.json
+  if enumeray --json analysis wait "$ANALYSIS" \
     --check-outcome --interval 2 --deadline 3600 > terminal-run.json; then
     outcome=0
   else
@@ -147,7 +148,7 @@ interruption, repeat it from that directory.
   fi
   case "$outcome" in
     0|3|4)
-      enumeray --profile research --json analysis collect "$ANALYSIS" > collection.json
+      enumeray --json analysis collect "$ANALYSIS" > collection.json
       jq -e '.schema_version == 1 and .complete == true' collection.json >/dev/null
       ;;
     5|130)
@@ -172,8 +173,8 @@ have a complete record. Open `terminal-run.json` for the outcome and
 Read the original acceptance from the nested `receipt` in `submission.json`
 or the saved `scripted-analysis/state/receipt.json`. Use status or wait for
 current progress. If collection fails, rerun `analysis collect` with the
-same directory. If sign-in expires, renew the same service and account or
-replace the scoped token before resuming.
+same directory. If sign-in expires, sign in with the same account or replace
+its scoped token before resuming.
 
 ## Script log collection
 
@@ -256,9 +257,13 @@ Review the corresponding paths and identities consistently in your own case.
 | `analysis/inputs.json` | Scientific values in the private analysis directory, validated against the selected publication's input schema |
 
 Approve the exact inputs, execution location and data access before submitting.
-The analysis keeps the publication it saved, even if a different one becomes
-current. Stop if review fields are missing. After a lost submission reply,
-recover from the same directory so you keep the original request identity.
+Stop if review fields are missing. Before it sends an ordinary run request, the
+CLI checks whether the reviewed publication is still current. If this check
+reports a change, initialize a fresh analysis and review it before submitting.
+
+After a lost submission reply, repeat submit from the same directory to
+recover the original acceptance or see the rejection. An accepted run keeps
+the publication it used.
 
 ## Collection completeness
 

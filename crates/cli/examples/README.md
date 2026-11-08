@@ -62,8 +62,8 @@ and scientific identities are examples to replace before publication. Creating
 local files does not provision compute or install a model.
 
 Start from the package root, whose `examples/` directory contains this file.
-The commands use `research` as the profile. Substitute the profile you
-signed in to. Use a new private working directory for each intended run.
+Sign in to Enumeray and use a new private working directory for each
+intended run.
 The [analysis guide](../ANALYSIS_GUIDE.md) covers how to review inputs and
 recover work from a saved directory.
 
@@ -76,37 +76,39 @@ launch-capable invocation.
 ## Scalar publication
 
 The supplied [process declaration](scalar-publication.json) and
-[Slurm declaration](slurm-scalar-publication.json) both describe `scalar-double`.
-To follow the example, you need `scalar-double` activated on your service
-and permission to run it. If you publish the model, use the matching context
-template and follow the author guide for installation and testing.
+[Slurm declaration](slurm-scalar-publication.json) use the example ID
+`scalar-double`. To run the scalar starter, get its published ID and access
+from the author. If you publish the model, use the matching context template
+and follow the author guide for installation and testing.
 
 ```sh
-enumeray --profile research model get scalar-double
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID"
 ```
 
 From the package root, record the path to the supplied input file before
-switching to a fresh working directory. Stay there for the rest of this example.
+switching to a fresh working directory. Use the same shell and stay in the
+new directory for the rest of the example.
 
 ```sh
 SCALAR_INPUTS="$PWD/examples/scalar-inputs.json"
 SCALAR_WORK_DIR=$(mktemp -d "$PWD/enumeray-scalar.XXXXXX") &&
   cd "$SCALAR_WORK_DIR" &&
-  enumeray --profile research analysis init scalar-double \
+  enumeray analysis init "$MODEL_ID" \
     --inputs "$SCALAR_INPUTS" --directory scalar-analysis &&
-  enumeray --profile research analysis status scalar-analysis
+  enumeray analysis status scalar-analysis
 ```
 
 Check where the run will happen and who can access its data. Review
 `scalar-analysis/inputs.json` before submitting.
 
 ```sh
-enumeray --profile research analysis submit scalar-analysis
-enumeray --profile research analysis wait scalar-analysis --check-outcome
-enumeray --profile research analysis collect scalar-analysis
+enumeray analysis submit scalar-analysis
+enumeray analysis wait scalar-analysis --check-outcome
+enumeray analysis collect scalar-analysis
 ```
 
-The supplied input is `{"value":21}`. The scalar-double fixture returns
+The supplied input is `{"value":21}`. The scalar starter returns
 `{"doubled":42}` in `scalar-analysis/results/outputs.json`. Edit the analysis's
 `inputs.json` before its first submit to choose another value. Submit freezes
 the inputs. After interruption, repeat submit with the same directory to
@@ -114,16 +116,17 @@ recover the same execution. For a new run, use a fresh directory.
 
 ## File starter
 
-To follow this example, your team needs to activate the file starter as
-`csv-example` on your service and give your account access. Check with
-`enumeray --profile research model get csv-example`. If you're preparing the
-model for your team, follow the [author guide](../AUTHOR_GUIDE.md).
+The author tutorial uses `csv-example` as the file starter's ID. Ask your
+team for the published ID and access. If you're preparing the model for
+your team, follow the [author guide](../AUTHOR_GUIDE.md).
 
-Create a fresh private working directory for the example and stay there
-for the rest of the commands.
+Set `MODEL_ID` to the published ID and create a fresh private working directory.
+Use the same shell and stay in that directory for the rest of the commands.
 
 ```sh
-FILE_WORK_DIR=$(mktemp -d "$PWD/enumeray-file.XXXXXX") &&
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID" &&
+  FILE_WORK_DIR=$(mktemp -d "$PWD/enumeray-file.XXXXXX") &&
   cd "$FILE_WORK_DIR" &&
   pwd
 ```
@@ -143,9 +146,9 @@ CSV
   cat > file-inputs.json <<'JSON'
 {}
 JSON
-  enumeray --profile research analysis init csv-example --inputs file-inputs.json \
+  enumeray analysis init "$MODEL_ID" --inputs file-inputs.json \
     --file dataset=dataset.csv --directory file-analysis
-  enumeray --profile research analysis status file-analysis
+  enumeray analysis status file-analysis
 )
 ```
 
@@ -153,9 +156,9 @@ Review the local `dataset` binding and check where the file will go and who
 can access it before submitting.
 
 ```sh
-enumeray --profile research analysis submit file-analysis
-enumeray --profile research analysis wait file-analysis --check-outcome
-enumeray --profile research analysis collect file-analysis
+enumeray analysis submit file-analysis
+enumeray analysis wait file-analysis --check-outcome
+enumeray analysis collect file-analysis
 ```
 
 The CLI uploads the bound file when you submit. Open `results/outputs.json`
@@ -167,22 +170,23 @@ copy if you need it later. The analysis records its path and checksum.
 ## Collection example
 
 Use a collection when your model takes a directory of related files as one
-input. This example sends two files to `collection-example`. The model
-copies them into its `snapshots` output. The commands use the `research`
-profile from the team sign-in example. Replace it with the profile you signed
-in to. To run the commands as written, your service needs the `collection-example`
-model activated and your account needs permission to run it. To publish it,
-use the [collection publication](../../../examples/collections/publication.json)
+input. This example sends two files to a starter that copies them into its
+`snapshots` output. Its template uses `collection-example` as the model ID.
+Ask the author for the published ID and access. To publish the starter, use
+the [collection publication](../../../examples/collections/publication.json)
 and [Python wrapper](../../../examples/collections/wrapper.py), then
 [review and activate the tested publication](https://doc.enumeray.com/authors/publication/#review-and-activate).
 
 ### Prepare and review a two-file run
 
-From a folder where you can keep your work, create a private working
-directory and stay there for the rest of the example.
+Set `MODEL_ID` to the published ID. Run the block from a folder where you
+can keep your work. Use the same shell and stay in the printed directory
+for the rest of the example.
 
 ```sh
-COLLECTION_WORK_DIR=$(mktemp -d "$PWD/enumeray-collection.XXXXXX") &&
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID" &&
+  COLLECTION_WORK_DIR=$(mktemp -d "$PWD/enumeray-collection.XXXXXX") &&
   cd "$COLLECTION_WORK_DIR" &&
   pwd
 ```
@@ -198,10 +202,10 @@ object can be empty. The analysis directory is separate from the source tree.
   printf '%s\n' 'grid fixture' > collection-inputs/mesh/grid.bin
   printf '%s\n' 'snapshot fixture' > collection-inputs/snapshots/0001.bin
   printf '%s\n' '{}' > collection-inputs.json
-  enumeray --profile research analysis init collection-example \
+  enumeray analysis init "$MODEL_ID" \
     --directory collection-analysis --inputs collection-inputs.json \
     --collection dataset=collection-inputs --media-type dataset=application/octet-stream
-  enumeray --profile research analysis status collection-analysis
+  enumeray analysis status collection-analysis
 )
 ```
 
@@ -210,13 +214,13 @@ data-access disclosure shown by status. Keep the files in place while their
 uploads are unfinished. Submit only after review.
 
 ```sh
-enumeray --profile research analysis submit collection-analysis
+enumeray analysis submit collection-analysis
 ```
 
 After you have the receipt, wait for the outcome.
 
 ```sh
-enumeray --profile research analysis wait collection-analysis --check-outcome
+enumeray analysis wait collection-analysis --check-outcome
 ```
 
 ### Collect the output in stages
@@ -225,10 +229,10 @@ After a successful run, try all three stages below. To collect the whole
 result in one step, use the last command on its own.
 
 ```sh
-enumeray --profile research --json analysis collect collection-analysis --evidence-only
-enumeray --profile research --json analysis collect collection-analysis \
+enumeray --json analysis collect collection-analysis --evidence-only
+enumeray --json analysis collect collection-analysis \
   --member snapshots=mesh/grid.bin
-enumeray --profile research --json analysis collect collection-analysis
+enumeray --json analysis collect collection-analysis
 ```
 
 The first step saves the run record and manifests. The second downloads

@@ -1,16 +1,16 @@
 # Generate an SDK for Enumeray
 
-Use the OpenAPI document for the service you will call. The service owner
-supplies the selected service and public revisions. The API and scientific
-contract use version 1, and the selected revisions identify the exact contract
-for your client.
+Use the Enumeray OpenAPI document to generate a client. The API and
+scientific contract use version 1. The document defines the available
+operations, the data they accept and the responses they return.
 
 ## Generated SDK method names
 
 Use the operation IDs from the downloadable OpenAPI document to generate client
 methods. Your generator may change capitalization. The website uses its own
-anchors for navigation. Generate clients from the download or from your service's
-`/api/v1/openapi.json`.
+anchors for navigation. Generate clients from the
+[download](https://doc.enumeray.com/openapi.json) or the
+[specification served by the API](https://api.enumeray.com/api/v1/openapi.json).
 
 | Method and path | Operation ID |
 | --- | --- |
@@ -65,7 +65,7 @@ JS
 
 These commands generate and compile the SDK locally. The smoke function takes
 the disposable fixture described by its typed `SmokeContext`. The service
-acceptance suite supplies that fixture to exercise the eleven methods.
+acceptance suite supplies that fixture to exercise the methods in the table.
 Normal integrations can import the generated SDK and follow the independently
 executable [HTTP workflows](HTTP_WORKFLOWS.md).
 

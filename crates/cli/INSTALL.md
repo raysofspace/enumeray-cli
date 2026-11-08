@@ -1,9 +1,8 @@
 # Install and use Enumeray
 
-Install the `enumeray` command for the service you plan to use. The same
-executable provides the CLI, connector and compute runner. For a hosted trial
-or to run a model your team shares, install it on the computer where you
-will submit the run.
+Install the `enumeray` command on the computer where you will submit runs.
+The same executable provides the CLI, connector and compute runner.
+The CLI connects to Enumeray at `https://api.enumeray.com`.
 
 For a first-time workstation install, start with the
 [short installation guide](https://doc.enumeray.com/start/install-cli/). This
@@ -13,9 +12,8 @@ and maintenance for installations that hold saved work.
 ## Before choosing a package
 
 For the demo, [check hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
-Start when you have trial access and the approved version, target and API
-address. For a team service, ask its administrator for the approved release
-or public commit, API address and matching service verification information.
+Use the release approved by Enumeray. If your lab provides the CLI on its
+computers, ask which release it supports.
 
 Choose the route for your computer and situation.
 
@@ -25,7 +23,7 @@ Choose the route for your computer and situation.
 | Install a specific published binary | [Verify and install an archive](#verify-and-install-an-archive) |
 | Install on a machine without internet access | [Offline and SSH/HPC hosts](#offline-and-sshhpc-hosts) |
 | Compile an approved published release | [Build from a release source archive](#build-from-a-release-source-archive) |
-| Evaluate a service that has no qualified package | [Build from the exact public commit supplied by the service owner](#build-from-a-pinned-checkout) |
+| Build from an approved source selection | [Build from the exact public commit supplied by Enumeray](#build-from-a-pinned-checkout) |
 | Replace an installation with saved work | [Plan the change with the service and compute owners](#upgrade-deliberately) |
 
 The binary targets are macOS 15 or later and Linux with glibc 2.28 or later,
@@ -41,8 +39,8 @@ if you also need to connect a computer that runs models.
 
 ## Homebrew on macOS
 
-Use Homebrew when the tap publishes the formula for the version approved for
-your service. The formula selects the archive for your Mac.
+Use Homebrew when the tap publishes the formula for the approved release.
+The formula selects the archive for your Mac.
 
 ```sh
 brew tap raysofspace/tap
@@ -50,9 +48,11 @@ brew install raysofspace/tap/enumeray
 enumeray --version
 ```
 
-Homebrew installs the tap's published version. To install a specific version
-that differs from the formula, use the archive below. Find the packaged guides
-and compatibility information under `$(brew --prefix enumeray)/share/enumeray`.
+Homebrew installs the tap's published version. To install a specific version,
+use the archive below. Find the packaged guides and `compatibility.json` under
+`$(brew --prefix enumeray)/share/enumeray`. To compare the installed executable
+with its release evidence, follow [Inspect the selected installation](#inspect-the-selected-installation)
+and use `ENUMERAY_BIN=enumeray`.
 
 For a replacement, follow [the maintenance procedure](#upgrade-deliberately)
 before running `brew upgrade raysofspace/tap/enumeray`. Use
@@ -233,10 +233,8 @@ or establish compatibility with another service release.
 
 ## Build from a pinned checkout
 
-Use this development evaluation route when no qualified release package has
-been supplied. The service owner must provide the **full 40-character public
-commit** matching the selected service, not `main`, a guessed tag or an abbreviated
-commit. Replace the deliberate placeholder below before running the block. Use
+Use this route if Enumeray supplies a development selection. Set the
+**full 40-character public commit** from that selection before running the block. Use
 a new destination directory. Install Git, Rustup and the platform compiler and
 linker on the build host. The public repository contains the client sources.
 
@@ -287,19 +285,20 @@ the release manifest, the service publication receipt, and the four reports
 for the supported platforms. The block below downloads and checks them. It
 requires `jq`, `curl` and a separately trusted Cosign v3.
 
-Use the same `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL` as your archive.
-Set `API_ORIGIN` if your administrator supplies a different address. Check
-the extracted executable before installing it. To check an already installed
-package, set `ENUMERAY_BIN=enumeray` instead. Use a new `EVIDENCE` directory
-for each attempt so you can keep the results of an interrupted check.
+Set `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL` from
+[Download the selected archive](#download-the-selected-archive) for the
+release you installed or extracted. For an installed CLI, including Homebrew,
+set `ENUMERAY_BIN=enumeray`. To check an extracted binary before installing
+it, set `ENUMERAY_BIN="$EXTRACTED/enumeray"`. The block compares release
+evidence with Enumeray at `https://api.enumeray.com`. Run each attempt from
+a new working directory to keep the evidence from earlier attempts.
 
 <!-- release-evidence-acquisition -->
 ```sh
 EVIDENCE="$PWD/release-evidence-$TAG"
-ENUMERAY_BIN="$EXTRACTED/enumeray"
+ENUMERAY_BIN="${ENUMERAY_BIN:-$EXTRACTED/enumeray}"
 (
   set -eu
-  API_ORIGIN="${API_ORIGIN:-https://api.enumeray.com}"
   mkdir "$EVIDENCE"
   for file in release-manifest.json release-manifest.json.sigstore.json \
               service-publish.json service-publish.sigstore.json; do
@@ -327,7 +326,7 @@ ENUMERAY_BIN="$EXTRACTED/enumeray"
     curl --fail --location --proto '=https' --tlsv1.2 \
       --output "$EVIDENCE/$report" "$BASE_URL/$report"
   done
-  "$ENUMERAY_BIN" --api "$API_ORIGIN" --json compatibility check \
+  "$ENUMERAY_BIN" --api https://api.enumeray.com --json compatibility check \
     --manifest "$EVIDENCE/release-manifest.json" \
     --service-receipt "$EVIDENCE/service-publish.json" \
     --receipt "$EVIDENCE/installation-receipt.json"
@@ -381,46 +380,34 @@ site as its examples, not from an unrelated current site.
 
 ## Login and profiles
 
-Sign in using the API address selected for your service. A fresh configuration
-uses `https://api.enumeray.com`.
+Sign in to Enumeray. The CLI uses `https://api.enumeray.com` by default.
 
 ```sh
-enumeray auth login
-enumeray auth whoami
+enumeray auth login &&
+  enumeray auth whoami
 ```
 
 In the browser, choose **Register** if you need an account, verify your email,
 then finish signing in. If the CLI stops waiting, complete registration and run
 `auth login` again. `auth whoami` confirms the account.
 
-For a team service, replace the example address with the one your administrator
-provided. Use the named profile with every command for that service.
-
-```sh
-enumeray --profile research auth configure https://research.example.org
-enumeray --profile research auth login
-enumeray --profile research auth whoami
-```
-
-Run `enumeray auth profiles` to see the names and API addresses. The CLI uses
-`default` when you omit `--profile`. Changing a profile’s address clears its
-saved credentials. The CLI uses a profile’s credentials only at their original
-address. If you supply `ENUMERAY_TOKEN`, pair it with the issuing service.
+Run `enumeray auth profiles` to list saved logins. The CLI uses `default`
+when you omit `--profile`. You can use another named profile to keep a script
+token or a separate account apart from your main login.
 
 For a CLI running on a remote host without a browser, create a personal token
 from a signed-in account. Copy the private token file to the intended host using
-your approved method and import its `token` field. This example uses `jq`.
-Configure the `analysis` profile with the issuing service’s API address
-before import if it differs from the hosted API.
+your approved method and import its `token` field with `jq`. Use an unused
+profile name such as `analysis` for the script token.
 
 ```sh
 enumeray auth token-create analysis-script \
   --scopes models:read,runs:create,runs:read,me:read --output token.json
-jq -er '.token' token.json | enumeray --profile analysis auth login --token-stdin
-enumeray --profile analysis auth whoami
+jq -er '.token' token.json | enumeray --profile analysis auth login --token-stdin &&
+  enumeray --profile analysis auth whoami
 ```
 
-Use the issuing profile for token creation. Add only the scopes the script
+Use the signed-in account for token creation. Add only the scopes the script
 needs, including `me:read` for import and checkpoint recovery. The default
 token lifetime is 30 days. Issue a replacement when it expires. Use
 `auth token-list` to find token IDs and `auth token-revoke TOKEN_UUID` to

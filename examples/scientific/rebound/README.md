@@ -35,11 +35,16 @@ Open these files in the sample ZIP or in `rebound-default` after a local run.
 | `trajectory.csv` | The 361 samples give time in years, position in AU and velocity in AU per year. |
 | `outputs.json` | The orbital period, the closest and farthest distances and the relative changes in energy and angular momentum. |
 
-In the default run, the distance ranges from **0.9833 AU** at periapse to
-**1.0167 AU** at apoapse, the farthest point. The fields
-`max_relative_energy_error` and `max_relative_angular_momentum_error` show
-how much those quantities drift from their initial values. Both should stay
-at or below `1e-9` for this example.
+In the default run, the orbital distances are **0.9833 AU** at periapse and
+**1.0167 AU** at apoapse. The fields `periapse_au` and `apoapse_au` are
+calculated from the initial orbit parameters. The closest and farthest points
+in the CSV depend on the sampled times. For example, a quarter-orbit run
+ends before the planet reaches apoapse.
+
+The energy and angular momentum errors in `outputs.json` measure drift
+across the solver's samples. `run-record.json` recomputes those errors from
+the rounded CSV, so the last digits can differ. Both checks allow drift of
+at most `1e-9` for this example.
 
 The samples are evenly spaced in time. In a more elongated orbit, the planet
 moves faster near periapse, so its sampled positions are farther apart there.

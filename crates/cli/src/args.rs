@@ -8,7 +8,7 @@ use std::path::PathBuf;
     about = "Model execution and connector management"
 )]
 pub struct Args {
-    /// User API origin override; defaults to the selected profile or https://api.enumeray.com. Credentials never cross origins. Connector host commands use their own API settings.
+    /// Pin the API origin for this command. Defaults to the profile origin or https://api.enumeray.com. Saved credentials are bound to their origin. Connector host commands use separate settings.
     #[arg(long, global = true)]
     pub api: Option<String>,
     /// Named local user API/login profile; connector host and runner commands do not use it.
@@ -384,9 +384,9 @@ pub enum Auth {
     Whoami,
     /// List saved local profiles and their API origins without revealing credentials.
     Profiles,
-    /// Create/select this profile's API origin; changing origin clears old credentials.
+    /// Set an API origin for a test profile or restore the Enumeray address.
     Configure {
-        /// API origin supplied by the administrator of another deployment.
+        /// API origin. Use https://api.enumeray.com for Enumeray.
         api_url: String,
     },
     /// Create a scoped, expiring token and save the secret to a private file.

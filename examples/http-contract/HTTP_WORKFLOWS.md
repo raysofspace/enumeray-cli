@@ -2,10 +2,9 @@
 
 Run these Python examples to upload and verify a file, seal a collection, or
 recover a run after a lost submission reply. The scripts use HTTP directly
-and run with Python 3.9+ and its standard library. The examples are tested
-against a disposable service. To use your service, get its API origin, a token
-and resource access from the service owner. For the run example, also get
-the IDs of an installed, ready model and its current publication.
+and run with Python 3.9+ and its standard library. Use an Enumeray account
+and a personal token. For the run example, choose a model you can run and
+check its current publication ID.
 
 Download the [complete examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
 and [SHA-256](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256).
@@ -13,12 +12,13 @@ Follow the [fresh-directory extraction and verification instructions](https://do
 Work in `examples/http-contract/` inside the extracted archive. Keep
 [raw-http.py](raw-http.py), [collection-identity.py](collection-identity.py),
 `digest-vectors/` and `files/` together. These examples use files up to 1 MiB.
-Check your service's policy, quotas and the model's file declarations when
-adapting them. Larger transfers can require multipart object uploads.
+Check the model's file declarations and the
+[service limits](https://doc.enumeray.com/reference/limits/) when adapting them.
+Larger transfers can require multipart object uploads.
 
-Set `API` to the HTTPS origin without a path. Supply the token in
-`ENUMERAY_TOKEN` using your approved credential method. Use plain HTTP only
-for a disposable loopback fixture. Choose the scopes for the example you run.
+The commands use `https://api.enumeray.com`. When you
+[create a personal token](https://doc.enumeray.com/start/login/#create-a-script-token),
+choose the scopes for the example you want to run.
 
 | Task | Required scopes |
 | --- | --- |
@@ -33,15 +33,25 @@ candidate or a named delegation for it.
 See the downloadable [HTTP conformance records](https://doc.enumeray.com/examples/http-conformance.json)
 for the operation-specific rules.
 
-## A standalone artifact
-
-From the downloaded directory, run the artifact example with `API` and
-`ENUMERAY_TOKEN` set.
+In a shell for these examples, load the token from its private file.
+Replace the path with the one you used when you created the token.
 
 ```sh
-python3 raw-http.py --api "$API" --directory artifact-operation \
+ENUMERAY_TOKEN=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["token"])' \
+  /path/to/private/token.json) &&
+  export ENUMERAY_TOKEN
+```
+
+Clear it with `unset ENUMERAY_TOKEN` when you finish.
+
+## A standalone artifact
+
+From the downloaded directory, run the artifact example.
+
+```sh
+python3 raw-http.py --api https://api.enumeray.com --directory artifact-operation \
   artifact --file files/a.csv --media-type text/csv \
-  --metadata digest-vectors/a-metadata.json > artifact-receipt.json
+  --metadata digest-vectors/a-metadata.json
 ```
 
 The script uploads one CSV, verifies its download and writes a receipt. It
@@ -59,8 +69,9 @@ performs the transaction in this order.
    SHA-256. Keep the version query intact and check redirect targets before
    following them.
 
-Keep the completion receipt as evidence of that exact version. When you ask
-to download again, the service checks current read access and availability.
+Keep `artifact-operation/artifact/completion.json` as evidence of the exact
+version. When you ask to download again, Enumeray checks current read access
+and availability.
 
 After an interruption, run the same command with the original
 `artifact-operation/` directory and unchanged file. The script checks the API,
@@ -80,10 +91,10 @@ First compute the digest of the two-member request, then upload and seal
 the collection.
 
 ```sh
-python3 collection-identity.py digest-vectors/mixed-requested.input.json
-python3 raw-http.py --api "$API" --directory collection-operation \
-  collection --manifest digest-vectors/mixed-requested.input.json \
-  --source-root files > collection-receipt.json
+python3 collection-identity.py digest-vectors/mixed-requested.input.json &&
+  python3 raw-http.py --api https://api.enumeray.com --directory collection-operation \
+    collection --manifest digest-vectors/mixed-requested.input.json \
+    --source-root files
 ```
 
 The script saves the complete requested manifest and the request and key for
@@ -122,9 +133,10 @@ state. Keep requested and sealed identities separately.
 
 ## Submission after a lost reply
 
-Create `run-request.json` using the actual accessible model/publication IDs and
-scientific inputs satisfying its published schema. Use this request shape
-with your own model and publication IDs.
+Create `run-request.json` for a model you can run. The
+[model discovery request](https://doc.enumeray.com/reference/http-workflows/#discover-save-and-submit-one-json-operation)
+shows where to find its current publication ID and input schema. Replace
+the example IDs and use inputs that match your model.
 
 ```json
 {"model_id":"YOUR_MODEL_ID","expected_publication_id":"YOUR_PUBLICATION_ID","inputs":{"value":2}}
@@ -135,9 +147,9 @@ valid scientific value. Review the inputs, execution location and data access
 for the intended run before sending it.
 
 ```sh
-python3 raw-http.py --api "$API" --directory submission-operation \
+python3 raw-http.py --api https://api.enumeray.com --directory submission-operation \
   run --request run-request.json --lose-reply \
-  --changed-request changed-request.json > recovered-submission.json
+  --changed-request changed-request.json
 ```
 
 The script saves the exact request and key in private `operation.json` before
@@ -148,9 +160,9 @@ receipt. The changed request with that same key must return
 sequence creates one run, one assignment and one execution. Collection page
 replay follows its own rules.
 
-Keep `submission-operation/run/operation.json`, `request.json`, `idempotency-key.txt`, receipt and
-identity files after a timeout or loss of authentication. Restore access to
-the same account and API and repeat the saved operation with the original key.
+Keep the `submission-operation/` directory after a timeout or loss of
+authentication. It contains the saved request, key, account and receipt.
+Restore access to the same account and repeat the saved operation with its key.
 The replayed `queued` receipt records initial acceptance. Read
 `GET /api/v1/runs/{run_id}` for current progress. If an error or missing field
 leaves the outcome uncertain, inspect the existing operation before taking any

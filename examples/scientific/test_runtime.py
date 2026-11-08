@@ -1,4 +1,5 @@
 """Dependency-free supervision, offline, protocol and evidence regressions."""
+import base64
 import errno
 import hashlib
 import json
@@ -28,6 +29,40 @@ def request(model="huxt"):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_sample_collection_links_real_output_bytes_and_example_run_records(self):
+        model = ROOT / "rebound"
+        prefix = "rebound-collection/"
+        with ZipFile(model / "sample-collection.zip") as collection, ZipFile(model / "sample-run.zip") as sample:
+            bundle = json.loads(collection.read(prefix + "bundle.json"))
+            inspection = json.loads(collection.read(prefix + bundle["inspection"]))
+            provenance = json.loads(collection.read(prefix + bundle["provenance"]))
+            inputs = json.loads(collection.read(prefix + bundle["effective_inputs"]))
+            outputs = json.loads(collection.read(prefix + bundle["scientific_outputs"]))
+            self.assertIs(bundle["complete"], True)
+            self.assertEqual(bundle["scientific_state"], "succeeded")
+            for key in ("run_id", "publication_id"):
+                self.assertEqual(bundle[key], inspection[key])
+                self.assertEqual(bundle[key], provenance["run"][key])
+            self.assertEqual(provenance["publication"]["context_id"], inspection["context_id"])
+            self.assertEqual(inspection["effective_inputs"], inputs)
+            self.assertEqual(inputs, request("rebound")["inputs"])
+            self.assertEqual(inspection["result"], provenance["result"])
+            self.assertEqual(inspection["result"]["outputs"], outputs)
+            expected_paths = [prefix + name for name in ("bundle.json", bundle["inspection"],
+                                                         bundle["provenance"], bundle["effective_inputs"],
+                                                         bundle["scientific_outputs"])]
+            self.assertEqual(bundle["outputs"].keys(), FILES["rebound"].keys())
+            for pin in provenance["output_artifacts"]:
+                item = bundle["outputs"][pin["name"]]
+                expected_paths.append(prefix + item["path"])
+                data = collection.read(prefix + item["path"])
+                self.assertEqual(data, sample.read("rebound-sample/" + pin["filename"]))
+                self.assertEqual(len(data), item["size_bytes"])
+                self.assertEqual(item["artifact_id"], outputs[pin["name"]]["artifact_id"])
+                self.assertEqual(pin["checksum"], item["checksum"])
+                self.assertEqual(item["checksum"]["value"], base64.b64encode(hashlib.sha256(data).digest()).decode("ascii"))
+            self.assertCountEqual(collection.namelist(), expected_paths)
+
     def test_sample_downloads_match_the_default_models_and_recorded_files(self):
         manifest = json.loads((ROOT / "runtime-manifest.json").read_text())
         for model, artifacts in FILES.items():

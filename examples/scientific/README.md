@@ -16,16 +16,62 @@ Download and unzip a result. Open the PNG first to see what the model calculated
 Each ZIP contains the plot, CSV data, `inputs.json` with the parameters,
 `outputs.json` with the numerical summary and `run-record.json` with the checks.
 
+## Inspect an Enumeray collection
+
+Download the [example REBOUND collection](rebound/sample-collection.zip) and
+extract `rebound-collection`. This teaching fixture uses data from the
+local orbit calculation. Its run and publication IDs, compute location and
+access disclosure are examples.
+
+1. Open `bundle.json` to check the run ID and find the verified plot and CSV.
+2. Open `results/inspection.json` to see the inputs, model publication,
+   execution location and who could access the data.
+3. Open `results/provenance.json` to see the recorded model and runtime
+   identities. Find a file under `output_artifacts` and compare its checksum
+   with the corresponding entry in the bundle.
+
+After [setting up the solvers](#set-up-the-solvers), run the checker from
+`examples/scientific`. Replace the example path with the extracted folder.
+
+```sh
+.venv/bin/python verify_collected.py --model rebound --analysis /path/to/rebound-collection
+```
+
+Look for `"verified": true`. The checker reads local files and verifies the
+file checksums and the orbit calculation.
+[Read more about run records](https://doc.enumeray.com/users/logs-provenance/).
+
 ## Set up the solvers
 
-On macOS or Linux, install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-to get the exact Python version and packages. Allow a few gigabytes for the
-environment and download cache.
+You need Python 3.9 or newer to extract the archive and
+[uv](https://docs.astral.sh/uv/getting-started/installation/) to install the
+pinned Python and solver packages. Allow a few gigabytes for the environment
+and download cache. These steps were checked on macOS ARM64. Enumeray also
+uses the locked solver packages on Linux.
 
-Download and extract the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz).
-Use the [archive checksum instructions](https://doc.enumeray.com/authors/author-guide/#run-the-downloaded-model-examples-offline)
-to check the download. From the extracted archive's top-level folder, run these
-commands to install the pinned Python and solver dependencies.
+Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
+and [its checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
+into a new directory. Keep both filenames and run this block there.
+
+```sh
+(
+  set -eu
+  python3 - <<'PY'
+from hashlib import sha256
+from pathlib import Path
+archive = Path("model-examples.tar.gz")
+expected = Path("model-examples.tar.gz.sha256").read_text().split()[0]
+if sha256(archive.read_bytes()).hexdigest() != expected:
+    raise SystemExit("Archive checksum mismatch")
+PY
+  python3 -m tarfile -e model-examples.tar.gz
+)
+```
+
+If the checksum fails, download the archive and its matching checksum again.
+From the extracted `enumeray-examples-…` directory, install the pinned
+runtime. Downloads use Astral's Python builds on GitHub and packages from
+PyPI, including `files.pythonhosted.org`.
 
 ```sh
 cd examples/scientific
@@ -33,10 +79,10 @@ uv venv --python 3.12.16
 uv pip install --python .venv/bin/python --require-hashes -r requirements.lock
 ```
 
-If a native dependency needs a source build, install a C compiler, such as
-Xcode Command Line Tools on macOS or `build-essential` on Debian and Ubuntu.
-Use these two commands in place of the last install command to pin the build
-tools as well.
+If a dependency has no wheel for your platform and uv reports a build error,
+install a C compiler, such as Xcode Command Line Tools on macOS or
+`build-essential` on Debian and Ubuntu. Use these commands in place of the
+last install command to pin the build tools as well.
 
 ```sh
 uv pip install --python .venv/bin/python --require-hashes -r build-requirements.lock

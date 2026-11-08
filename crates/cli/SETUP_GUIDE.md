@@ -1,31 +1,30 @@
 # Guided connector setup
 
-Use `enumeray setup` to connect a machine to Enumeray so it can run models.
-The wizard saves what you choose, shows what the host administrator needs to
-prepare and checks readiness after the connector starts. You can stop when
-the connector is ready or test it by running one model.
+Use `enumeray setup` to connect your compute to Enumeray at
+`https://api.enumeray.com`. The wizard saves your choices, shows what the
+host administrator needs to prepare and checks readiness after the
+connector starts. You can stop at readiness or test it with a model.
 
-Decide who will run the code. On a personal machine, development mode runs
-trusted code under your account. On shared or managed compute, keep the
-connector and model execution in separate accounts. Install the executable
-for your service and host before starting. [Installation guide](INSTALL.md)
+## Before you start
+
+- [Install the CLI](INSTALL.md) on the connector host. Run the wizard as
+  your regular OS user.
+- [Sign in to Enumeray](https://doc.enumeray.com/start/login/) as the account
+  that will own a new connector. To adopt an existing connector, sign in
+  as its owner or a co-admin and review its saved settings.
+- For shared compute, arrange for a host administrator to prepare separate
+  connector and execution accounts. On your own machine, development mode
+  runs trusted models under your account.
+- To try the demo, install Python 3.9 or newer on the execution host. For
+  your own project, prepare its runtime and data and use an account
+  allowed to create the model or administer its existing catalogue entry.
 
 ## Choose a mode and save the journey
 
-Run the wizard as your regular OS user. Use the
-[profile for your team service](https://doc.enumeray.com/start/login/) and
-check its API address. The commands use the profile name `research`. Replace
-it throughout if yours has a different name.
-
-When setup registers a new connector, your signed-in account becomes its
-owner. To use an existing connector, sign in as its owner or a co-admin and
-approve adoption of its matching settings. Ask your service administrator
-if you need permission to register a connector. For a first model, you
-also need a compute grant and permission to create the model or administer
-its existing catalogue entry.
+Run the wizard from a directory where you can keep its files.
 
 ```sh
-enumeray --profile research setup --directory enumeray-setup
+enumeray setup --directory enumeray-setup
 ```
 
 | Mode | When to choose it | After approving the setup plan |
@@ -38,21 +37,27 @@ You can select a mode in the wizard or pass `--mode development` or
 executable, execution location, data access disclosure, startup and first-model
 choices in the saved plan before approval.
 
-Keep the setup directory. It holds your selected account and API, the host
-plan and progress. Login credentials stay in your profile store. Connector
+After approval, setup registers the connector and context, then gives
+your signed-in account a compute grant for that context before checking
+host readiness. If an active grant already exists for your account and
+context, setup asks you to adopt it with its current limits. The
+first-model trial uses that saved grant.
+
+Keep the setup directory. It holds your account, the host plan and
+progress. Login credentials stay in your profile store. Connector
 credentials and the journal use separate host paths. Restore a backup to the
 original directory and use that path to continue after an interruption.
 
 ```sh
-enumeray --profile research setup --directory enumeray-setup
-enumeray --profile research setup status --directory enumeray-setup
+enumeray setup --directory enumeray-setup
+enumeray setup status --directory enumeray-setup
 ```
 
 Status reads saved progress and authenticated readiness without initiating checks
-or repairing a host. Offline or unauthorized observations remain unknown. Restore
-an expired login for the same API/account and resume the original directory.
-Changing mode, origin or frozen settings requires a new reviewed plan; preserve
-existing journals, credentials and release evidence.
+or repairing a host. Offline or unauthorized observations remain unknown.
+If your login expires, sign back in to the original account and resume the
+saved directory. Changing the mode or host settings requires a new
+reviewed plan. Keep existing journals, credentials and release evidence.
 
 ## Development setup under your current user
 
@@ -165,11 +170,10 @@ enumeray connector status --configuration /absolute/connector/runtime.json
 
 In the second terminal, return to the directory where you started setup and
 resume the same operation as the setup user. With background startup, you can
-resume in the original terminal after the start command returns. Use the same
-profile and configuration file as before, if applicable.
+resume in the original terminal after the start command returns.
 
 ```sh
-enumeray --profile research setup --directory enumeray-setup
+enumeray setup --directory enumeray-setup
 ```
 
 The runtime file contains credential **paths**, not credential values. `--configuration`
@@ -202,9 +206,7 @@ declared example or provide your own scientific inputs JSON file. The wizard
 also accepts local file and collection bindings and can select an already
 installed release. Saved input and installation paths must be absolute.
 
-Install Python for the demo and prepare the runtime, dependencies and data needed
-by your own project. For Slurm, prepare the site-specific batch script before
-freezing the release.
+For Slurm, prepare the site-specific batch script before freezing the release.
 For a generated Slurm starter, setup pauses for this work; resume with
 `--confirm-model-preparation` after reviewing the site's allocation and runtime setup.
 
@@ -231,41 +233,40 @@ If you want to make the candidate current, first check its scientific result
 and save the proposed release comparison.
 
 ```sh
-enumeray --profile research model release review /absolute/setup/first-release
+enumeray model release review enumeray-setup/first-release
 ```
 
 Read the review before deciding to activate.
 
 ```sh
-enumeray --profile research model release activate /absolute/setup/first-release
+enumeray model release activate enumeray-setup/first-release
 ```
 
-Use the same profile and, if selected, the same `--config` as the saved setup.
 If setup reports that an installation or access step needs a different account,
 give the responsible person the displayed action.
 
 ## Give an author access to the ready context
 
-After setup reports **ready**, use the connector owner or co-admin account
-on the same Enumeray service. Ask the author for their account UUID from
-`enumeray --profile research auth whoami`. Use the connector and context IDs from your setup
-plan, and choose limits appropriate to the compute you are sharing.
+After setup reports **ready**, use your connector owner or co-admin
+account. Ask the author for their account UUID from `enumeray auth whoami`.
+Use the connector and context IDs from your setup plan, and choose limits
+appropriate to the compute you are sharing.
 
 ```sh
-enumeray --profile research connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
+enumeray connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
   --max-queued-runs 100 --max-outstanding-assignments 4
-enumeray --profile research connector grant list CONNECTOR_ID
+enumeray connector grant list CONNECTOR_ID
 ```
 
 Check that the list includes the author's UUID, intended context and limits.
-Give the author the API address, context ID, approved installation root,
-execution account, runtime requirements and instructions for installing
-files. Arrange host installation access as well as the compute grant.
+Give the author the context ID, approved installation root, execution
+account, runtime requirements and instructions for installing files.
+Arrange host installation access as well as the compute grant.
 
-The author signs in to the same service and runs
-`enumeray --profile research connector grant available`. The handoff is complete when that
-command shows the intended context and the author knows where and how to install
-the release. They can then [install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
+The author runs `enumeray connector grant available`. The handoff is
+complete when the command shows the intended context and the author knows
+where and how to install the release. They can then
+[install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
 For day-to-day service tasks, see
 [service operation](../connector/README.md#enrollment-and-service-operation).
 
@@ -277,7 +278,7 @@ and optional `first_model`. Start from the existing
 [development host specification](examples/host-setup-development.json),
 [Linux host specification](examples/host-setup-linux.json) or
 [macOS host specification](examples/host-setup-macos.json). Replace example accounts
-and absolute paths. The examples already use the hosted API origin.
+and absolute paths. Keep `host.api_base_url` at `https://api.enumeray.com`.
 
 For background operation set `host.install_service` to `true`; otherwise leave it
 `false`. Managed executable copying needs `executable_source` and
@@ -300,7 +301,7 @@ enumeray setup --directory setup-operation --non-interactive --approve SETUP_PLA
 # After reviewing the saved analysis, --submit-trial explicitly submits/resumes it.
 ```
 
-Noninteractive setup requires an authenticated selected profile. Existing records
+Noninteractive setup requires an existing Enumeray login. Existing records
 need explicit `--adopt-existing`; conflicting settings are never overwritten.
 A server-assigned enrollment secret cannot be recovered by repeating connector
 creation. Preserve any saved document and identity directory. If none is usable,

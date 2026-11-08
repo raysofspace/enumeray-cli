@@ -1,9 +1,9 @@
 # Enumeray connector
 
 The connector receives run assignments from Enumeray, starts models under
-the approved execution account and sends results back. It contacts the API
-over outbound HTTPS. Its journal records the original work and transfer
-progress so it can recover after interruption.
+the approved execution account and sends results back. It contacts
+`https://api.enumeray.com` over outbound HTTPS. Its journal records work and
+transfer progress so the connector can resume after interruption.
 
 For first-time setup, use the [guided connector setup](../cli/SETUP_GUIDE.md).
 This guide also covers manual setup and day-to-day operation. Choose the
@@ -30,7 +30,7 @@ Choose the example for [managed Linux](../cli/examples/host-setup-linux.json),
 [managed macOS](../cli/examples/host-setup-macos.json), or
 [single-user development](../cli/examples/host-setup-development.json).
 Save it as `host-setup.json` and edit the IDs, accounts, absolute paths and
-limits. Set `api_base_url` if you use a different deployment. On macOS, ask
+limits. Keep `api_base_url` set to `https://api.enumeray.com`. On macOS, ask
 the administrator to check that the account names and numeric IDs are free.
 
 ```sh
@@ -130,9 +130,7 @@ permissions still protect against other users; they cannot isolate processes
 running as the same user. Managed execution with separate identities remains the
 default, including when a connector permits development contexts.
 
-This recipe uses the hosted Enumeray API with an ordinary CLI login and Python 3
-for the example model. For another deployment, sign in with its profile and use
-that profile for the owner commands throughout.
+This recipe requires an Enumeray account and Python 3 for the example model.
 The connector initiates outbound requests; no inbound laptop connection, local
 API/database, new host account or sudo configuration is required. Development
 execution does not enable insecure HTTP or bypass authentication, ownership,
@@ -316,16 +314,14 @@ The explicit [development exception](#single-user-development) permits trusted
 same-user process/direct execution. File jobs also require
 the service's verified versioned storage.
 
-Choose IDs once, then create the connector and one-time enrollment on the
-owner's CLI machine. The unconfigured CLI uses the hosted API at
-`https://api.enumeray.com`. For another deployment, use its authenticated profile
-for owner commands.
+Choose IDs once, then sign in to Enumeray and create the connector with its
+one-time enrollment document on the owner's CLI machine.
 
 ```sh
 umask 077
-enumeray auth login
-enumeray connector create lab-connector --label 'Lab connector' \
-  --max-outstanding-assignments 4 --output enrollment.json
+enumeray auth login &&
+  enumeray connector create lab-connector --label 'Lab connector' \
+    --max-outstanding-assignments 4 --output enrollment.json
 ```
 
 The owner CLI reports success only after validating and saving a private enrollment
@@ -358,21 +354,20 @@ enumeray connector run --journal connector-state/journal \
   --recovery-mode exclusive-local
 ```
 
-Use the API origin in the enrollment document. For first enrollment with a
-document that omits it, or with `--enrollment-token-file`, set `--api-base-url`
-to the issuing API. Enrollment saves the machine identity and token before
-sending the request. After a lost reply, repeat the command with the same
-directory and file. An accepted enrollment can return its receipt after the
+The enrollment document supplies the API address. For first enrollment with
+`--enrollment-token-file` or a document without an address, add
+`--api-base-url https://api.enumeray.com`. Enrollment saves the machine
+identity and token before sending the request. After a lost reply, repeat
+the command with the same directory and file. An accepted enrollment can return its receipt after the
 document expires while its credential is active. If an unused document
 expires, request another in a new file. An identity that never enrolled can
 use the replacement with the same directory.
 After successful enrollment, use the credential rotation procedure below with a
-new credential directory and the original journal. `--allow-insecure-http` is an
-explicit development/private-network exception; HTTPS is required otherwise.
+new credential directory and the original journal.
 
 The `run` command uses the retained journal's API origin on restart. For a new
 journal it uses the origin from the enrollment record next to the token. If you
-moved the token separately, pass its issuing origin with `--api-base-url`.
+moved the token separately, pass `--api-base-url https://api.enumeray.com`.
 The command remains in the foreground. Its service account must own the
 state directory and no execution account may read it. Stop a foreground test
 before starting its service. `exclusive-local` is appropriate only for one
@@ -460,17 +455,9 @@ the remote host. The remote account needs an SSH-compatible shell and SFTP acces
 | `publish-log-archives` | Finish retained terminal archive delivery | Publishes diagnostics without scientific execution |
 | `compute-runner` | Connector transport/backend integration | Runs a typed credential-free action under the approved execution identity |
 
-Use `connector run` for the supervised service. The following one-off
-commands use a disposable loopback journal. Stop the connector service
-before trying them.
-
-```sh
-enumeray connector init --journal one-off-journal \
-  --api-base-url http://127.0.0.1:8080 --connector-id lab-connector
-enumeray connector claim-once --journal one-off-journal --token-file connector-state/token
-enumeray connector inspect --journal one-off-journal
-enumeray connector execute-once --journal one-off-journal --token-file connector-state/token
-```
+Use `connector run` for the supervised service. For local backend
+development, see the [one-off command reference](https://doc.enumeray.com/reference/cli/connector-init/).
+Use a separate test journal and credentials issued by the test fixture.
 
 The next `claim-once` archives assignments whose scientific result and delivery
 are complete before reserving new capacity. Their receipts and cleanup queue

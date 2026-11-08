@@ -17,12 +17,14 @@ The scalar starter turns `2` into `4`. When you replace its calculation, add
 tests with results you can verify for your model. If you are running a model
 that is already published, follow the [analysis guide](ANALYSIS_GUIDE.md).
 
-Run the commands in a terminal. This tutorial generates the scalar model
-`example` and a separate file model `csv-example`. Each is available to
-researchers after you publish it and grant access. Use your own model ID
-throughout your project. For network commands, select the CLI profile for your
-service and replace sample context IDs, paths and values such as `RUN_UUID`.
-Use a new folder for each release or run and keep it when resuming that work.
+Choose an unused model ID in Enumeray's shared catalogue before generating
+your project. A lab or project prefix helps distinguish it. Keep the same ID
+from `model init` through publication and share it with your users. Treat
+`example` and `csv-example` in sample declarations and reference commands
+as illustrative IDs. [Sign in to Enumeray](https://doc.enumeray.com/start/login/)
+before publishing. Replace sample context IDs, paths and values such as
+`RUN_UUID`. Use a new folder for each release or run and keep it when
+resuming that work.
 
 ## Run the downloaded model examples offline
 
@@ -86,11 +88,11 @@ Look for `"doubled": 4` under `outputs`. The request fixture supplies input
 | `examples/collections/` | `collection-example`; `fixtures/request.json` and `fixtures/workspace/` copy two nested members into `snapshots/`, with `member_count: 2`; empty sets are valid |
 | `examples/scalar-publication.json`, `examples/slurm-scalar-publication.json` | Installed `scalar-double` / named example `double-two`; the separate `scalar-inputs.json` uses `value: 21`, expected `doubled: 42`; these declarations require a matching installed `run-model` entrypoint |
 
-This guide generates `example` and `csv-example` instead of the bundled starter
-IDs. The connector's single-user journey separately generates `development-double`
+Use a model ID you choose when adapting a bundled starter. The connector's
+single-user journey separately uses `development-double`
 under `models/development-double-r1/`. Choose one project and keep its model ID,
 publication and request fixtures together; do not combine fixtures by filename.
-The scalar tutorial uses `/opt/enumeray/models/example/r1`, the installed scalar
+The scalar tutorial uses `/opt/enumeray/models/my-lab-double/r1`, the installed scalar
 templates use `/opt/enumeray/models/scalar-double/r1`, and the collection declaration
 uses `/opt/models/collection-example`. These are example installed roots to agree
 with a site, separate from the extracted project and per-run workspace. Bundled
@@ -224,18 +226,25 @@ runtime/dependencies and installed datasets. They are author claims. Keep runtim
 lockfiles/container digests and dataset checksums with immutable releases when
 needed; connector-observed executable/batch-file hashes are separate evidence.
 
-Use `model create example --file publication.json` to import ID/name/description
-once. It does not register, activate or update existing catalogue metadata.
+Use `model create MODEL_ID --file publication.json` to create the catalogue
+entry with the ID, name and description in your declaration.
 There is one authored file; release operations save their own immutable evidence.
 
 ## Scaffold and map your science
 
 ```sh
-enumeray model init example --directory example
+MODEL_ID=my-lab-double
+enumeray model init "$MODEL_ID" --directory "$MODEL_ID" &&
+  cd "$MODEL_ID" &&
+  python3 -B -m unittest discover -s . -p 'test_*.py'
+```
+
+For a different starter, run a command from the parent directory. Replace
+the sample IDs and destination names before publishing.
+
+```sh
 enumeray model init csv-example --directory csv-example --io files
 enumeray model init solver-example --directory solver-example --kind executable --io files --driver slurm
-cd example
-python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
 The destination must be new and its parent must exist. Defaults are Python,
@@ -470,10 +479,11 @@ process execution.
 
 For either driver, have the connector owner prepare the approved parent and
 installation access. On the execution host, start in the tested project and
-copy it to a new release directory.
+copy it to a new release directory. Set `RELEASE_DIR` to the path from your
+declaration.
 
 ```sh
-RELEASE_DIR=/opt/enumeray/models/example/r1
+RELEASE_DIR=/opt/enumeray/models/my-lab-double/r1
 mkdir "$RELEASE_DIR" &&
   cp -R . "$RELEASE_DIR/"
 ```
@@ -482,11 +492,11 @@ Copy the solver, runtime dependencies and datasets that live outside the
 project. Include the completed Slurm script if the context uses one. Give the
 execution account permission to traverse the parents, read the required files
 and execute the wrapper. Use the site's method to test as that account. For the
-Python starter, run the tests from the installed release.
+Python starter, replace the sample path with your installed release path.
 
 ```sh
 (
-  cd /opt/enumeray/models/example/r1 &&
+  cd /opt/enumeray/models/my-lab-double/r1 &&
     test -x wrapper.py &&
     python3 -B -m unittest discover -p 'test_*.py'
 )
@@ -517,18 +527,29 @@ and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 
-Once local tests pass and the files are installed, validate the publication.
-Create a catalogue entry for a new model. The signed-in account becomes its
-owner. For an existing model, use its owner account or ask its owner for
-co-admin access and start at `model release init`. The `release-r1` folder
-keeps the candidate ID, readiness checks and activation review together.
+Once local tests pass and the files are installed, return to the editable
+project. Read the model ID from the declaration and validate the publication.
+Keep using this shell for the remaining steps.
 
 ```sh
-enumeray model validate --file publication.json
-enumeray model create example --file publication.json
-enumeray model release init example --file publication.json --directory release-r1
-enumeray model release resume release-r1
-enumeray model release status release-r1
+MODEL_ID=$(python3 -c 'import json; print(json.load(open("publication.json"))["model"]["id"])') &&
+  enumeray model validate --file publication.json
+```
+
+Create a catalogue entry for a new model. The signed-in account becomes its
+owner. If the ID belongs to another model, choose a new ID for your starter
+before continuing. For an existing model you administer, skip creation.
+
+```sh
+enumeray model create "$MODEL_ID" --file publication.json
+```
+
+The release directory keeps the candidate ID, readiness checks and
+activation review together.
+
+```sh
+enumeray model release init "$MODEL_ID" --file publication.json --directory release-r1 &&
+  enumeray model release resume release-r1
 ```
 
 Initialization requires the complete declaration and matching model ID, assigns one candidate ID and freezes the source, normalized machine request and observed current publication. It reads API identity/model authority but does not register or activate. A fresh initialization into a new directory explicitly requests a new candidate; resume the existing directory for a retry.
@@ -572,15 +593,13 @@ On readiness failure, inspect validation messages and coordinate context, grant,
 
 Use the full Candidate ID displayed by `model release status release-r1` as
 `PUBLICATION_ID`, or adapt its displayed trial-init command. Before activation,
-exercise the exact ready candidate in a separate analysis directory:
+exercise the ready candidate in a separate analysis directory. The scalar
+starter provides `starter-example` with input `2`.
 
 ```sh
 PUBLICATION_ID='REPLACE_WITH_FULL_CANDIDATE_ID_FROM_RELEASE_STATUS'
-cat > trial-inputs.json <<'JSON'
-{"value":2}
-JSON
-enumeray analysis init example --candidate "$PUBLICATION_ID" \
-  --inputs trial-inputs.json --directory trial-r1
+enumeray analysis init "$MODEL_ID" --candidate "$PUBLICATION_ID" \
+  --example starter-example --directory trial-r1
 ```
 
 Read the saved inputs, installation, location and data-access information.
@@ -608,7 +627,7 @@ Initialization displays and saves the exact candidate installation, readiness,
 execution location, scientific-data access disclosure, captured grant and any
 named delegation. Review them before explicitly submitting. This also works for a
 first ready candidate when the model has no current publication. Use
-`--example NAME` instead of `--inputs FILE` for a named candidate example. Bind
+`--inputs FILE` to supply your own values. Bind
 ordinary files with `--file SLOT=PATH` and collections with
 `--collection SLOT=DIR` or `--collection-manifest SLOT=MANIFEST.json`, using the
 candidate's declarations and any required `--media-type SLOT=TYPE`. Completed
@@ -657,13 +676,13 @@ Read the comparison, then activate the candidate when you are satisfied with
 the change.
 
 ```sh
-enumeray model release activate release-r1
-enumeray model get example
+enumeray model release activate release-r1 &&
+  enumeray model get "$MODEL_ID"
 ```
 
 Review captures the observed current publication, including no current publication on first activation. If it changes, inspect the competing update and run review again before explicit activation. Initialization and registration never activate or share.
 
-Check that `model get example` shows the candidate as the current publication.
+Check that `model get` shows the candidate as the current publication.
 Accepted runs retain their original publication. Set access explicitly before
 handing the model ID and its scientific examples to a user.
 
