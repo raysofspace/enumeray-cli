@@ -191,8 +191,13 @@ fn save_enrollment(
             ));
         }
     };
-    match serde_json::from_value::<ConnectorRegistration>(value.clone()) {
-        Ok(ConnectorRegistration::Enrollment(document)) if valid_enrollment(&document, id) => {}
+    let document = match serde_json::from_value::<ConnectorRegistration>(value) {
+        Ok(ConnectorRegistration::Enrollment(document)) if valid_enrollment(&document, id) => {
+            ConnectorEnrollmentFile {
+                enrollment: document,
+                api_base_url: Some(client.base_url().trim_end_matches('/').to_owned()),
+            }
+        }
         Ok(ConnectorRegistration::AlreadyRegistered(existing))
             if creation && existing.already_registered && existing.connector_id == id =>
         {
@@ -211,8 +216,8 @@ fn save_enrollment(
                 false,
             ));
         }
-    }
-    if config::write_private(output, &value, false).is_err() {
+    };
+    if config::write_private(output, &document, false).is_err() {
         return Err(enrollment_recovery(
             client,
             id,

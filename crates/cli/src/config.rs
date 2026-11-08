@@ -1,6 +1,7 @@
 use crate::args::Args;
 use enumeray_client::EnumerayClient;
 use enumeray_client::Error;
+use enumeray_contracts::DEFAULT_API_ORIGIN;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::time::Duration;
 use std::{
@@ -11,7 +12,6 @@ use std::{
 };
 
 const MAX_JSON_BYTES: usize = 1024 * 1024;
-pub(crate) const DEFAULT_API_ORIGIN: &str = "https://enumeray.com";
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -276,10 +276,10 @@ mod tests {
         for name in ["default", "analysis"] {
             let args = Args::parse_from(["enumeray", "--profile", name, "model", "list"]);
             assert!(args.api.is_none());
-            assert_eq!(api_origin(&args, None), "https://enumeray.com");
+            assert_eq!(api_origin(&args, None), "https://api.enumeray.com");
             assert_eq!(
                 client(&args, &profiles).unwrap().base_url(),
-                "https://enumeray.com/"
+                "https://api.enumeray.com/"
             );
         }
         assert!(profiles.profiles.is_empty());
@@ -287,9 +287,9 @@ mod tests {
 
     #[test]
     fn origin_precedence_preserves_existing_profiles_and_explicit_overrides() {
-        let saved = Profile::new("https://api.enumeray.com/".into());
+        let saved = Profile::new("https://enumeray.com/".into());
         let args = Args::parse_from(["enumeray", "auth", "login"]);
-        assert_eq!(api_origin(&args, Some(&saved)), "https://api.enumeray.com/");
+        assert_eq!(api_origin(&args, Some(&saved)), "https://enumeray.com/");
         let args = Args::parse_from([
             "enumeray",
             "--api",

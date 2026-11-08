@@ -11,7 +11,7 @@
   "contract": "analysis-collection-summary",
   "exit_code": 0,
   "schema_version": 1,
-  "stderr": "Retained download checkpoint: /private/enumeray-example/analysis/results/files/.enumeray-download-0000000000000000000000000000000000000000000000000000000000000000\nResuming 0 of 20 bytes.\n",
+  "stderr": "Retained download checkpoint: /private/enumeray-example/analysis/results/files/55555555-5555-4555-8555-555555555555/.enumeray-download-0000000000000000000000000000000000000000000000000000000000000000\nResuming 0 of 20 bytes.\n",
   "stdout": {
     "bundle": "/private/enumeray-example/analysis/bundle.json",
     "collections": {},
@@ -32,7 +32,7 @@
         },
         "logical_name": "../hostile%output",
         "media_type": "text/csv",
-        "path": "results/files/55555555-5555-4555-8555-555555555555",
+        "path": "results/files/55555555-5555-4555-8555-555555555555/answer.csv",
         "size_bytes": 20,
         "version_id": "version-one"
       }

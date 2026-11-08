@@ -22,9 +22,10 @@ pub struct EnrollOptions {
     /// Private durable identity directory; reuse after an uncertain reply to retain the same enrollment.
     #[arg(long)]
     directory: PathBuf,
-    /// API origin using HTTPS or loopback HTTP; non-loopback HTTP requires --allow-insecure-http.
+    /// API origin, inferred from the enrollment document or retained identity when omitted.
+    /// First enrollment with a legacy document or raw token needs an explicit origin.
     #[arg(long)]
-    api_base_url: String,
+    api_base_url: Option<String>,
     /// Private file containing only the one-time enrollment token; alternative to --enrollment-file.
     #[arg(
         long,
@@ -47,31 +48,32 @@ struct Identity {
     origin: String,
 }
 
-pub fn enroll(options: EnrollOptions) -> Result<Value> {
-    let origin =
-        crate::client::validate_origin(&options.api_base_url, options.allow_insecure_http)?;
-    local_process::create_private_directory(&options.directory)?;
-    let identity_path = options.directory.join("identity.json");
-    let identity: Identity = if identity_path.exists() {
-        local_process::read_record(&identity_path)?
-    } else {
-        let credential_id = Uuid::new_v4();
-        let mut secret = [0_u8; 32];
-        getrandom::fill(&mut secret).map_err(|_| failure("cannot obtain credential entropy"))?;
-        let identity = Identity {
-            machine_id: Uuid::new_v4(),
-            credential_id,
-            token: format!("enr_c1_{credential_id}.{}", URL_SAFE_NO_PAD.encode(secret)),
-            origin: origin.clone(),
-        };
-        local_process::write_record(&options.directory, "identity.json", &identity)?;
-        identity
-    };
-    if identity.origin != origin {
-        return Err(failure(
-            "enrollment directory is bound to another API origin",
-        ));
+/// Match the enrollment record to the token rather than inferring its origin
+/// from directory layout alone.
+pub(crate) fn enrolled_token_origin(token_file: &Path) -> Result<Option<String>> {
+    if token_file.file_name().and_then(|name| name.to_str()) != Some("token") {
+        return Ok(None);
     }
+    let identity_path = token_file.with_file_name("identity.json");
+    if !identity_path
+        .try_exists()
+        .map_err(|_| failure("cannot inspect enrollment identity"))?
+    {
+        return Ok(None);
+    }
+    let identity: Identity = local_process::read_record(&identity_path)?;
+    let token = local_process::read_private(token_file, 256)?;
+    Ok((token == identity.token.as_bytes()).then_some(identity.origin))
+}
+
+pub fn enroll(options: EnrollOptions) -> Result<Value> {
+    let validate_origin =
+        |origin: &str| crate::client::validate_origin(origin, options.allow_insecure_http);
+    let explicit_origin = options
+        .api_base_url
+        .as_deref()
+        .map(validate_origin)
+        .transpose()?;
     let source = options
         .enrollment_file
         .as_ref()
@@ -80,19 +82,74 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
     let bytes = local_process::read_private(source, MAX_ENROLLMENT_BYTES)?;
     let content =
         String::from_utf8(bytes).map_err(|_| failure("invalid private enrollment credential"))?;
-    let enrollment_token = if options.enrollment_file.is_some() {
+    let (enrollment_token, document_origin) = if options.enrollment_file.is_some() {
         let value: Value =
             serde_json::from_str(&content).map_err(|_| failure("invalid enrollment document"))?;
-        value["enrollment_token"]
+        let token = value["enrollment_token"]
             .as_str()
             .ok_or_else(|| failure("enrollment document lacks enrollment_token"))?
-            .to_owned()
+            .to_owned();
+        let origin = value
+            .get("api_base_url")
+            .map(|origin| {
+                validate_origin(
+                    origin
+                        .as_str()
+                        .ok_or_else(|| failure("invalid enrollment document API origin"))?,
+                )
+            })
+            .transpose()?;
+        (token, origin)
     } else {
-        content
+        (content, None)
     };
     if enrollment_token.len() > 512 {
         return Err(failure("enrollment credential exceeds limit"));
     }
+    if explicit_origin
+        .as_ref()
+        .zip(document_origin.as_ref())
+        .is_some_and(|(explicit, document)| explicit != document)
+    {
+        return Err(failure(
+            "enrollment document is bound to another API origin",
+        ));
+    }
+    let requested_origin = explicit_origin.or(document_origin);
+
+    local_process::create_private_directory(&options.directory)?;
+    let identity_path = options.directory.join("identity.json");
+    let identity: Identity = if identity_path
+        .try_exists()
+        .map_err(|_| failure("cannot inspect enrollment identity"))?
+    {
+        let identity: Identity = local_process::read_record(&identity_path)?;
+        if requested_origin
+            .as_ref()
+            .is_some_and(|origin| *origin != identity.origin)
+        {
+            return Err(failure(
+                "enrollment directory is bound to another API origin",
+            ));
+        }
+        identity
+    } else {
+        let origin = requested_origin.ok_or_else(|| {
+            failure("use --api-base-url for a first enrollment with a legacy document or raw token")
+        })?;
+        let credential_id = Uuid::new_v4();
+        let mut secret = [0_u8; 32];
+        getrandom::fill(&mut secret).map_err(|_| failure("cannot obtain credential entropy"))?;
+        let identity = Identity {
+            machine_id: Uuid::new_v4(),
+            credential_id,
+            token: format!("enr_c1_{credential_id}.{}", URL_SAFE_NO_PAD.encode(secret)),
+            origin,
+        };
+        local_process::write_record(&options.directory, "identity.json", &identity)?;
+        identity
+    };
+    let origin = validate_origin(&identity.origin)?;
     let request = EnrollmentRequest {
         enrollment_token: enrollment_token.trim().to_owned(),
         machine_id: identity.machine_id,

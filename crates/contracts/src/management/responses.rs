@@ -190,6 +190,32 @@ pub struct ConnectorEnrollment {
     pub expires_at: String,
 }
 
+/// A private CLI enrollment document. Older saved documents have no API origin.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(try_from = "Value")]
+pub struct ConnectorEnrollmentFile {
+    #[serde(flatten)]
+    pub enrollment: ConnectorEnrollment,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
+}
+
+impl TryFrom<Value> for ConnectorEnrollmentFile {
+    type Error = serde_json::Error;
+
+    fn try_from(mut value: Value) -> Result<Self, Self::Error> {
+        let api_base_url = value
+            .as_object_mut()
+            .and_then(|object| object.remove("api_base_url"))
+            .map(serde_json::from_value)
+            .transpose()?;
+        Ok(Self {
+            enrollment: serde_json::from_value(value)?,
+            api_base_url,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]

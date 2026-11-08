@@ -52,10 +52,10 @@ time of peak is the first saved value within `1e-9` relative of the maximum. `bu
   radius. All values are finite; there are 30,597 data rows.
 - `wind_plot_png` to a radius/time speed heatmap and interpolated 1-AU time series.
 
-The downloaded artifacts are stored under `results/files/<artifact-uuid>`; use
-the bundle mapping to locate them. Preserve `results/provenance.json` with the
-scientific files. A larger speed near 1 AU than at the boundary includes HUXt's
-prescribed residual acceleration; these quantities are not interchangeable.
+For new results, `bundle.json` points to `wind-field.csv` and `wind.png` under
+their respective `results/files/<artifact-uuid>/` directories. Preserve
+`results/provenance.json` with the scientific files. A larger speed near 1 AU
+than at the boundary includes HUXt's prescribed residual acceleration.
 The default reference has a minimum near **401.0803 km/s**, a peak near
 **802.1606 km/s**, first saved at **4.283708 days**.
 

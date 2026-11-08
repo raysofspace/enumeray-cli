@@ -3,7 +3,7 @@ use crate::{Result, failure, setup};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use enumeray_contracts::{
     execution::{ConnectionConfig, ExecutionMode},
-    management::ConnectorEnrollment,
+    management::ConnectorEnrollmentFile,
     setup::*,
 };
 use rustix::fs::{self as rfs, AtFlags, Gid, Mode, OFlags, Uid};
@@ -575,7 +575,7 @@ fn install_binary(
     }
     owned_file(Path::new(destination), &bytes, 0, 0, 0o755, true)
 }
-fn read_enrollment(path: &Path, connector: &str) -> Result<ConnectorEnrollment> {
+fn read_enrollment(path: &Path, connector: &str) -> Result<ConnectorEnrollmentFile> {
     crate::journal::check_private_path(path, false)?;
     let file = File::from(
         rfs::open(
@@ -599,13 +599,13 @@ fn read_enrollment(path: &Path, connector: &str) -> Result<ConnectorEnrollment> 
     if bytes.len() > 16 * 1024 {
         return Err(failure("enrollment document exceeds 16 KiB"));
     }
-    let document: ConnectorEnrollment =
+    let document: ConnectorEnrollmentFile =
         serde_json::from_slice(&bytes).map_err(|_| failure("invalid enrollment document"))?;
-    if document.connector_id != connector
-        || document.id.is_nil()
-        || document.enrollment_token.len() != 43
+    if document.enrollment.connector_id != connector
+        || document.enrollment.id.is_nil()
+        || document.enrollment.enrollment_token.len() != 43
         || !URL_SAFE_NO_PAD
-            .decode(&document.enrollment_token)
+            .decode(&document.enrollment.enrollment_token)
             .is_ok_and(|token| token.len() == 32)
     {
         return Err(failure(
@@ -653,6 +653,19 @@ fn apply(
     if account.platform != native {
         return Err(failure(
             "run this apply step locally on its reviewed host platform",
+        ));
+    }
+    let enrollment = enrollment
+        .map(|source| read_enrollment(source, &spec.context.connector_id))
+        .transpose()?;
+    if let Some(origin) = enrollment
+        .as_ref()
+        .and_then(|document| document.api_base_url.as_deref())
+        && crate::client::validate_api_url(origin)?
+            != crate::client::validate_api_url(&spec.api_base_url)?
+    {
+        return Err(failure(
+            "enrollment document is bound to another API origin",
         ));
     }
     let base = if native == HostPlatform::Macos {
@@ -748,10 +761,9 @@ fn apply(
             executable_source,
             spec.executable_sha256.as_deref(),
         )?;
-        if let Some(source) = enrollment {
-            let document = read_enrollment(source, &spec.context.connector_id)?;
-            let destination =
-                Path::new(&account.home).join(format!("enrollment-{}.json", document.id));
+        if let Some(document) = enrollment {
+            let destination = Path::new(&account.home)
+                .join(format!("enrollment-{}.json", document.enrollment.id));
             owned_file(
                 &destination,
                 &serde_json::to_vec(&document)
@@ -1152,7 +1164,10 @@ mod tests {
         };
         write(&document);
         assert_eq!(
-            read_enrollment(&path, "example").unwrap().enrollment_token,
+            read_enrollment(&path, "example")
+                .unwrap()
+                .enrollment
+                .enrollment_token,
             token
         );
         assert!(read_enrollment(&path, "different").is_err());

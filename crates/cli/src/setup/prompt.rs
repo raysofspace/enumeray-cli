@@ -29,6 +29,16 @@ pub(super) fn yes(label: &str, default: bool) -> Result<bool, Error> {
         }
     }
 }
+fn choice(label: &str, default: &str, options: &[&str]) -> Result<String, Error> {
+    let label = format!("{label} ({})", options.join("/"));
+    loop {
+        let value = ask(&label, default)?;
+        if options.contains(&value.as_str()) {
+            return Ok(value);
+        }
+        eprintln!("Choose {}.", options.join(" or "));
+    }
+}
 fn local(args: &[&str]) -> Result<String, Error> {
     let out = Command::new("/usr/bin/id").args(args).output()?;
     if !out.status.success() {
@@ -62,18 +72,50 @@ fn number(label: &str, default: u32) -> Result<u32, Error> {
         .map_err(|_| invalid("Enter a positive numeric ID or capacity."))
 }
 pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
-    let mode = match options.mode {
-        Some(m) => m,
-        None => match ask("Setup mode: development or managed", "development")?.as_str() {
-            "development" => SetupMode::Development,
-            "managed" => SetupMode::Managed,
-            _ => return Err(invalid("Choose development or managed.")),
-        },
-    };
     if local(&["-u"])? == "0" {
         return Err(invalid(
-            "Run the owner setup as a regular user; administrator apply is a separate step.",
+            "Run setup as a regular user. A managed installation has a separate administrator step.",
         ));
+    }
+    let profiles = config::load(&profile_path(args)?)?;
+    let profile = profiles.profiles.get(&args.profile);
+    let api = EnumerayClient::new(
+        config::api_origin(args, profile),
+        None,
+        Duration::from_secs(args.timeout),
+    )?
+    .base_url()
+    .to_owned();
+    if profile
+        .is_some_and(|profile| profile.api_url.trim_end_matches('/') != api.trim_end_matches('/'))
+    {
+        return Err(invalid(
+            "The selected profile is saved for a different API. Select a profile for this API and rerun setup.",
+        ));
+    }
+    eprintln!("Using profile {:?} at {api}.", args.profile);
+    let mode = match options.mode {
+        Some(m) => m,
+        None => {
+            eprintln!(
+                "  development  Run trusted models locally as your current OS user. No administrator step.\n  managed      Separate connector and model accounts. An administrator applies the host plan before startup."
+            );
+            if choice("Setup mode", "development", &["development", "managed"])? == "development" {
+                SetupMode::Development
+            } else {
+                SetupMode::Managed
+            }
+        }
+    };
+    let dev = mode == SetupMode::Development;
+    if dev {
+        eprintln!(
+            "Development uses the local process driver under your account. Model code can read your files and connector credentials. Setup prepares and enrolls the connector after you approve."
+        );
+    } else {
+        eprintln!(
+            "Managed setup needs a host administrator to prepare the reviewed accounts, paths and connector enrollment before either startup option."
+        );
     }
     let name = local(&["-un"])?;
     let group = local(&["-gn"])?;
@@ -83,32 +125,24 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
     } else {
         HostPlatform::Linux
     };
-    let profiles = config::load(&profile_path(args)?)?;
-    let api = ask(
-        "API origin",
-        config::api_origin(args, profiles.profiles.get(&args.profile)),
-    )?;
-    let api = EnumerayClient::new(&api, None, Duration::from_secs(args.timeout))?
-        .base_url()
-        .to_owned();
     let id = ask("Connector ID", "personal-connector")?;
     let context = ask("Context ID", &format!("{id}-cpu"))?;
-    let dev = mode == SetupMode::Development;
     let driver = if dev {
         "process".into()
     } else {
-        ask("Driver: process or slurm", "process")?
+        eprintln!(
+            "  process  Launch each model directly on the execution host.\n  slurm    Submit each model to the site's Slurm scheduler. Requires an allocation, shared paths and a prepared batch script."
+        );
+        choice("Execution driver", "process", &["process", "slurm"])?
     };
     let connection = if dev {
         "direct".into()
     } else {
-        ask("Connection: direct or ssh", "direct")?
+        eprintln!(
+            "  direct  Use a separate execution account on this host through restricted sudo.\n  ssh     Use a remote execution host. Requires setup on both hosts, a private SSH credential and a verified host key."
+        );
+        choice("Execution connection", "direct", &["direct", "ssh"])?
     };
-    if !matches!(driver.as_str(), "process" | "slurm")
-        || !matches!(connection.as_str(), "direct" | "ssh")
-    {
-        return Err(invalid("Choose process/slurm and direct/ssh."));
-    }
     let template = match (driver.as_str(), connection.as_str()) {
         ("process", "direct") => include_str!("../../examples/process-direct-context.json"),
         ("process", "ssh") => include_str!("../../examples/process-ssh-context.json"),
@@ -146,7 +180,10 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
             &format!("enumeray-{}", id.chars().take(20).collect::<String>()),
         )?;
         let svc_group = ask("Connector primary group", &svc)?;
-        let create = yes("Create the connector account if absent", true)?;
+        let create = yes(
+            "Allow the administrator to create this account if absent",
+            true,
+        )?;
         let (uid, gid) = if create && platform == HostPlatform::Macos {
             eprintln!(
                 "Review unused numeric IDs; host apply rechecks collisions before creating any account."
@@ -171,7 +208,7 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
     let execution_account = if dev {
         existing
     } else if connection == "direct" {
-        let execution = ask("Existing model execution account", &name)?;
+        let execution = ask("Existing model execution account on this host", &name)?;
         if execution == name {
             existing
         } else {
@@ -179,7 +216,10 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
                 platform,
                 name: execution.clone(),
                 group: ask("Execution primary group", &execution)?,
-                home: path("Execution account home", &format!("/home/{execution}"))?,
+                home: path(
+                    "Execution account home",
+                    &account_home(platform, &execution),
+                )?,
                 create: false,
                 uid: None,
                 gid: None,
@@ -187,17 +227,20 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
         }
     } else {
         let remote_platform =
-            match ask("Execution host platform: linux or macos", "linux")?.as_str() {
-                "linux" => HostPlatform::Linux,
-                "macos" => HostPlatform::Macos,
-                _ => return Err(invalid("Choose linux or macos.")),
+            if choice("Execution host platform", "linux", &["linux", "macos"])? == "linux" {
+                HostPlatform::Linux
+            } else {
+                HostPlatform::Macos
             };
         let remote = ask("Existing remote execution account", &name)?;
         HostAccount {
             platform: remote_platform,
             name: remote.clone(),
             group: ask("Remote primary group", &remote)?,
-            home: path("Remote account home", &format!("/home/{remote}"))?,
+            home: path(
+                "Remote account home",
+                &account_home(remote_platform, &remote),
+            )?,
             create: false,
             uid: None,
             gid: None,
@@ -220,7 +263,7 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
     let default_models = format!("{base}/models");
     let default_work = if dev {
         format!("{base}/work")
-    } else if platform == HostPlatform::Macos {
+    } else if execution_account.platform == HostPlatform::Macos {
         format!("/Library/Application Support/EnumerayWork/{id}")
     } else {
         format!("/var/lib/{id}-model-work")
@@ -279,7 +322,10 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
             "Models run under the selected execution account on this site."
         },
     )?;
-    let workers = number("Maximum simultaneous assignments", if dev { 1 } else { 4 })?;
+    let workers = number(
+        "Maximum simultaneous assignments (1–64)",
+        if dev { 1 } else { 4 },
+    )?;
     context_spec.definition.max_outstanding_assignments = workers;
     let state = if dev {
         format!("{base}/connector")
@@ -322,9 +368,27 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
             },
         )?);
     }
-    let startup = ask("Startup: foreground or background", "foreground")?;
+    eprintln!("  foreground  Start the connector in a terminal after preparation.");
+    if dev {
+        eprintln!(
+            "  background  Start a user-level systemd service or macOS LaunchAgent from your logged-in account."
+        );
+    } else {
+        eprintln!(
+            "  background  Include a systemd service or macOS LaunchDaemon in the administrator's host plan."
+        );
+    }
+    let startup = choice(
+        "Connector startup",
+        "foreground",
+        &["foreground", "background"],
+    )?;
     host.install_service = startup == "background";
-    let first_model = match ask("First model: demo, project or later", "demo")?.as_str() {
+    eprintln!(
+        "  demo     Generate a Python starter and prepare a candidate trial.\n  project  Use a project with publication.json and prepare a candidate trial.\n  later    Finish at connector readiness and prepare a model separately."
+    );
+    let selected_model = choice("First model", "demo", &["demo", "project", "later"])?;
+    let first_model = match selected_model.as_str() {
         "later" => None,
         choice @ ("demo" | "project") => {
             let project = if choice == "project" {
@@ -348,27 +412,16 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
                     &format!("setup-example-{}", &Uuid::new_v4().to_string()[..8]),
                 )?
             };
-            let example = Some(ask(
-                "Declared input example",
-                if choice == "demo" {
-                    "starter-example"
-                } else {
-                    parsed
-                        .as_ref()
-                        .and_then(|(_, source)| source.definition.examples.first())
-                        .map(|e| e.name.as_str())
-                        .unwrap_or("")
-                },
-            )?)
-            .filter(|s| !s.is_empty());
-            let inputs = if example.is_none() {
-                Some(PathBuf::from(path(
-                    "Scientific inputs JSON",
-                    &format!("{home}/inputs.json"),
-                )?))
-            } else {
-                None
+            let examples: Vec<&str> = match &parsed {
+                Some((_, source)) => source
+                    .definition
+                    .examples
+                    .iter()
+                    .map(|e| e.name.as_str())
+                    .collect(),
+                None => vec!["starter-example"],
             };
+            let (example, inputs) = trial_inputs(&home, &examples)?;
             let installed_release = if choice == "project"
                 && yes("Use an already installed release directory", false)?
             {
@@ -407,7 +460,7 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
                 metadata,
             })
         }
-        _ => return Err(invalid("Choose demo, project or later.")),
+        _ => unreachable!("first-model choice is validated"),
     };
     Ok(Input {
         manifest_version: 1,
@@ -420,4 +473,27 @@ pub(super) fn input(args: &Args, options: &Setup) -> Result<Input, Error> {
         startup,
         first_model,
     })
+}
+
+fn account_home(platform: HostPlatform, name: &str) -> String {
+    match platform {
+        HostPlatform::Linux => format!("/home/{name}"),
+        HostPlatform::Macos => format!("/Users/{name}"),
+    }
+}
+
+fn trial_inputs(home: &str, examples: &[&str]) -> Result<(Option<String>, Option<PathBuf>), Error> {
+    if let Some(first) = examples.first()
+        && choice("Trial inputs", "example", &["example", "file"])? == "example"
+    {
+        return Ok((
+            Some(choice("Declared input example", first, examples)?),
+            None,
+        ));
+    }
+    let inputs = path(
+        "Scientific inputs JSON file",
+        &format!("{home}/inputs.json"),
+    )?;
+    Ok((None, Some(PathBuf::from(inputs))))
 }

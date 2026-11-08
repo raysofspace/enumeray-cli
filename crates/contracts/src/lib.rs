@@ -1,5 +1,9 @@
 //! Shared wire contracts and pure validation for the API and connector.
 
+/// API origin of the hosted Enumeray service.
+pub const DEFAULT_API_ORIGIN: &str = "https://api.enumeray.com";
+
+pub mod artifact_names;
 pub mod assignments;
 pub mod automation;
 pub mod collections;

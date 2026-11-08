@@ -49,7 +49,8 @@ specific angular momentum. `bundle.json` maps:
 - `trajectory_csv`: 361 rows with `time_years,x_au,y_au,vx_au_per_year,vy_au_per_year`.
 - `orbit_plot_png`: the relative planar trajectory, with equal axis scales.
 
-The actual downloads are `results/files/<artifact-uuid>`; use the bundle mapping.
+For new results, `bundle.json` points to `trajectory.csv` and `orbit.png` under
+their respective `results/files/<artifact-uuid>/` directories.
 Retain `results/outputs.json` and `results/provenance.json` with them. A partial
 orbit ends before returning to its starting point by design. At high eccentricity,
 equal time samples are spaced farther apart around periapse because the planet

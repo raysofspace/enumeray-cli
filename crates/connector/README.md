@@ -4,6 +4,12 @@ Start with [guided connector setup](../cli/SETUP_GUIDE.md) to prepare approved
 hosts, enroll a connector, check readiness and trial a model. Use this complete
 guide for operation, manual preparation and offline reference.
 
+In guided development setup, your current user runs local process jobs directly.
+The setup can prepare its user-level paths and optional background service without
+`sudo` or `setup apply-host`. Managed setup uses separate OS accounts. An
+administrator applies the reviewed host changes before either a foreground start
+or a system service start.
+
 The connector is a library used by the unified `enumeray` executable. Its normal
 dependency graph contains the
 shared contracts and HTTP/runtime libraries; it needs neither PostgreSQL access nor
@@ -20,8 +26,9 @@ choices offline and separates the backend developer reference.
 Start from the [Linux managed host specification](../cli/examples/host-setup-linux.json),
 [macOS managed host specification](../cli/examples/host-setup-macos.json), or
 [single-user development host specification](../cli/examples/host-setup-development.json). Edit the
-identifiers, accounts, absolute site paths and limits. macOS numeric IDs are
-examples; the administrator must check name and UID/GID collisions first.
+identifiers, accounts, absolute site paths and limits. The examples already use
+the hosted API. Change `api_base_url` for another deployment. On macOS, the
+administrator must check for collisions before choosing names and numeric IDs.
 
 ```sh
 enumeray connector configuration generate --file host-setup.json --directory host-plan
@@ -120,9 +127,9 @@ permissions still protect against other users; they cannot isolate processes
 running as the same user. Managed execution with separate identities remains the
 default, including when a connector permits development contexts.
 
-This recipe needs outbound HTTPS to a compatible deployed test service, an
-ordinary CLI login, and Python 3 for the example model. A DSM-hosted test service
-works the same way: use its actual HTTPS origin and normal trusted certificates.
+This recipe uses the hosted Enumeray API with an ordinary CLI login and Python 3
+for the example model. For another deployment, sign in with its profile and use
+that profile for the owner commands throughout.
 The connector initiates outbound requests; no inbound laptop connection, local
 API/database, new host account or sudo configuration is required. Development
 execution does not enable insecure HTTP or bypass authentication, ownership,
@@ -141,14 +148,13 @@ mkdir -p "$HOME/enumeray-development/models" "$HOME/enumeray-development/work" \
 chmod 700 "$HOME/enumeray-development" "$HOME/enumeray-development/work" \
   "$HOME/enumeray-development/connector"
 cd "$HOME/enumeray-development"
-enumeray auth configure https://enumeray.example.org
 enumeray auth login
 enumeray auth whoami
 enumeray connector create development-connector \
   --label 'Personal development connector' --max-outstanding-assignments 1 \
   --output enrollment.json
 enumeray connector enroll --directory connector/credentials \
-  --api-base-url https://enumeray.example.org --enrollment-file enrollment.json
+  --enrollment-file enrollment.json
 ```
 
 Choose unique resource IDs if those names already exist. Retry an interrupted
@@ -176,7 +182,7 @@ terminal under that same OS user, run the connector in the foreground:
 
 ```sh
 enumeray connector run --journal "$HOME/enumeray-development/connector/journal" \
-  --api-base-url https://enumeray.example.org --connector-id development-connector \
+  --connector-id development-connector \
   --token-file "$HOME/enumeray-development/connector/credentials/token" \
   --max-workers 1 --recovery-mode exclusive-local --allow-development-execution
 ```
@@ -308,11 +314,12 @@ same-user process/direct execution. File jobs also require
 the service's verified versioned storage.
 
 Choose IDs once, then create the connector and one-time enrollment on the
-owner's CLI machine:
+owner's CLI machine. The unconfigured CLI uses the hosted API at
+`https://api.enumeray.com`. For another deployment, use its authenticated profile
+for owner commands.
 
 ```sh
 umask 077
-enumeray auth configure https://enumeray.example.org
 enumeray auth login
 enumeray connector create lab-connector --label 'Lab connector' \
   --max-outstanding-assignments 4 --output enrollment.json
@@ -340,16 +347,17 @@ below when applicable). As the dedicated connector account, run:
 ```sh
 mkdir -m 700 connector-state
 enumeray connector enroll --directory connector-state \
-  --api-base-url https://enumeray.example.org \
   --enrollment-file enrollment.json
 
 enumeray connector run --journal connector-state/journal \
-  --api-base-url https://enumeray.example.org --connector-id lab-connector \
+  --connector-id lab-connector \
   --token-file connector-state/token --max-workers 4 \
   --recovery-mode exclusive-local
 ```
 
-`--enrollment-token-file` accepts a raw enrollment token instead. Enrollment writes
+The saved enrollment document carries the issuing API origin. For a first
+enrollment with an older document or a raw `--enrollment-token-file`, pass
+`--api-base-url` with the issuing API origin. Enrollment writes
 its machine identity and generated bearer token to private durable storage before
 sending the enrollment request. Retry an uncertain enrollment with the same
 state directory and enrollment file; do not create a new identity. Even after its
@@ -360,7 +368,10 @@ After successful enrollment, use the credential rotation procedure below with a
 new credential directory and the original journal. `--allow-insecure-http` is an
 explicit development/private-network exception; HTTPS is required otherwise.
 
-The `run` command remains in the foreground. Its service account must own the
+The `run` command uses the retained journal's API origin on restart. For a new
+journal it uses the origin from the enrollment record next to the token. If you
+moved the token separately, pass its issuing origin with `--api-base-url`.
+The command remains in the foreground. Its service account must own the
 state directory and no execution account may read it. Stop a foreground test
 before starting its service. `exclusive-local` is appropriate only for one
 installation on an unshared, uncloned local filesystem. Use the default manual
@@ -393,9 +404,9 @@ original journal so accepted work and backend evidence remain recoverable:
 enumeray connector enrollment CONNECTOR_ID --output rotated-enrollment.json
 # Stop the existing connector daemon before replacing its credential.
 enumeray connector enroll --directory rotated-connector-credentials \
-  --api-base-url https://enumeray.example.org --enrollment-file rotated-enrollment.json
+  --enrollment-file rotated-enrollment.json
 enumeray connector run --journal connector-state/journal \
-  --api-base-url https://enumeray.example.org --connector-id CONNECTOR_ID \
+  --connector-id CONNECTOR_ID \
   --token-file rotated-connector-credentials/token --max-workers 4 \
   --recovery-mode exclusive-local --credentials-file credentials.json
 ```
@@ -475,7 +486,7 @@ For manual recovery of existing work:
 enumeray connector reconcile --journal connector-state/journal \
   --token-file connector-state/token --confirm-prior-process-stopped
 enumeray connector run --journal connector-state/journal \
-  --api-base-url https://enumeray.example.org --connector-id lab-connector \
+  --connector-id lab-connector \
   --token-file connector-state/token --recovery-mode manual \
   --confirm-prior-process-stopped
 ```

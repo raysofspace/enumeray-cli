@@ -105,7 +105,7 @@ pub enum HostCommand {
         #[arg(long)]
         journal: PathBuf,
         /// API origin using HTTPS or loopback HTTP; retained identity stays bound to this origin.
-        #[arg(long)]
+        #[arg(long, default_value = enumeray_contracts::DEFAULT_API_ORIGIN)]
         api_base_url: String,
         /// Stable connector ID matching the enrollment credential and intended journal.
         #[arg(long)]

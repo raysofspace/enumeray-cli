@@ -53,6 +53,21 @@ fn both_modes_save_one_private_review_plan_without_profiles_or_requests() {
         assert_eq!(first.status.code(), Some(1));
         let first = json(&first);
         assert_eq!(first["status"], "review_required");
+        assert_eq!(first["api_url"], "https://api.enumeray.com");
+        assert_eq!(first["profile"], "default");
+        let start = first["commands"]["start"].as_array().unwrap();
+        assert_eq!(start.last().unwrap(), "--foreground");
+        if kind == "development" {
+            assert_eq!(first["mode"], "development");
+            assert!(first["commands"].get("apply_host").is_none());
+            assert_eq!(start[1], "connector");
+        } else {
+            assert_eq!(first["mode"], "managed");
+            assert!(first["commands"]["apply_host"].is_array());
+            assert_eq!(start[0], "sudo");
+            assert_eq!(start[1], "-u");
+            assert_eq!(start[2], first["connector_account"]);
+        }
         let saved = fs::read(directory.join("setup.json")).unwrap();
         assert_eq!(json(&call())["plan_sha256"], first["plan_sha256"]);
         assert_eq!(fs::read(directory.join("setup.json")).unwrap(), saved);

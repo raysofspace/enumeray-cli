@@ -313,16 +313,17 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
     if !progress.approved {
         let overview = summary(&directory, &plan, &progress, "review_required");
         eprintln!(
-            "Review connector {}, context {}, mode {}, startup {}. Host actions:\n{}\nPlan SHA-256: {}",
+            "Review connector {} and context {} for profile {:?} at {}.\nMode: {}. Startup: {}. Connector account: {}. Execution account: {}.\nReview {} and {} before approving.\nPlan SHA-256: {}",
             plan.input.connector.id,
             plan.input.host.context.id,
+            plan.profile,
+            plan.input.host.api_base_url,
             enumeray_contracts::setup::mode_name(&plan.input.host.context.definition),
             plan.input.startup,
-            serde_json::to_string_pretty(
-                &enumeray_connector::host_configuration_plan(plan.input.host.clone())
-                    .map_err(invalid)?
-                    .actions
-            )?,
+            plan.input.host.connector_account.name,
+            plan.input.host.execution_account.name,
+            plan_path.display(),
+            host_path.display(),
             progress.plan_sha256
         );
         let approve = options.approve.as_deref() == Some(progress.plan_sha256.as_str())
@@ -560,20 +561,32 @@ fn login(args: &Args, plan: &Plan, options: &Setup) -> Result<EnumerayClient, Er
                 "Configure and authenticate the saved profile, then resume this setup.",
             ));
         }
-        crate::commands::auth(
-            args,
-            &Auth::Configure {
-                api_url: plan.input.host.api_base_url.clone(),
-            },
-            &plan.profile_file,
+        let selected = EnumerayClient::new(
+            config::api_origin(args, None),
+            None,
+            Duration::from_secs(args.timeout),
         )?;
+        if selected.base_url().trim_end_matches('/')
+            != plan.input.host.api_base_url.trim_end_matches('/')
+        {
+            crate::commands::auth(
+                args,
+                &Auth::Configure {
+                    api_url: plan.input.host.api_base_url.clone(),
+                },
+                &plan.profile_file,
+            )?;
+        }
     }
     let client = config::client(args, &config::load(&plan.profile_file)?)?;
     match client.me() {
         Ok(_) => Ok(client),
         Err(e) if interactive(options) => {
             eprintln!("Authentication needs attention: {e}");
-            if !prompt::yes("Log in again to the original API/account", false)? {
+            if !prompt::yes(
+                &format!("Open browser login for profile {:?}", plan.profile),
+                false,
+            )? {
                 return Err(e);
             }
             crate::commands::auth(
@@ -589,6 +602,17 @@ fn login(args: &Args, plan: &Plan, options: &Setup) -> Result<EnumerayClient, Er
         Err(e) => Err(e),
     }
 }
+fn valid_setup_enrollment(
+    document: &ConnectorEnrollmentFile,
+    connector: &str,
+    client: &EnumerayClient,
+) -> bool {
+    crate::commands::valid_enrollment(&document.enrollment, connector)
+        && document.api_base_url.as_deref().is_none_or(|origin| {
+            origin.trim_end_matches('/') == client.base_url().trim_end_matches('/')
+        })
+}
+
 fn register(
     client: &EnumerayClient,
     options: &Setup,
@@ -651,8 +675,8 @@ fn register(
             if p.connector_registered { /* Registration may be known without recovering its one-time secret. */
             } else if output.exists() {
                 config::require_private(&output)?;
-                let document: ConnectorEnrollment = read(&output)?;
-                if !crate::commands::valid_enrollment(&document, id) {
+                let document: ConnectorEnrollmentFile = read(&output)?;
+                if !valid_setup_enrollment(&document, id, client) {
                     return Err(invalid(
                         "Retained enrollment document does not match this connector.",
                     ));
@@ -681,13 +705,13 @@ fn register(
         }
     }
     if let Some(source) = &options.enrollment_file {
-        let document: ConnectorEnrollment = read(source)?;
-        if !crate::commands::valid_enrollment(&document, id) {
+        let document: ConnectorEnrollmentFile = read(source)?;
+        if !valid_setup_enrollment(&document, id, client) {
             return Err(invalid(
                 "Imported enrollment does not match this connector or its strict credential contract.",
             ));
         }
-        let target = directory.join(format!("enrollment-import-{}.json", document.id));
+        let target = directory.join(format!("enrollment-import-{}.json", document.enrollment.id));
         if !target.exists() {
             config::write_private(&target, &document, false)?;
         }
@@ -700,8 +724,8 @@ fn register(
     if options.replace_enrollment {
         if let Some(output) = &p.pending_replacement {
             if output.exists() {
-                let document: ConnectorEnrollment = read(output)?;
-                if !crate::commands::valid_enrollment(&document, id) {
+                let document: ConnectorEnrollmentFile = read(output)?;
+                if !valid_setup_enrollment(&document, id, client) {
                     return Err(invalid(
                         "Retained replacement enrollment is invalid; preserve it.",
                     ));
@@ -848,13 +872,61 @@ fn register(
 }
 fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
     let host = &plan.input.host;
+    let managed = host.context.definition.execution_mode == ExecutionMode::Managed;
+    let next_action = match status {
+        "review_required" => {
+            "Review the saved setup and host plan. Approve the setup plan SHA-256 to continue."
+        }
+        "start_required" if !managed => {
+            "Your connector is enrolled and local preflight passed. Run the start command as your current user, then resume setup. For foreground startup, resume in another terminal."
+        }
+        "start_required"
+            if matches!(
+                host.context.definition.connection,
+                enumeray_contracts::execution::ConnectionConfig::Ssh(_)
+            ) =>
+        {
+            "Have the execution host administrator apply the reviewed plan there with --side execution. On the connector host, have its administrator run the displayed host apply command and review local preflight. Start the connector, then resume setup."
+        }
+        "start_required" => {
+            "Have the connector host administrator run the displayed host apply command and review local preflight. Start the connector, then resume setup. For foreground startup, resume in another terminal."
+        }
+        "enrollment_required" => {
+            "Inspect existing enrollment and credentials. If no usable document exists, explicitly request --replace-enrollment, then resume with the same durable identity directory."
+        }
+        "development_consent_required" => {
+            "Acknowledge trusted same-user execution with --allow-development-execution."
+        }
+        "ready" => {
+            "Host readiness is established. Scientific installation and qualification remain author/site responsibilities."
+        }
+        _ => {
+            "Inspect current diagnostics and follow each responsible role's correction. Retain this setup directory."
+        }
+    };
     let runtime = Path::new(&host.journal)
         .parent()
         .unwrap()
         .join("runtime.json");
-    let mut value = json!({"directory":directory,"status":status,"plan_sha256":p.plan_sha256,"host_plan_sha256":enumeray_connector::configuration_digest(host).ok(),"connector_id":plan.input.connector.id,"context_id":host.context.id,"startup":plan.input.startup,"configuration":runtime,
-        "host_plan":directory.join("host-plan.json"),"enrollment_file":p.enrollment_paths.last(),"execution_account":host.execution_account.name,"connector_account":host.connector_account.name,
-        "next_action":match status {"review_required"=>"Review the saved setup and host plan; approve its plan SHA-256 to continue.","start_required"=>"For managed mode apply the host plan explicitly as administrator with its host digest and retained enrollment document. Run connector preflight as the connector account, then connector start --configuration FILE with --foreground or --background. Resume this setup in another terminal.","enrollment_required"=>"Inspect existing enrollment and credentials. If no usable document exists, explicitly request --replace-enrollment, then resume with the same durable identity directory.","development_consent_required"=>"Acknowledge trusted same-user execution with --allow-development-execution.","ready"=>"Host readiness is established. Scientific installation and qualification remain author/site responsibilities.",_=>"Inspect current diagnostics and follow each responsible role's correction; retain this setup directory."},"trial":p.trial });
+    let mut value = json!({
+        "directory": directory,
+        "status": status,
+        "plan_sha256": p.plan_sha256,
+        "host_plan_sha256": enumeray_connector::configuration_digest(host).ok(),
+        "connector_id": plan.input.connector.id,
+        "context_id": host.context.id,
+        "startup": plan.input.startup,
+        "configuration": runtime,
+        "host_plan": directory.join("host-plan.json"),
+        "enrollment_file": p.enrollment_paths.last(),
+        "execution_account": host.execution_account.name,
+        "connector_account": host.connector_account.name,
+        "mode": mode_name(&host.context.definition),
+        "profile": plan.profile,
+        "api_url": host.api_base_url,
+        "next_action": next_action,
+        "trial": p.trial
+    });
     let foreground = plan.input.startup == "foreground";
     let mut start = vec![
         host.connector_executable.clone(),
@@ -864,7 +936,7 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
         runtime.to_string_lossy().into_owned(),
         format!("--{}", plan.input.startup),
     ];
-    if host.context.definition.execution_mode == ExecutionMode::Managed {
+    if managed {
         let mut prefix = if foreground {
             vec![
                 "sudo".into(),
@@ -904,7 +976,7 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
         ]);
     }
     value["commands"] = json!({"start":start,"resume":["enumeray","--config",plan.profile_file.to_string_lossy(),"--profile",plan.profile,"setup","--directory",directory.to_string_lossy()]});
-    if host.context.definition.execution_mode == ExecutionMode::Managed {
+    if managed {
         value["commands"]["apply_host"] = json!(apply);
     }
     value

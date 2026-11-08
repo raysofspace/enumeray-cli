@@ -18,16 +18,13 @@ async fn enrollment_retry_preserves_machine_and_generated_credential_after_lost_
     let root = std::env::temp_dir().join(format!("enumeray-enrollment-{}", Uuid::new_v4()));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-    let enrollment = root.join("enrollment.json");
-    fs::write(
-        &enrollment,
-        serde_json::to_vec(&json!({"enrollment_token":"test-single-use-token"})).unwrap(),
-    )
-    .unwrap();
-    fs::set_permissions(&enrollment, fs::Permissions::from_mode(0o600)).unwrap();
-    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
+    let enrollment = root.join("enrollment.json");
+    let document = json!({"enrollment_token":"test-single-use-token","api_base_url":origin});
+    fs::write(&enrollment, serde_json::to_vec(&document).unwrap()).unwrap();
+    fs::set_permissions(&enrollment, fs::Permissions::from_mode(0o600)).unwrap();
+    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
     let received = requests.clone();
     let server = tokio::spawn(async move {
         for attempt in 0..3 {
@@ -81,6 +78,26 @@ async fn enrollment_retry_preserves_machine_and_generated_credential_after_lost_
         b"original backend identity",
     )
     .unwrap();
+    let refused = Command::new(env!("CARGO_BIN_EXE_enumeray"))
+        .args([
+            "connector",
+            "enroll",
+            "--api-base-url",
+            "http://127.0.0.1:9",
+            "--directory",
+        ])
+        .arg(&state)
+        .arg("--enrollment-file")
+        .arg(&enrollment)
+        .output()
+        .await
+        .unwrap();
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr)
+            .contains("document is bound to another API origin")
+    );
+    assert!(!state.join("identity.json").exists());
     let mut durable_identity = None;
     for attempt in 0..3 {
         let output = Command::new(env!("CARGO_BIN_EXE_enumeray"))
@@ -91,7 +108,7 @@ async fn enrollment_retry_preserves_machine_and_generated_credential_after_lost_
                 "user-profile-token-must-not-reach-enrollment",
             )
             .arg("connector")
-            .args(["enroll", "--api-base-url", &origin, "--directory"])
+            .args(["enroll", "--directory"])
             .arg(&state)
             .arg("--enrollment-file")
             .arg(&enrollment)
@@ -109,6 +126,12 @@ async fn enrollment_retry_preserves_machine_and_generated_credential_after_lost_
             assert_eq!(&identity, original);
         } else {
             durable_identity = Some(identity);
+            // The retained identity can also route a legacy document on retry.
+            fs::write(
+                &enrollment,
+                serde_json::to_vec(&json!({"enrollment_token":"test-single-use-token"})).unwrap(),
+            )
+            .unwrap();
         }
         assert_eq!(
             fs::read(journal.join("original-evidence")).unwrap(),
@@ -164,7 +187,7 @@ async fn enrollment_creates_a_relative_directory_and_bounds_the_credential_read(
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("exceeds its byte limit"));
-    assert!(root.join("new-state/identity.json").is_file());
+    assert!(!root.join("new-state/identity.json").exists());
     assert!(!root.join("new-state/token").exists());
     fs::remove_dir_all(root).unwrap();
 }
