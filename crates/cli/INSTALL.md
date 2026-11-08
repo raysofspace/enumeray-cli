@@ -20,7 +20,7 @@ or REBOUND model without operating a connector. For your own compute, use
 [guided connector setup](SETUP_GUIDE.md) to select a mode, prepare the host,
 establish readiness and trial a first model with saved progress.
 
-**Alpha: 0.1.0-alpha.2.** Commands and APIs may change. Alpha updates may require
+**Alpha: 0.1.0-alpha.3.** Commands and APIs may change. Alpha updates may require
 a separate fresh installation; no in-place upgrade compatibility is promised.
 Read the target release's instructions before upgrading. Keep valuable existing
 state with its matching binaries; installation and removal never recreate or
@@ -30,10 +30,22 @@ recovery checks.
 
 ## Before choosing a package
 
+For a fresh disposable trial on the public demo, open the
+[hosted release selection](https://doc.enumeray.com/start/hosted-release/) before
+downloading. Use the exact tag, target, origin and evidence linked there. If the
+page shows a qualification hold, stop and use its named contact. For a historical
+incident, keep the exact archive and comparison receipt and use the guides and
+examples inside that archive or its matching source release.
+
+For an offline or institutional handoff, use the selection from the responsible
+site owner and retain the verified files and transfer evidence. For durable state,
+follow the [maintenance order](#upgrade-deliberately) before
+replacing any component.
+
 Obtain the approved public source revision or release,
 matching service selection/receipt and responsible installation contact from the
-service or site owner. A model ID, a `persistent-v1` label, a version string and
-this guide's example `0.1.0-alpha.2` are not substitutes for that selection.
+service or site owner. Use the exact release evidence even when the version or
+baseline label agrees with this guide.
 Confirm that the selected version is published for your chosen channel;
 Homebrew additionally requires its qualified tap formula. The examples below
 do not establish availability. If no qualified package is identified, use the pinned source
