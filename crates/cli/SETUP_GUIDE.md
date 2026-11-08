@@ -142,16 +142,28 @@ for the native service manager. Run the start command printed by setup:
 | **Foreground** (default) | Run as your current user. | Run as the dedicated connector account after applying the host plan. |
 | **Background** | Run as your logged-in user. Starts a user-level systemd service on Linux or a LaunchAgent on macOS. | An administrator starts the systemd service or LaunchDaemon installed by the reviewed background host plan. On Linux, site policy controls boot enablement. |
 
-For example, development foreground startup and status use the saved runtime file:
+For development foreground startup, run the printed command in its own
+terminal. Use the actual runtime file path from your setup plan.
 
 ```sh
 enumeray connector start --configuration /absolute/connector/runtime.json --foreground
+```
+
+Leave that terminal running. In a second terminal on the connector host, run
+the host status check as the account running the connector.
+
+```sh
 enumeray connector status --configuration /absolute/connector/runtime.json
 ```
 
-Foreground start occupies its terminal. Resume the original setup directory in
-another terminal. With background startup, resume in the same terminal after the
-start command returns.
+In the second terminal, return to the directory where you started setup and
+resume the same operation as the setup user. With background startup, you can
+resume in the original terminal after the start command returns. Use the same
+profile and configuration file as before, if applicable.
+
+```sh
+enumeray setup --directory enumeray-setup
+```
 
 The runtime file contains credential **paths**, not credential values. `--configuration`
 is distinct from the global `--config` profile-file option. Host start/status do
@@ -172,6 +184,10 @@ trial checks the actual installation and results separately.
 Choose **demo** to generate a small Python starter and trial it on your connector,
 **project** to use an author project containing `publication.json`, or **later**
 to finish at connector readiness and prepare a model separately.
+
+If you chose **later**, setup is complete when it reports **ready**.
+Continue to the [author handoff](#give-an-author-access-to-the-ready-context)
+when you want an author to publish on this connector.
 
 For a project, the wizard reads its model ID and named input examples. Choose a
 declared example or provide your own scientific inputs JSON file. The wizard
@@ -218,14 +234,35 @@ scientific tests and interpretation remain the author's responsibility. Installa
 or access requiring another person remains a site handoff; setup reports the
 required action without granting that person's authority.
 
-If you chose **later**, setup is complete when it reports **ready**. The
-connector owner can continue with
-[service operation](../connector/README.md#enrollment-and-service-operation).
-
 If you chose **demo** or **project**, check for **trial_complete** and confirm
 that `first-trial` contains the collected result and provenance. The model author
 can check the scientific result and
 [review and activate the saved release](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate).
+
+## Give an author access to the ready context
+
+After setup reports **ready**, use the connector owner or co-admin account
+on the same Enumeray service. Ask the author for their account UUID from
+`enumeray auth whoami`. Use the connector and context IDs from your setup
+plan, and choose limits appropriate to the compute you are sharing.
+
+```sh
+enumeray connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
+  --max-queued-runs 100 --max-outstanding-assignments 4
+enumeray connector grant list CONNECTOR_ID
+```
+
+Check that the list includes the author's UUID, intended context and limits.
+Give the author the context ID, approved installation root, execution account,
+runtime requirements and the site's instructions for installing files. The
+compute grant and host installation access are separate.
+
+The author signs in to the same service and runs
+`enumeray connector grant available`. The handoff is complete when that
+command shows the intended context and the author knows where and how to install
+the release. They can then [install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
+For day-to-day service tasks, see
+[service operation](../connector/README.md#enrollment-and-service-operation).
 
 ## Script the same saved workflow
 

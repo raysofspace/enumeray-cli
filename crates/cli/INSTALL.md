@@ -5,13 +5,17 @@ executable provides the CLI, connector and compute runner. For a hosted trial
 or to run a model your team shares, install it on the computer where you
 will submit the run.
 
+For a first-time workstation install, start with the
+[short installation guide](https://doc.enumeray.com/start/install-cli/). This
+reference includes archive verification, offline installation, source builds
+and maintenance for installations that hold saved work.
+
 ## Before choosing a package
 
 For the demo, [check hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
-Use the approved version, target and API address listed there. If the page asks
-you to contact support, get those details before downloading. For a team
-service, ask its administrator for the approved release or public commit, API
-address and matching service verification information.
+Start when you have trial access and the approved version, target and API
+address. For a team service, ask its administrator for the approved release
+or public commit, API address and matching service verification information.
 
 Choose the route for your computer and situation.
 
@@ -435,7 +439,7 @@ troubleshooting.
 | Goal | Included help |
 | --- | --- |
 | Run scalar, file or collection analyses | [Analysis guide](ANALYSIS_GUIDE.md) |
-| Script with structured output | [Complete JSON recipe](ANALYSIS_GUIDE.md#script-with-structured-output) |
+| Script with structured output | [Complete JSON recipe](CLI_AUTOMATION.md#script-with-structured-output) |
 | Create, install, trial and publish a model | [Author guide](AUTHOR_GUIDE.md) |
 | Work through supplied publications and inputs | [Example walkthrough](examples/README.md) |
 | Connect compute and trial a model | [Guided connector setup](SETUP_GUIDE.md) |

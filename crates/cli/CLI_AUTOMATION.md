@@ -3,7 +3,7 @@
 Use `enumeray --json` when a script needs to read a command's result. Set the
 flag explicitly even when redirecting output to a file. Check the exit code,
 then read the JSON fields that govern your next action. Use the
-[scripting recipe](ANALYSIS_GUIDE.md#script-with-structured-output) for a complete run.
+[scripting recipe](#script-with-structured-output) for a complete run.
 
 The [CLI output schemas](https://doc.enumeray.com/contracts/cli-output-v1.json)
 come from the Rust types in `enumeray_contracts::automation`. The bundle
@@ -96,6 +96,110 @@ details when available. `retry_after` copies the HTTP header. Use documented
 codes and typed fields to choose the next action. Keep the exact operation
 before renewing credentials or recovering from a lost reply.
 
+## Script with structured output
+
+This walkthrough saves the result of one run so another program can use it.
+Use `jq`, a signed-in CLI profile and access to the scalar starter published
+as `example`. Start in a new private working directory. If you use a named
+profile, pass the same `--profile NAME` after `enumeray` on every command.
+
+### Prepare one run
+
+```sh
+(
+  set -eu
+  umask 077
+  printf '%s\n' '{"value":2}' > inputs.json
+  enumeray --json model get example > model.json
+  enumeray --json analysis init example --inputs inputs.json \
+    --directory scripted-analysis > initialized.json
+  enumeray --json analysis status scripted-analysis > reviewed-analysis.json
+)
+```
+
+Read [the four files](#read-the-four-files-before-submitting) before
+submitting. Confirm the inputs, model version, execution location and data
+access. To change the inputs before submission, edit
+`scripted-analysis/inputs.json`.
+
+### Submit, wait and collect
+
+Run this stage after review. After interruption, repeat it with the same
+analysis directory.
+
+```sh
+(
+  set -eu
+  umask 077
+  ANALYSIS=scripted-analysis
+  enumeray --json analysis submit "$ANALYSIS" > submission.json
+  if enumeray --json analysis wait "$ANALYSIS" --check-outcome --interval 2 --deadline 3600 > terminal-run.json; then
+    outcome=0
+  else
+    outcome=$?
+  fi
+  case "$outcome" in
+    0|3|4)
+      enumeray --json analysis collect "$ANALYSIS" > collection.json
+      jq -e '.schema_version == 1 and .complete == true' collection.json >/dev/null
+      ;;
+    5|130)
+      echo 'Observation ended; retain the analysis directory and resume waiting.' >&2
+      ;;
+    *)
+      echo 'No terminal outcome was obtained; inspect the error and retained directory.' >&2
+      ;;
+  esac
+  exit "$outcome"
+)
+```
+
+For a successful scalar run, check for `{"doubled":4}` in
+`scripted-analysis/results/outputs.json`. The script checks collection
+completeness before returning the run outcome. With `--check-outcome`, wait
+returns 0 for success, 3 for failure, 4 for cancellation or 5 for a local
+deadline. Exit 130 means interruption. A failed or cancelled run can still
+have a complete record. Open `terminal-run.json` for the outcome and
+`collection.json` for the collected record.
+
+Read the original acceptance from the nested `receipt` in `submission.json`
+or the saved `scripted-analysis/state/receipt.json`. Use status or wait for
+current progress. If collection fails, rerun `analysis collect` with the
+same directory. If sign-in expires, renew the same service and account or
+replace the scoped token before resuming.
+
+## Script log collection
+
+Use `enumeray --json run logs RUN_UUID` or
+`enumeray --json run events RUN_UUID` to read one retained page. Replace
+`RUN_UUID` with your run ID. Each response is one JSON object. Keep the
+response and pass its `next_cursor` unchanged with `--cursor` to read the
+next page. Use the last page's `resume_cursor` to poll for new entries.
+Cancellation events can appear on more than one event page. Log records
+include source offsets, epochs and gap markers.
+
+For a live stream, `--follow` writes newline-delimited JSON with one event
+per line. The analysis command saves its own checkpoint. With only a run ID,
+choose a private checkpoint file. Substitute your analysis directory for
+`analysis` if needed.
+
+```sh
+enumeray --json analysis logs analysis --follow >> log-events.ndjson
+enumeray --json run logs RUN_UUID --follow --state watch.json >> run-log-events.ndjson
+```
+
+Each checkpoint belongs to one API origin, account and run. A scoped token
+needs `me:read` when resuming. The CLI writes the event before recording its
+position, so an interruption between those actions can replay entries.
+Use the run ID and log position to deduplicate them.
+
+The stream reads the final retained pages after the run reaches a terminal
+state. A stream exit of 0 means observation completed. Use
+`analysis wait analysis --check-outcome` to act on the run's outcome. For
+recovery from missing pages, see the
+[analysis logs](https://doc.enumeray.com/reference/cli/analysis-logs/)
+and [run logs](https://doc.enumeray.com/reference/cli/run-logs/) references.
+
 ## Analysis summaries and acceptance identity
 
 Complete specimens:
@@ -133,7 +237,7 @@ same directory; status and import never submit automatically.
 
 The [complete four-file specimen](examples/automation/four-file-review.json)
 contains the actual `model.json`, `initialized.json`, `reviewed-analysis.json`
-and analysis `inputs.json` produced by the [scripting recipe](ANALYSIS_GUIDE.md#script-with-structured-output).
+and analysis `inputs.json` produced by the [scripting recipe](#script-with-structured-output).
 The fixture uses directory `analysis`; the recipe chooses `scripted-analysis`.
 Review the corresponding paths and identities consistently in your own case.
 

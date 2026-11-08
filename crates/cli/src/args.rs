@@ -63,7 +63,7 @@ pub enum Command {
     /// Keep one analysis's inputs, retry identities, run and verified results together.
     #[command(subcommand)]
     Analysis(Analysis),
-    /// Explicit HTTP escape hatch for new management APIs; limited to this API origin.
+    /// Send an HTTP request to the selected Enumeray API.
     Api {
         /// HTTP method supported by the target API endpoint.
         #[arg(value_parser=["GET", "POST", "PUT", "PATCH", "DELETE"])]
@@ -170,7 +170,7 @@ pub enum Analysis {
     },
     /// Import an original prepared request locally. Submit explicitly to reconcile acceptance.
     Import {
-        /// Original private prepared-operation JSON file from the former run prepare workflow.
+        /// Private JSON file containing the original prepared request and retry key.
         #[arg(long)]
         prepared: PathBuf,
         /// New private analysis directory, or the same interrupted import destination.

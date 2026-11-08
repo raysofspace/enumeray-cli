@@ -6,21 +6,13 @@ The model starts from a synthetic wind speed profile. It illustrates wind propag
 
 ## Run the fast-stream example
 
-The hosted model ID is `demo-huxt` and the example name is `fast-stream`. Use the first-run guide to check whether the trial is available, install the matching CLI and sign in. The hosted connector supplies the solver and runtime. [Hosted trial](https://doc.enumeray.com/start/first-run/)
+Check [hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
+Once you have access and an approved CLI for the trial's API address, follow
+[your first run](https://doc.enumeray.com/start/first-run/). Choose the
+[HUXt solar-wind example](https://doc.enumeray.com/start/first-run/#huxt-solar-wind).
+The hosted model ID is `demo-huxt` and the example is `fast-stream`. It sets the slow wind to 350 km/s, the fast stream to 700 km/s and the sector width to 30°.
 
-```sh
-enumeray model get demo-huxt
-enumeray analysis init demo-huxt --example fast-stream --directory first-run
-```
-
-Open `first-run/inputs.json`. The example sets the slow wind to 350 km/s, the fast stream to 700 km/s and the sector width to 30°. Review those values, the printed execution location and who can access the data. After review, submit and wait.
-
-```sh
-enumeray analysis submit first-run
-enumeray analysis wait first-run --check-outcome
-```
-
-When the run succeeds, collect it with `enumeray analysis collect first-run`.
+When the walkthrough finishes, read the files in its `first-run` folder.
 
 ## Read the speed field and the 1 AU summary
 

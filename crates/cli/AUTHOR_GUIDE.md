@@ -34,7 +34,8 @@ Unicode spelling. You can run these tests without an API, credentials or a
 source checkout.
 
 ```sh
-python3 - <<'PY'
+(
+  python3 - <<'PY' &&
 from hashlib import sha256
 from pathlib import Path
 archive = Path("model-examples.tar.gz")
@@ -42,18 +43,25 @@ expected = Path("model-examples.tar.gz.sha256").read_text().split()[0]
 if sha256(archive.read_bytes()).hexdigest() != expected:
     raise SystemExit("Archive checksum mismatch")
 PY
-python3 -m tarfile -e model-examples.tar.gz
-cd enumeray-examples-*
-python3 verify-examples.py --root .
+  python3 -m tarfile -e model-examples.tar.gz &&
+    cd enumeray-examples-* &&
+    python3 verify-examples.py --root .
+)
 ```
 
-The versioned root contains `examples-manifest.json`, which records the package
-version, exact public source revision and file hashes. Verification checks those
-bytes and runs fresh copies of all supplied projects. From an already extracted
-package root, only the last command is needed. To edit one Python scalar starter:
+The block checks the checksum before opening the archive. If that check fails,
+download the archive and its matching checksum again before continuing. The
+extracted root contains `examples-manifest.json`, which records the package
+version, exact public source revision and file hashes. The verifier checks those
+bytes and tests fresh copies of all supplied projects. If you already have a
+verified extraction, you can run `python3 verify-examples.py --root .` from its
+root directory.
+
+After verification succeeds, open the editable Python scalar starter from the
+download directory.
 
 ```sh
-cd starter-kit/python-json
+cd enumeray-examples-*/starter-kit/python-json &&
 python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
@@ -427,56 +435,62 @@ failure annotation.
 
 ## Install an immutable release and select compute
 
-Coordinate installation under a site-approved release directory, such
-as `/opt/enumeray/models/example/r1`. Copy the complete project and your solver,
-runtime requirements and datasets. Ensure the execution account can traverse
-directories, read all resources and execute `wrapper.py`. Set read-only release
-permissions appropriate to the site; keep writable scratch/output work separate.
-Resolve resources relative to the release, not the job's current directory.
-Do not modify an installed release referenced by a publication or accepted work.
-New release directories and declared entrypoint/batch-file paths cannot occupy
-`work_root/UUID` or descendants of that reserved run directory for any registered
-execution context. Registration rejects this with
-`reserved_run_installation_path`. A separate `work_root/releases/r1` path can
-be allowed by the ordinary installation-root rules. The connector protects
-known releases and their observed aliases if they overlap retained run data.
-
-For example, on the execution host from the tested project, assuming the site's
-owner has prepared the parent and installation permissions:
-
-```sh
-RELEASE_DIR=/opt/enumeray/models/example/r1
-mkdir "$RELEASE_DIR"
-cp -R . "$RELEASE_DIR/"
-chmod a+rx "$RELEASE_DIR/wrapper.py"
-python3 -B -m unittest discover -s "$RELEASE_DIR" -p 'test_*.py'
-chmod -R a-w "$RELEASE_DIR"
-```
-
-Use site-specific read/execute permissions for private resources. Verify access
-and the wrapper's `/usr/bin/env python3` interpreter as the execution account;
-your workstation's successful test is insufficient. Copy native binaries,
-dependencies and installed datasets as needed. The destination must be new.
-
-For Slurm, edit `model.sbatch` before installing it: account, partition, cluster,
-resources, modules, virtual environment/container/MPI setup. Keep the worker in
-the foreground via `exec "$1" local-worker --directory "$2"`. The connector
-supplies the worker executable and job directory. Exported runtime setup and
-allocation variables reach the wrapper. Dependencies, release and workspace paths
-must be available on compute nodes. Add `execution.slurm_script: "model.sbatch"`
-for Slurm; omit it for process. Local tests do not submit a scheduler job.
+Sign in and find a context your connector owner has granted you access to.
 
 ```sh
 enumeray auth login
 enumeray connector grant available
 ```
 
-Select an available context, inspect its driver/location/disclosure and edit
-`execution.context_id` plus `execution.release_path` in `publication.json`.
-The entrypoint executable is release-relative, followed by fixed arguments.
-Context configuration owns hosts, SSH credentials, launchers and shared roots.
-Registration resolves your active grant and derives installation identity claims;
-authors supply neither grant UUIDs nor provider binding keys.
+Check the context's driver, location and data-access information. Put its ID
+and the approved absolute release path in `execution.context_id` and
+`execution.release_path` in `publication.json`. The entrypoint is relative to
+the release directory, followed by its fixed arguments. The connector owner
+manages hosts, SSH credentials, launchers and shared roots. Registration selects
+your active grant and derives the installation identity.
+
+For Slurm, prepare `model.sbatch` with the account, partition, cluster and
+resources for your site. Set up modules, the runtime, container or MPI there.
+Use `exec "$1" local-worker --directory "$2"` to keep the worker in the
+foreground. The connector supplies the worker executable and job directory.
+Exported runtime setup and allocation variables reach the wrapper. Make the
+dependencies, release and workspace paths available to the compute nodes.
+Set `execution.slurm_script` to `"model.sbatch"` for Slurm and leave it out for
+process execution.
+
+For either driver, have the connector owner prepare the approved parent and
+installation access. On the execution host, start in the tested project and
+copy it to a new release directory.
+
+```sh
+RELEASE_DIR=/opt/enumeray/models/example/r1
+mkdir "$RELEASE_DIR" &&
+  cp -R . "$RELEASE_DIR/"
+```
+
+Copy the solver, runtime dependencies and datasets that live outside the
+project. Include the completed Slurm script if the context uses one. Give the
+execution account permission to traverse the parents, read the required files
+and execute the wrapper. Use the site's method to test as that account. For the
+Python starter, run the tests from the installed release.
+
+```sh
+(
+  cd /opt/enumeray/models/example/r1 &&
+    test -x wrapper.py &&
+    python3 -B -m unittest discover -p 'test_*.py'
+)
+```
+
+Once the files, runtime and access checks pass, have the installer apply the
+site's read-only permissions to the release. Resolve installed resources
+relative to the release and write scratch files and results to the job
+workspace. Use a new directory for changed files. Keep the release and declared
+entrypoint or batch script outside every context's per-run `work_root/UUID`
+directories. Registration reports `reserved_run_installation_path` for paths
+in that area. A sibling path such as `work_root/releases/r1` can work if the
+context allows it. The connector protects known releases and their observed
+aliases if they overlap retained run data.
 
 Environment settings are bounded string runtime configuration, never credentials.
 They cannot override `HOME`, `PATH`, `PYTHONDONTWRITEBYTECODE`, or names beginning
@@ -543,6 +557,8 @@ derived installation claims out of the editable declaration.
 
 On readiness failure, inspect validation messages and coordinate context, grant, path and execution-account corrections with the connector owner. Changed immutable science or installation settings require a new operation. Local validation checks contracts and settings; API registration checks authority/context policy; connector readiness checks installed entrypoint/batch files and execution/backend access. Readiness does not attest scientific correctness or every runtime dependency.
 
+### Run the candidate and check its results
+
 Use the full Candidate ID displayed by `model release status release-r1` as
 `PUBLICATION_ID`, or adapt its displayed trial-init command. Before activation,
 exercise the exact ready candidate in a separate analysis directory:
@@ -557,16 +573,25 @@ enumeray analysis init example --candidate "$PUBLICATION_ID" \
 ```
 
 Read the saved inputs, installation, location and data-access information.
-When you are ready to run that candidate, submit the trial folder.
+Run `enumeray analysis status trial-r1` if you need to see the saved details
+again. When you are ready, submit the trial folder and wait for the run.
 
 ```sh
-enumeray analysis submit trial-r1
-enumeray analysis wait trial-r1 --check-outcome
-enumeray analysis status trial-r1
-enumeray analysis logs trial-r1
-enumeray analysis collect trial-r1
-enumeray model release status release-r1
+enumeray analysis submit trial-r1 &&
+  enumeray analysis wait trial-r1 --check-outcome
 ```
+
+After the run succeeds, collect its outputs and compare them with your
+expected result. The scalar example should report `{"doubled":4}` in
+`trial-r1/results/outputs.json`. With Slurm, the trial also exercises the
+scheduler and the runtime on the compute nodes.
+
+```sh
+enumeray analysis collect trial-r1
+```
+
+If the run fails, inspect `enumeray analysis status trial-r1` and
+`enumeray analysis logs trial-r1` before continuing.
 
 Initialization displays and saves the exact candidate installation, readiness,
 execution location, scientific-data access disclosure, captured grant and any
@@ -608,6 +633,10 @@ a successful trial is execution evidence; authors own scientific validation.
 Trial success is advisory and never automatically activates or gates activation.
 Trials do not change the current publication, public admission or access policy.
 Validated, authorized retained publications can also be trialled after activation.
+
+### Review and activate
+
+Save the proposed publication comparison once you finish the scientific checks.
 
 ```sh
 enumeray model release review release-r1
@@ -1001,8 +1030,8 @@ If you maintain the public CLI or its fixtures, follow the
 The captured compute-grant holder can explicitly authorize another active model
 administrator to trial and activate the same candidate. The reviewer does not need
 a separate compute grant. A delegation applies only to this publication; it cannot
-be used to register another installation or delegate authority onward. Single-author
-releases remain supported, and independent approval is optional.
+be used to register another installation or delegate authority onward. An author
+with the required access can also trial and activate their own release.
 
 Inspect `model release status release-r1` for `model_generation`, then use that
 observed value for the handoff (replace the example generation below):

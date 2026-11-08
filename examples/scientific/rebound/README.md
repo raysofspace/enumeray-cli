@@ -6,21 +6,13 @@ The IAS15 integrator solves an isolated Newtonian two-body problem. The orbit is
 
 ## Run the Earth-like orbit example
 
-The hosted model ID is `demo-rebound` and the example name is `earth-like-orbit`. Use the first-run guide to check whether the trial is available, install the matching CLI and sign in. The hosted connector supplies the solver and runtime. [Hosted trial](https://doc.enumeray.com/start/first-run/)
+Check [hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
+Once you have access and an approved CLI for the trial's API address, follow
+[your first run](https://doc.enumeray.com/start/first-run/). Choose the
+[REBOUND orbit example](https://doc.enumeray.com/start/first-run/#rebound-orbit).
+The hosted model ID is `demo-rebound` and the example is `earth-like-orbit`. It uses a semimajor axis of 1 AU, an eccentricity of 0.0167 and follows two orbits.
 
-```sh
-enumeray model get demo-rebound
-enumeray analysis init demo-rebound --example earth-like-orbit --directory first-run
-```
-
-Open `first-run/inputs.json`. The example uses a semimajor axis of 1 AU and an eccentricity of 0.0167, and follows two orbits. Review the inputs, the printed execution location and who can access the data. After review, submit and wait.
-
-```sh
-enumeray analysis submit first-run
-enumeray analysis wait first-run --check-outcome
-```
-
-When the run succeeds, collect it with `enumeray analysis collect first-run`.
+When the walkthrough finishes, read the files in its `first-run` folder.
 
 ## Read the trajectory and check the orbit
 

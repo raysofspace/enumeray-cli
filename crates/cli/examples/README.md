@@ -66,7 +66,7 @@ contains this file. Use a logged-in profile and choose a new private analysis
 directory for each intended execution. Inspect the model and the saved destination/disclosure
 before submitting. The [analysis guide](../ANALYSIS_GUIDE.md) explains editable and
 frozen inputs, retries, logs/cancellation, copied-folder recovery and the complete
-[noninteractive JSON recipe](../ANALYSIS_GUIDE.md#script-with-structured-output).
+[noninteractive JSON recipe](../CLI_AUTOMATION.md#script-with-structured-output).
 
 For trusted local experiments, [development-process-context.json](development-process-context.json)
 provides the explicit process/direct development policy. Replace its absolute
@@ -86,7 +86,13 @@ umask 077
 enumeray model get scalar-double
 enumeray analysis init scalar-double --inputs examples/scalar-inputs.json \
   --directory scalar-analysis
-# Review the saved publication, destination/disclosure and editable inputs.json.
+enumeray analysis status scalar-analysis
+```
+
+Check where the run will happen and who can access its data. Review
+`scalar-analysis/inputs.json` before submitting.
+
+```sh
 enumeray analysis submit scalar-analysis
 enumeray analysis wait scalar-analysis --check-outcome
 enumeray analysis collect scalar-analysis
@@ -118,7 +124,13 @@ JSON
 enumeray model get csv-example
 enumeray analysis init csv-example --inputs file-inputs.json \
   --file dataset=dataset.csv --directory file-analysis
-# Review the destination/disclosure and the local dataset binding.
+enumeray analysis status file-analysis
+```
+
+Review the local `dataset` binding and check where the file will go and who
+can access it before submitting.
+
+```sh
 enumeray analysis submit file-analysis
 enumeray analysis wait file-analysis --check-outcome
 enumeray analysis collect file-analysis
@@ -133,22 +145,87 @@ them. Status, logs, cancellation and collection use the folder after acceptance.
 
 ## Collection example
 
-The [collection publication](../../../examples/collections/publication.json)
-and [Python wrapper](../../../examples/collections/wrapper.py)
-describe `collection-example`, with input `dataset` and output `snapshots`.
-Install and publish that model through the author workflow, then follow the
-[complete two-member setup](../ANALYSIS_GUIDE.md#bind-local-collections): it creates
-`mesh/grid.bin`, `snapshots/0001.bin` and `{}` scientific inputs, binds the directory
-and records every member's original size/checksum before upload. Review and submit
-that folder, then use the guide's [staged collection commands](../ANALYSIS_GUIDE.md#collect-verified-evidence)
-to collect manifests, one selected member and finally all outputs.
+Use a collection when your model takes a directory of related files as one
+input. This example sends two files to `collection-example`. The model
+copies them into its `snapshots` output. To follow along, use a signed-in CLI
+profile with permission to run that model. If you own the model and need to
+publish it first, use the [author guide](../AUTHOR_GUIDE.md) with the
+[collection publication](../../../examples/collections/publication.json)
+and [Python wrapper](../../../examples/collections/wrapper.py).
 
-Evidence-only and partial collection can exit 0 with `complete: false`. Verify
-`complete: true` and `bundle.json` for every output; scientific success, failure or
-cancellation is recorded independently. Repeated collection never launches the
-model again. For a deliberately selected input set, use a collection manifest
-instead of a directory binding. Independent artifact/collection utilities remain
-available for reusable data; accepted-run IDs remain useful for authorized
-investigation and attachment.
+### Prepare and review a two-file run
 
-Host preparation specifications: [Linux managed](host-setup-linux.json), [macOS managed](host-setup-macos.json) and [development](host-setup-development.json). Edit accounts, paths, IDs and limits before generating a plan. Generation applies no host changes.
+Use a fresh private working directory. The `dataset` binding supplies the
+only required input, so the JSON input object can be empty. Keep the analysis
+directory outside the source tree. If you use a named CLI profile, include it
+after `enumeray` on every command.
+
+```sh
+umask 077
+mkdir -p collection-inputs/mesh collection-inputs/snapshots
+printf '%s\n' 'grid fixture' > collection-inputs/mesh/grid.bin
+printf '%s\n' 'snapshot fixture' > collection-inputs/snapshots/0001.bin
+printf '%s\n' '{}' > collection-inputs.json
+enumeray analysis init collection-example --directory collection-analysis \
+  --inputs collection-inputs.json --collection dataset=collection-inputs \
+  --media-type dataset=application/octet-stream
+enumeray analysis status collection-analysis
+```
+
+Check both files in the source directory and read the execution location and
+data-access disclosure shown by status. Keep the files in place while their
+uploads are unfinished. Submit only after review.
+
+```sh
+enumeray analysis submit collection-analysis
+```
+
+After you have the receipt, wait for the outcome.
+
+```sh
+enumeray analysis wait collection-analysis --check-outcome
+```
+
+### Collect the output in stages
+
+After a successful run, collect the result in one step or try each stage
+below. All three stages use the same run.
+
+```sh
+enumeray --json analysis collect collection-analysis --evidence-only > collection-evidence.json
+enumeray --json analysis collect collection-analysis \
+  --member snapshots=mesh/grid.bin > collection-partial.json
+enumeray --json analysis collect collection-analysis > collection-complete.json
+```
+
+The first step saves the run record and manifests. The second downloads
+`mesh/grid.bin` from the `snapshots` output. On a fresh collection, both
+report `complete: false`. The last step downloads the remaining files,
+reports `complete: true` and writes `collection-analysis/bundle.json`.
+
+Open `collection-analysis/results/outputs.json` and check that
+`member_count` is `2`. Use the paths in the bundle to find
+`mesh/grid.bin` and `snapshots/0001.bin` within the downloaded collection.
+Both should match their respective source files. If a transfer stops, repeat
+the same collection command with the same directory.
+
+### Choose which files to send
+
+Use `--collection SLOT=PATH` to include the regular files under a directory.
+If the slot accepts several media types, set `--media-type SLOT=TYPE` to use
+one type for the entire directory. For a selected list of files or different
+types by file, put the manifest at the source root and initialize with
+`--collection-manifest SLOT=MANIFEST.json`. For a previously uploaded
+collection, put its completed `collection_id` in the input JSON.
+
+A collection can have up to 10,000 members and a manifest of up to 16 MiB.
+The model can impose lower limits. The 10,000-file total includes standalone
+files and collection members in each direction. Keep original source bytes
+separately when you need them. [File and collection limits](https://doc.enumeray.com/reference/limits/)
+
+## Host preparation specifications
+
+Choose the [Linux managed](host-setup-linux.json), [macOS managed](host-setup-macos.json)
+or [development](host-setup-development.json) specification. Edit accounts,
+paths, IDs and limits before generating a plan. Generating a plan only
+prepares it for review.
