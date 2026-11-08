@@ -155,14 +155,24 @@ class ExampleBundleTests(unittest.TestCase):
             self.assertEqual(producer.artifacts.source_identity(root), selected)
             self.assertNotIn('content_sha256', selected)
 
-    def test_exported_tests_run_without_the_source_tree(self):
+    def test_documented_download_runs_without_the_source_tree(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'source'
             root.mkdir()
-            destination = Path(temporary) / 'bundle'
+            destination = Path(temporary) / 'enumeray-examples-0.1.0-test'
             manifest = self.assemble(root, destination)
+            download = Path(temporary) / 'download'
+            artifacts.archive_directory(destination, download / 'model-examples.tar.gz')
             shutil.rmtree(root)
-            self.assertEqual(verifier.verify_examples(destination)['file_count'], len(manifest['files']))
+            shutil.rmtree(destination)
+
+            guide = Path(__file__).resolve().parents[1] / 'crates/cli/AUTHOR_GUIDE.md'
+            offline = guide.read_text().split('## Run the downloaded model examples offline\n', 1)[1]
+            commands = offline.split('```sh\n', 1)[1].split('\n```', 1)[0]
+            output = subprocess.check_output(['sh', '-e', '-c', commands], cwd=download, text=True)
+            self.assertEqual(json.loads(output)['file_count'], len(manifest['files']))
+
+            destination = download / destination.name
             self.assertFalse(any(destination.rglob('__pycache__')))
             self.assertIn('[guide](../AUTHOR_GUIDE.md)', (destination / 'examples/README.md').read_text())
             self.assertIn('examples/http-contract', manifest['projects'])

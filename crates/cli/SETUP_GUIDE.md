@@ -209,10 +209,13 @@ scientific tests and interpretation remain the author's responsibility. Installa
 or access requiring another person remains a site handoff; setup reports the
 required action without granting that person's authority.
 
-Check that setup reports **ready** and that `first-trial` holds the collected
-result and provenance. The connector owner can continue with
+If you chose **later**, setup is complete when it reports **ready**. The
+connector owner can continue with
 [service operation](../connector/README.md#enrollment-and-service-operation).
-The model author can check the scientific result and
+
+If you chose **demo** or **project**, check for **trial_complete** and confirm
+that `first-trial` contains the collected result and provenance. The model author
+can check the scientific result and
 [review and activate the saved release](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate).
 
 ## Script the same saved workflow
