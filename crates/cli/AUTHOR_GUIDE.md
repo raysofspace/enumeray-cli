@@ -33,8 +33,10 @@ destinations; retain the original directories and state for exact retries.
 
 Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
 and its [model examples archive checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
-into a new directory, keeping those filenames. Python 3.9+ and `tar` are required
-for these commands; no API, credentials or source checkout is needed:
+into a new directory, keeping those filenames. These commands need Python 3.9+.
+Its archive extractor preserves the file names used in the manifest, including
+Unicode spelling. You can run these tests without an API, credentials or a
+source checkout.
 
 ```sh
 python3 - <<'PY'
@@ -45,7 +47,7 @@ expected = Path("model-examples.tar.gz.sha256").read_text().split()[0]
 if sha256(archive.read_bytes()).hexdigest() != expected:
     raise SystemExit("Archive checksum mismatch")
 PY
-tar -xzf model-examples.tar.gz
+python3 -m tarfile -e model-examples.tar.gz
 cd enumeray-examples-*
 python3 verify-examples.py --root .
 ```
