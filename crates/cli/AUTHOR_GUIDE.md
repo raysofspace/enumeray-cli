@@ -23,8 +23,8 @@ Commands run in a terminal, usually from the generated project. `example` is the
 scalar model ID; `csv-example` is a separate file model. Choose your own IDs before
 scaffolding and keep them consistent through installation and registration.
 Replace uppercase values such as `RUN_UUID`, `USER_UUID` and `TRANSFER_ID` with
-actual service response values. The CLI defaults to https://enumeray.com;
-configure a separate profile for another service. Replace the example context IDs
+actual service response values. The CLI defaults to https://api.enumeray.com.
+Configure a separate profile for another service. Replace the example context IDs
 and release paths with values supplied by your site. New release/analysis operations
 need new directories, and independent upload/download operations need new
 destinations; retain the original directories and state for exact retries.

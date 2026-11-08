@@ -9,20 +9,15 @@ directory. Start a new directory when you intend another execution.
 
 ## Try the hosted scientific models
 
-For an optional hosted trial, use a separate profile for https://enumeray.com.
-Run `enumeray auth profiles` to check the API origin of any existing `demo`
-profile. If it points to another service, choose an unused name and substitute
-it for `demo` throughout this example. If the profile is absent, configure it:
+Sign in with your regular hosted Enumeray profile. The CLI uses the hosted API
+at https://api.enumeray.com when the selected profile has no saved origin.
+If you already use a named hosted profile, add `--profile NAME` to the commands
+below. See the [login guide](https://doc.enumeray.com/start/login/) to check
+which origin each profile uses.
 
 ```sh
-enumeray --profile demo auth configure https://enumeray.com
-```
-
-Sign in with the selected profile:
-
-```sh
-enumeray --profile demo auth login
-enumeray --profile demo auth whoami
+enumeray auth login
+enumeray auth whoami
 ```
 
 Confirm your account before continuing. The trial supplies the installed
@@ -31,12 +26,12 @@ models and connector. Follow the
 HUXt or REBOUND walkthrough, or use this REBOUND recipe:
 
 ```sh
-enumeray --profile demo model get demo-rebound
-enumeray --profile demo analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
+enumeray model get demo-rebound
+enumeray analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
 # Review the scientific inputs, execution location and disclosure before submitting.
-enumeray --profile demo analysis submit orbit-analysis
-enumeray --profile demo analysis wait orbit-analysis --check-outcome
-enumeray --profile demo analysis collect orbit-analysis
+enumeray analysis submit orbit-analysis
+enumeray analysis wait orbit-analysis --check-outcome
+enumeray analysis collect orbit-analysis
 ```
 
 Use `demo-huxt` with example `fast-stream` and a new directory for the solar-wind
@@ -219,9 +214,14 @@ Collection requires a terminal run. It saves:
 - `results/inspection.json`, the retained final inspection;
 - `results/effective-inputs.json` and `results/outputs.json`, scientific JSON values;
 - `results/provenance.json`, exact publication, execution and artifact evidence;
-- `results/files/<artifact-uuid>`, downloaded file outputs;
+- `results/files/<artifact-uuid>/<filename>`, downloaded file outputs;
 - `results/collections/<collection-uuid>/`, full collection manifests and verified selected output members;
 - `bundle.json`, the complete bundle inventory keyed by declared output name, including local paths, sizes, checksums, immutable versions and optional output failures.
+
+New collections use the wrapper's original basename when the connector recorded
+it. For older artifacts, the CLI uses a safe name and adds a known extension
+from the recorded media type when needed. An analysis already collected with an
+older CLI keeps its saved paths.
 
 Repeat `collect` after interruption. It retains operation progress, resumes verified partial downloads by byte range and checks existing files against pinned evidence before adopting them. Conflicting files are preserved; move them aside or restore the exact bytes before retrying. It never substitutes a different remote artifact version. Download checkpoints remain beside result files until explicitly removed.
 

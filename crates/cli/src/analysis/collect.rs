@@ -7,6 +7,7 @@ use super::{
 use crate::{config, transfers};
 use enumeray_client::{EnumerayClient, Error, resource_path};
 use enumeray_contracts::{
+    artifact_names::download_filename,
     automation::{AnalysisCollectionSummary, CollectedFile, SchemaVersion},
     models,
 };
@@ -20,6 +21,8 @@ use uuid::Uuid;
 struct Output {
     artifact_id: Uuid,
     logical_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    filename: Option<String>,
     media_type: String,
     version_id: String,
     size_bytes: u64,
@@ -36,6 +39,10 @@ struct Plan {
     inspection: Value,
     provenance: Value,
     outputs: BTreeMap<String, Output>,
+    // Older plans keep their exact paths, including retained transfer checkpoints
+    // and immutable bundle evidence.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    named_files: bool,
     complete: bool,
 }
 
@@ -87,6 +94,7 @@ pub(super) fn collect(
             inspection,
             provenance,
             outputs: BTreeMap::new(),
+            named_files: true,
             complete: false,
         };
         plan.outputs = outputs(saved, &plan)?;
@@ -108,6 +116,7 @@ pub(super) fn collect(
             expected.get(name).is_none_or(|retained| {
                 output.artifact_id != retained.artifact_id
                     || output.logical_name != retained.logical_name
+                    || output.filename != retained.filename
                     || output.media_type != retained.media_type
                     || output.version_id != retained.version_id
                     || output.size_bytes != retained.size_bytes
@@ -172,7 +181,15 @@ pub(super) fn collect(
         .collect::<Vec<_>>()
     {
         let output = &plan.outputs[&name];
-        let relative = format!("results/files/{}", output.artifact_id);
+        let relative = output_path(output, plan.named_files);
+        if plan.named_files {
+            crate::collections::private_dir(
+                &directory
+                    .root
+                    .join("results/files")
+                    .join(output.artifact_id.to_string()),
+            )?;
+        }
         let checksum = output.checksum["value"]
             .as_str()
             .ok_or_else(|| invalid("Missing artifact checksum."))?
@@ -269,7 +286,7 @@ pub(super) fn collect(
         "effective_inputs":"results/effective-inputs.json","scientific_outputs":"results/outputs.json",
         "optional_output_failures":plan.inspection["result"]["optional_output_failures"],
         "original_input_files":saved.local().into_iter().flat_map(|local| local.bindings.iter()).map(|(name, binding)| json!({"slot":name,"source":binding.operation.source,"size_bytes":binding.operation.request.expected_size_bytes,"checksum":binding.operation.request.checksum})).collect::<Vec<_>>(),
-        "outputs":plan.outputs.iter().map(|(name, output)| (name.clone(),json!({"artifact_id":output.artifact_id,"logical_name":output.logical_name,"media_type":output.media_type,"version_id":output.version_id,"size_bytes":output.size_bytes,"checksum":output.checksum,"path":format!("results/files/{}",output.artifact_id)}))).collect::<BTreeMap<_,_>>()});
+        "outputs":plan.outputs.iter().map(|(name, output)| (name.clone(),json!({"artifact_id":output.artifact_id,"logical_name":output.logical_name,"media_type":output.media_type,"version_id":output.version_id,"size_bytes":output.size_bytes,"checksum":output.checksum,"path":output_path(output, plan.named_files)}))).collect::<BTreeMap<_,_>>()});
     let mut bundle = bundle;
     // Existing standard bundles are immutable retained evidence. Only trials
     // introduce additional persisted authority fields in this version-1 format.
@@ -309,7 +326,7 @@ fn collection_summary(
                     version_id: output.version_id.clone(),
                     size_bytes: output.size_bytes,
                     checksum: serde_json::from_value(output.checksum.clone())?,
-                    path: format!("results/files/{}", output.artifact_id),
+                    path: output_path(output, plan.named_files),
                 },
             ))
         })
@@ -336,6 +353,20 @@ fn collection_summary(
     };
     summary.validate().map_err(invalid)?;
     Ok(serde_json::to_value(summary)?)
+}
+
+fn output_path(output: &Output, named_files: bool) -> String {
+    let root = format!("results/files/{}", output.artifact_id);
+    if named_files {
+        let filename = download_filename(
+            output.filename.as_deref(),
+            &output.logical_name,
+            &output.media_type,
+        );
+        format!("{root}/{filename}")
+    } else {
+        root
+    }
 }
 
 fn outputs(saved: &AnalysisState, plan: &Plan) -> Result<BTreeMap<String, Output>, Error> {
@@ -429,6 +460,7 @@ fn outputs(saved: &AnalysisState, plan: &Plan) -> Result<BTreeMap<String, Output
                 .as_str()
                 .ok_or_else(|| invalid("Missing output logical name."))?
                 .into(),
+            filename: artifact["filename"].as_str().map(str::to_owned),
             media_type,
             version_id: artifact["version_id"]
                 .as_str()

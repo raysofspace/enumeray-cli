@@ -6,7 +6,10 @@ use crate::{
     failure, local_process,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
-use enumeray_contracts::models::{self, ScientificDefinition};
+use enumeray_contracts::{
+    artifact_names::valid_filename,
+    models::{self, ScientificDefinition},
+};
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -410,7 +413,25 @@ pub(crate) fn publish_from(
                 "uploads"
             },
         );
-        let request = json!({"logical_name":name,"media_type":file.media_type,"scientific_metadata":file.scientific_metadata,"expected_size_bytes":file.size_bytes,"checksum":{"algorithm":"sha256","checksum_type":"full_object","value":file.sha256}});
+        let mut request = json!({"logical_name":name,"media_type":file.media_type,"scientific_metadata":file.scientific_metadata,"expected_size_bytes":file.size_bytes,"checksum":{"algorithm":"sha256","checksum_type":"full_object","value":file.sha256}});
+        if !archive
+            && let Some(filename) = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .filter(|name| valid_filename(name))
+        {
+            request["filename"] = filename.into();
+            if serde_json::to_vec(&request)
+                .map_err(|_| failure("cannot encode output reservation"))?
+                .len()
+                > models::MAX_INPUT_BYTES
+            {
+                request
+                    .as_object_mut()
+                    .expect("request object")
+                    .remove("filename");
+            }
+        }
         let (status, bytes) = client.request(
             Method::POST,
             &base,

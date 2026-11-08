@@ -1256,6 +1256,16 @@ fn start(scratch: &Scratch, api: &Api, grace: u64) -> Child {
 }
 
 fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development: bool) -> Child {
+    start_with_origin(scratch, api, grace, allow_development, Some(&api.origin))
+}
+
+fn start_with_origin(
+    scratch: &Scratch,
+    api: &Api,
+    grace: u64,
+    allow_development: bool,
+    explicit_origin: Option<&str>,
+) -> Child {
     scratch.token(TOKEN);
     if !scratch.0.join("installation-fixture.json").exists() {
         support::install_scalar(scratch);
@@ -1281,16 +1291,12 @@ fn start_with_policy(scratch: &Scratch, api: &Api, grace: u64, allow_development
             "ENUMERAY_TOKEN",
             "user-profile-token-must-not-reach-connector",
         )
-        .arg("connector");
+        .args(["connector", "run"]);
+    if let Some(origin) = explicit_origin {
+        command.args(["--api-base-url", origin]);
+    }
     command
-        .args([
-            "run",
-            "--api-base-url",
-            &api.origin,
-            "--connector-id",
-            CONNECTOR,
-            "--journal",
-        ])
+        .args(["--connector-id", CONNECTOR, "--journal"])
         .arg(if relative {
             PathBuf::from("installation")
         } else {
@@ -1853,6 +1859,44 @@ async fn uncertain_launch_waits_for_operator_resolution_and_delivery_abandonment
             .join(old_intent.as_str().unwrap())
             .exists()
     );
+}
+
+#[tokio::test]
+async fn service_uses_matching_enrollment_and_retained_journal_origins() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = Scratch::new();
+    let api = Api::start(0, false).await;
+    let identity = scratch.0.join("identity.json");
+    let write_identity = |origin: &str| {
+        let document = json!({
+            "machine_id":Uuid::new_v4(),
+            "credential_id":Uuid::new_v4(),
+            "origin":origin,
+            "token":TOKEN
+        });
+        fs::write(&identity, serde_json::to_vec(&document).unwrap()).unwrap();
+        fs::set_permissions(&identity, fs::Permissions::from_mode(0o600)).unwrap();
+    };
+    write_identity(&api.origin);
+    let child = start_with_origin(&scratch, &api, 3, false, None);
+    service_status(&scratch, "idle").await;
+    assert_eq!(scratch.read()["api_base_url"], api.origin);
+    assert_eq!(stop(child).await["drained"], true);
+
+    write_identity("https://api.enumeray.com");
+    let child = start_with_origin(&scratch, &api, 3, false, None);
+    assert!(!child.wait_with_output().await.unwrap().status.success());
+    assert!(
+        fs::read_to_string(scratch.0.join("service.log"))
+            .unwrap()
+            .contains("enrolled credential is bound to another API origin")
+    );
+
+    fs::remove_file(&identity).unwrap();
+    let child = start_with_origin(&scratch, &api, 3, false, None);
+    service_status(&scratch, "idle").await;
+    assert_eq!(stop(child).await["drained"], true);
 }
 
 #[tokio::test]

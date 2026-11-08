@@ -20,6 +20,8 @@ const USER: &str = "22222222-2222-4222-8222-222222222222";
 const RUN: &str = "33333333-3333-4333-8333-333333333333";
 const INPUT: &str = "44444444-4444-4444-8444-444444444444";
 const OUTPUT: &str = "55555555-5555-4555-8555-555555555555";
+const OUTPUT_FILENAME: &str = "answer.csv";
+const OUTPUT_PATH: &str = "results/files/55555555-5555-4555-8555-555555555555/answer.csv";
 const UPLOAD: &str = "66666666-6666-4666-8666-666666666666";
 const GRANT: &str = "77777777-7777-4777-8777-777777777777";
 const DELEGATION: &str = "88888888-8888-4888-8888-888888888888";
@@ -372,7 +374,7 @@ impl Fixture {
     fn provenance(&self) -> Value {
         let run = self.run();
         let mut provenance = json!({"format_version":1,"publication":{"publication_id":"release-one","context_id":"context-one","compute_grant_id":GRANT,"generation":1,"execution_location":"Research compute","disclosure":"Model and compute administrators can read submitted data.","installation":candidate(self.files)["descriptor"]["installation"],"validation":null},"run":run,"definition":definition(self.files),"result":run["result"],"input_artifacts":if self.files {json!([{"name":"dataset","artifact_id":INPUT,"logical_name":"dataset","media_type":"text/csv","version_id":"version-one","size_bytes":BYTES.len(),"checksum":checksum(BYTES)}])} else {json!([])},"output_artifacts":if self.files && self.outcome == "succeeded" {
-            json!([{"name":SLOT,"artifact_id":OUTPUT,"logical_name":SLOT,"media_type":"text/csv","version_id":"version-one","size_bytes":ANSWER.len(),"checksum":checksum(ANSWER)}])
+            json!([{"name":SLOT,"artifact_id":OUTPUT,"logical_name":SLOT,"filename":OUTPUT_FILENAME,"media_type":"text/csv","version_id":"version-one","size_bytes":ANSWER.len(),"checksum":checksum(ANSWER)}])
         } else {json!([])}});
         if let Some((pointer, value)) = &self.provenance_override {
             *provenance.pointer_mut(pointer).unwrap() = value.clone();
@@ -1089,9 +1091,7 @@ fn copied_accepted_folders_keep_working_without_the_original_absolute_sources() 
             completed,
         );
         let original_checkpoint = enumeray_client::bulk::checkpoint_directory(
-            &original
-                .path()
-                .join(format!("analysis/results/files/{OUTPUT}")),
+            &original.path().join("analysis").join(OUTPUT_PATH),
         )
         .unwrap();
         let relative_checkpoint = original_checkpoint
@@ -1132,12 +1132,7 @@ fn copied_accepted_folders_keep_working_without_the_original_absolute_sources() 
             true
         );
         assert_eq!(
-            fs::read(
-                recovered
-                    .path()
-                    .join(format!("analysis/results/files/{OUTPUT}"))
-            )
-            .unwrap(),
+            fs::read(recovered.path().join("analysis").join(OUTPUT_PATH)).unwrap(),
             ANSWER
         );
         // A checkpoint tied to the old absolute destination remains retained evidence.
@@ -1999,7 +1994,7 @@ fn file_upload_recovers_reservation_and_completion_and_collection_preserves_conf
     server.call(root.path(), &["analysis", "collect", "analysis"], false);
     assert!(!root.path().join("analysis/bundle.json").exists());
     let checkpoint = enumeray_client::bulk::checkpoint_directory(
-        &root.path().join(format!("analysis/results/files/{OUTPUT}")),
+        &root.path().join("analysis").join(OUTPUT_PATH),
     )
     .unwrap()
     .join("state.json");
@@ -2011,12 +2006,9 @@ fn file_upload_recovers_reservation_and_completion_and_collection_preserves_conf
     server.fixture.lock().unwrap().expired_authorization = false;
     server.call(root.path(), &["analysis", "collect", "analysis"], true);
     let bundle = read(root.path(), "analysis/bundle.json");
+    assert_eq!(bundle["outputs"][SLOT]["path"], OUTPUT_PATH);
     assert_eq!(
-        bundle["outputs"][SLOT]["path"],
-        format!("results/files/{OUTPUT}")
-    );
-    assert_eq!(
-        fs::read(root.path().join(format!("analysis/results/files/{OUTPUT}"))).unwrap(),
+        fs::read(root.path().join("analysis").join(OUTPUT_PATH)).unwrap(),
         ANSWER
     );
     assert!(!root.path().join("hostile%output").exists());
@@ -2027,14 +2019,10 @@ fn file_upload_recovers_reservation_and_completion_and_collection_preserves_conf
     plan["complete"] = json!(false);
     fs::write(&collection, serde_json::to_vec(&plan).unwrap()).unwrap();
     server.call(root.path(), &["analysis", "collect", "analysis"], true);
-    fs::write(
-        root.path().join(format!("analysis/results/files/{OUTPUT}")),
-        b"unrelated",
-    )
-    .unwrap();
+    fs::write(root.path().join("analysis").join(OUTPUT_PATH), b"unrelated").unwrap();
     server.call(root.path(), &["analysis", "collect", "analysis"], false);
     assert_eq!(
-        fs::read(root.path().join(format!("analysis/results/files/{OUTPUT}"))).unwrap(),
+        fs::read(root.path().join("analysis").join(OUTPUT_PATH)).unwrap(),
         b"unrelated"
     );
     assert_eq!(
@@ -2048,6 +2036,54 @@ fn file_upload_recovers_reservation_and_completion_and_collection_preserves_conf
             .count(),
         1
     );
+}
+
+#[test]
+fn collection_uses_a_safe_fallback_and_preserves_a_legacy_plan_path() {
+    for legacy in [false, true] {
+        let server = Server::new(true);
+        let root = tempfile::tempdir().unwrap();
+        server.init(root.path(), true);
+        server.call(root.path(), &["analysis", "submit", "analysis"], true);
+        server.fixture.lock().unwrap().provenance_override = Some((
+            "/output_artifacts/0/filename".into(),
+            json!("../escape.csv"),
+        ));
+        if legacy {
+            server.call(
+                root.path(),
+                &["analysis", "collect", "analysis", "--evidence-only"],
+                true,
+            );
+            let mut plan = read(root.path(), "analysis/state/collection.json");
+            plan.as_object_mut().unwrap().remove("named_files");
+            fs::write(
+                root.path().join("analysis/state/collection.json"),
+                serde_json::to_vec(&plan).unwrap(),
+            )
+            .unwrap();
+        }
+        let expected = if legacy {
+            format!("results/files/{OUTPUT}")
+        } else {
+            format!("results/files/{OUTPUT}/artifact.csv")
+        };
+        for _ in 0..2 {
+            server.call(root.path(), &["analysis", "collect", "analysis"], true);
+            let bundle = read(root.path(), "analysis/bundle.json");
+            assert_eq!(bundle["outputs"][SLOT]["path"], expected);
+            assert_eq!(
+                fs::read(root.path().join("analysis").join(&expected)).unwrap(),
+                ANSWER
+            );
+        }
+        assert!(
+            !root
+                .path()
+                .join("analysis/results/files/escape.csv")
+                .exists()
+        );
+    }
 }
 
 #[test]

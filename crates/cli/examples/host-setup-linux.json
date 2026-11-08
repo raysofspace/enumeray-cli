@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "api_base_url": "https://enumeray.example.org",
+  "api_base_url": "https://api.enumeray.com",
   "context": {
     "id": "lab-cpu",
     "connector_id": "lab-connector",

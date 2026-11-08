@@ -8,10 +8,10 @@ use std::path::PathBuf;
     about = "Model execution and connector management"
 )]
 pub struct Args {
-    /// User API origin override; defaults to the selected profile or https://enumeray.com. Credentials never cross origins. Host/runner commands use explicit configuration.
+    /// User API origin override; defaults to the selected profile or https://api.enumeray.com. Credentials never cross origins. Connector host commands use their own API settings.
     #[arg(long, global = true)]
     pub api: Option<String>,
-    /// Named local user API/login profile; host/runner commands use explicit configuration.
+    /// Named local user API/login profile; connector host and runner commands do not use it.
     #[arg(long, default_value = "default", global = true)]
     pub profile: String,
     /// Private user profiles file; defaults to $XDG_CONFIG_HOME/enumeray/profiles.json or ~/.config/enumeray/profiles.json.
@@ -120,9 +120,9 @@ pub struct Setup {
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum SetupMode {
-    /// Run trusted model code under one regular OS account.
+    /// Run trusted model code as your current user without administrator host changes.
     Development,
-    /// Separate connector and model execution identities.
+    /// Isolate the connector from model execution under separate OS accounts; requires administrator host preparation.
     Managed,
 }
 
@@ -382,11 +382,11 @@ pub enum Auth {
     Logout,
     /// Inspect the authenticated account, stable user ID and authority.
     Whoami,
-    /// List configured profiles without credentials.
+    /// List saved local profiles and their API origins without revealing credentials.
     Profiles,
     /// Create/select this profile's API origin; changing origin clears old credentials.
     Configure {
-        /// API origin to save in this profile, for example https://enumeray.example.org.
+        /// API origin supplied by the administrator of another deployment.
         api_url: String,
     },
     /// Create a scoped, expiring token and save the secret to a private file.

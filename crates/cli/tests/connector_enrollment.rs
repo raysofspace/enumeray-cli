@@ -178,9 +178,11 @@ fn creation_and_replacement_publish_private_documents_with_compatible_summaries(
                 !String::from_utf8_lossy(&output.stdout)
                     .contains(&URL_SAFE_NO_PAD.encode(SECRET_BYTES))
             );
+            let mut expected = document();
+            expected["api_base_url"] = json!(server.origin.trim_end_matches('/'));
             assert_eq!(
                 serde_json::from_slice::<Value>(&fs::read(&destination).unwrap()).unwrap(),
-                document()
+                expected
             );
             #[cfg(unix)]
             {

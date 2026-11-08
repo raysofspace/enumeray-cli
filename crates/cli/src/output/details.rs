@@ -15,12 +15,18 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 &[
                     ("Status", "/status"),
                     ("Setup directory", "/directory"),
+                    ("Profile", "/profile"),
+                    ("API", "/api_url"),
+                    ("Mode", "/mode"),
                     ("Connector", "/connector_id"),
                     ("Context", "/context_id"),
+                    ("Connector account", "/connector_account"),
+                    ("Execution account", "/execution_account"),
                     ("Startup", "/startup"),
                     ("Configuration", "/configuration"),
                     ("Setup approval", "/plan_sha256"),
                     ("Host approval", "/host_plan_sha256"),
+                    ("Host plan", "/host_plan"),
                     ("Configured", "/diagnostics/setup/configured"),
                     ("Connected", "/diagnostics/setup/connected"),
                     ("Ready", "/diagnostics/setup/ready"),
@@ -30,12 +36,24 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 ],
             );
             if let Some(commands) = value["commands"].as_object() {
-                for (label, command) in commands {
-                    if let Some(parts) = command.as_array() {
+                for (key, label) in [
+                    ("apply_host", "Apply host plan"),
+                    ("start", "Start connector"),
+                    ("resume", "Resume setup"),
+                ] {
+                    if key != "resume"
+                        && matches!(
+                            value["status"].as_str(),
+                            Some("review_required" | "development_consent_required")
+                        )
+                    {
+                        continue;
+                    }
+                    if let Some(parts) = commands.get(key).and_then(Value::as_array) {
                         let quoted = parts
                             .iter()
                             .filter_map(Value::as_str)
-                            .map(|part| format!("'{}'", part.replace('\'', "'\\''")))
+                            .map(super::shell_word)
                             .collect::<Vec<_>>()
                             .join(" ");
                         field(output, label, Some(&Value::String(quoted)));

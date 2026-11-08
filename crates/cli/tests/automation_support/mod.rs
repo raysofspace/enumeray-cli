@@ -23,7 +23,7 @@ pub fn specimen(
     replacements.extend([
         (canonical_root.as_str(), "/private/enumeray-example"),
         (root_text.as_str(), "/private/enumeray-example"),
-        (origin, "https://enumeray.example.org/"),
+        (origin, "https://api.enumeray.com/"),
     ]);
     normalize(&mut transcript, &replacements);
     save(name, &transcript);

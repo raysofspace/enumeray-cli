@@ -31,9 +31,10 @@ pub struct Options {
     /// Connector-owned capture/archive policy, pinned before launch.
     #[arg(long)]
     log_policy_file: Option<PathBuf>,
-    /// API origin bound to the enrolled identity; non-loopback HTTP requires --allow-insecure-http.
+    /// API origin, inferred from the retained journal or matching enrollment identity when omitted.
+    /// Non-loopback HTTP requires --allow-insecure-http.
     #[arg(long)]
-    api_base_url: String,
+    api_base_url: Option<String>,
     /// Enrolled connector ID; must match the token and retained journal.
     #[arg(long)]
     connector_id: String,
@@ -104,23 +105,52 @@ pub fn run(options: Options) -> Result<Value> {
             "max-pending-assignments must be at least max-workers",
         ));
     }
-    let origin =
-        super::client::validate_origin(&options.api_base_url, options.allow_insecure_http)?;
-    let mut journal = if options
+    let explicit_origin = options
+        .api_base_url
+        .as_deref()
+        .map(|origin| super::client::validate_origin(origin, options.allow_insecure_http))
+        .transpose()?;
+    let retained_journal = if options
         .journal
         .join("journal.json")
         .try_exists()
         .map_err(|_| failure("cannot inspect journal"))?
     {
-        Journal::open(&options.journal)?
+        Some(Journal::open(&options.journal)?)
     } else {
-        Journal::initialize_service(
+        None
+    };
+    let enrollment_origin = if explicit_origin.is_none() {
+        super::control::enrolled_token_origin(&options.token_file)?
+    } else {
+        None
+    };
+    let origin = explicit_origin
+        .as_deref()
+        .or(retained_journal
+            .as_ref()
+            .map(|journal| journal.data.api_base_url.as_str()))
+        .or(enrollment_origin.as_deref())
+        .ok_or_else(|| {
+            failure(
+                "use --api-base-url when starting a new journal without its enrollment identity",
+            )
+        })?;
+    let origin = super::client::validate_origin(origin, options.allow_insecure_http)?;
+    if enrollment_origin.is_some_and(|enrolled| enrolled != origin) {
+        return Err(failure(
+            "enrolled credential is bound to another API origin",
+        ));
+    }
+    let mut journal = match retained_journal {
+        Some(journal) => journal,
+        None => Journal::initialize_service(
             &options.journal,
             origin.clone(),
             options.connector_id.clone(),
             options.recovery_mode == Recovery::ExclusiveLocal,
             options.allow_insecure_http,
-        )?
+        )?,
     };
     if journal.data.api_base_url != origin || journal.data.connector_id != options.connector_id {
         return Err(failure(

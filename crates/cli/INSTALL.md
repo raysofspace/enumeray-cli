@@ -307,8 +307,9 @@ does not install other targets. Confirm that the selected version's release
 assets are published before downloading; an example version alone does not
 establish availability.
 
-Set `API_ORIGIN` to the service origin supplied by its owner. The block below
-uses the verified extracted executable for a check **before replacement**. For
+The block uses the hosted API by default. For another deployment, set
+`API_ORIGIN` to the address supplied by its owner. It uses the verified
+extracted executable for a check **before replacement**. For
 an already installed package, replace the `ENUMERAY_BIN` assignment with
 `ENUMERAY_BIN=enumeray`. `EVIDENCE` must name a new directory: an interrupted or
 failed attempt leaves its original files intact, so select a fresh directory for
@@ -320,7 +321,7 @@ EVIDENCE="$PWD/release-evidence-$TAG"
 ENUMERAY_BIN="$EXTRACTED/enumeray"
 (
   set -eu
-  : "${API_ORIGIN:?Set the approved service API origin}"
+  API_ORIGIN="${API_ORIGIN:-https://api.enumeray.com}"
   mkdir "$EVIDENCE"
   for file in release-manifest.json release-manifest.json.sigstore.json \
               service-publish.json service-publish.sigstore.json; do
@@ -405,7 +406,8 @@ site as its examples, not from an unrelated current site.
 
 ## Login and profiles
 
-The CLI connects to https://enumeray.com without separate service configuration:
+With a fresh configuration, the CLI connects to https://api.enumeray.com.
+Sign in directly:
 
 ```sh
 enumeray auth login
@@ -445,7 +447,7 @@ enumeray --profile analysis auth whoami
 
 For another service, configure the `analysis` profile with that same service's
 origin before importing its token. An unconfigured named profile uses
-https://enumeray.com even when a different profile selects another service.
+https://api.enumeray.com even when a different profile selects another service.
 
 Import only the `token` value. Add artifact/upload scopes for files and
 `runs:cancel` for cancellation. Tokens retain the account's resource restrictions;
@@ -455,12 +457,13 @@ than browser refresh. Inspect `auth token-list` and revoke unused tokens with
 `auth token-revoke TOKEN_UUID`. After a lost creation reply, inspect inventory
 and revoke uncertain credentials before deliberately creating another.
 
-Profiles and credential state are private. `--profile` selects a named service
-(default `default`); `--config` selects another profiles file. Origin selection
-uses `--api` first, then the selected saved profile, then https://enumeray.com
-when that profile has not been configured. Existing profiles, including
-api.enumeray.com, keep their saved origins. A failed connection never selects a
-different service. Configure an alternate origin before importing its token.
+Profiles and credential state are private. `--profile` selects a saved login
+and service. The name is `default` when you omit this option. `--config` selects
+another profiles file. Origin selection uses `--api` first, then the selected
+saved profile, then https://api.enumeray.com. `enumeray auth profiles` lists the
+saved names and origins. Reuse an existing profile for the hosted API, including
+one saved with the earlier https://enumeray.com address. Configure an alternate
+deployment's origin before importing its token.
 API origin changes clear saved credentials, and `--api` never forwards a profile token to a different
 origin. An explicit `ENUMERAY_TOKEN` takes precedence over the selected profile;
 pair it with its intended origin. Saved browser sessions renew automatically

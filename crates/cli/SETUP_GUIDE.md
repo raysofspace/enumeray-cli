@@ -8,31 +8,26 @@ package is unavailable.
 
 ## Choose a mode and save the journey
 
-Run setup as your regular OS user. You need your service's API origin and an
-account that can register a connector and model. The wizard guides profile
-selection and browser login using the existing authentication mechanisms.
+Run setup as your regular OS user with an Enumeray account that can register a
+connector. A first-model trial also requires model author authority. The wizard
+uses your selected profile and offers browser login if needed. For the hosted
+service at `enumeray.com`, setup defaults to `https://api.enumeray.com` and login
+opens `auth.enumeray.com` without URL configuration. If you saved a profile for
+another deployment, use `--profile NAME` to select the intended profile.
 
 ```sh
 enumeray setup --directory enumeray-setup
 ```
 
-Choose **development** for trusted process/direct experiments under your existing
-OS account. The wizard proposes user-owned model, work and connector directories.
-Explicitly acknowledge that model code can access this user's files and connector
-credentials. Development does not grant isolation between that user's processes.
+| Mode | When to choose it | After approving the setup plan |
+| --- | --- | --- |
+| **Development** | Trusted local experiments where the connector and model can run as your current OS user. | Acknowledge same-user access. The wizard prepares the directories, enrolls the connector and checks local prerequisites. Continue to [startup](#start-and-establish-readiness). |
+| **Managed** | A site connector with a dedicated connector account and a separate model execution account. | Follow the [administrator step](#apply-managed-host-changes-explicitly) before startup, including foreground startup. |
 
-Choose **managed** for a dedicated connector account and a separate execution
-identity. Same-host setup suggests your existing login account for model execution.
-You may select another existing account or supply an explicitly reviewed account
-creation plan. Managed setup supports process/Slurm over direct/SSH on Linux and
-macOS. Slurm allocation, compute-node visibility, modules and scientific runtimes
-remain site responsibilities. For SSH, supply the execution account, a private
-credential reference and a trusted host key through your site's approved route.
-
-Review the proposed accounts, directories, executable, destination and startup
-choice before approval. Foreground is the suggested startup choice. A foreground
-plan does not install a background service. A background plan explicitly includes
-systemd or launchd configuration.
+You can select a mode in the wizard or pass `--mode development` or
+`--mode managed` on the first run. Review the proposed accounts, directories,
+executable, execution location, data access disclosure, startup and first-model
+choices in the saved plan before approval.
 
 The private setup directory retains the original profile/API binding, operation
 identities, host plan and progress. User login credentials stay in the private
@@ -52,17 +47,54 @@ an expired login for the same API/account and resume the original directory.
 Changing mode, origin or frozen settings requires a new reviewed plan; preserve
 existing journals, credentials and release evidence.
 
+## Development setup under your current user
+
+1. Choose **development**. The wizard selects the local process driver and direct
+   connection. Choose a user-owned directory for connector state, model
+   installations and execution work.
+2. Review the plan and explicitly acknowledge that model code can read your files
+   and connector credentials. Use models you trust with that access.
+3. Sign in if prompted. The wizard prepares the host under your account, enrolls
+   the connector and runs local preflight. **Skip the managed host changes section.
+   Development needs neither `sudo` nor `setup apply-host`.** Use the displayed
+   [start command](#start-and-establish-readiness) as your regular user.
+
+## Managed setup with separate accounts
+
+Select a dedicated connector account. You can require an existing connector
+account or authorize the administrator to create it if absent. Same-host
+execution defaults to your current OS account. The wizard also accepts a
+different existing local account or an existing account on the SSH host.
+Use a reviewed [scripted host specification](#script-the-same-saved-workflow)
+if the administrator must create the execution account.
+
+Choose an execution driver and connection independently. These choices support
+four combinations across Linux and macOS hosts:
+
+| Choice | What it requires |
+| --- | --- |
+| **Process** driver | Launches the model directly on the execution host. Install the model's runtime and dependencies on that host. |
+| **Slurm** driver | Submits model jobs to the site's scheduler. The site supplies an allocation, a prepared batch script, shared paths, the scientific runtime and an Enumeray executable visible to compute nodes. |
+| **Direct** connection | Uses a restricted sudo rule to launch as the separate execution account on the connector host. Its administrator prepares both identities in one host step. |
+| **SSH** connection | Uses a separate execution host. Its administrator prepares the runner and execution paths. The site provisions access for the connector, a private SSH credential reference and a verified host key. |
+
+The connector account needs its own private state. Use paths valid on the
+execution host for model installations and work. For Slurm, choose paths the
+allocated compute nodes can reach.
+
 ## Apply managed host changes explicitly
 
-The wizard prints complete commands with the installed executable, saved paths
-and host approval digest. Review the host specification before running the
-administrator helper. It copies the approved executable into the protected site
-path used by the connector and runner. A model user's writable Homebrew prefix
-is unsuitable for that runner boundary; follow the installation and connector
-guides for protected installation details.
+After the owner approves the managed plan, the wizard registers the connector
+and displays the host plan, enrollment document path and
+approval digest for the administrator. Review the host specification before
+running the helper. For direct execution, the helper prepares the connector and
+execution sides locally. For SSH, prepare the execution host first. If the
+connector account already exists, provision its SSH access before applying the
+connector plan. If the helper creates the account, provision its SSH access
+after the first connector-side apply and repeat that apply to check local
+prerequisites again.
 
-The administrator step has this form, using the actual paths and digest printed
-by setup:
+On the connector host, use the actual paths and digest printed by setup:
 
 ```sh
 sudo /path/to/installed/enumeray setup apply-host \
@@ -70,12 +102,12 @@ sudo /path/to/installed/enumeray setup apply-host \
   --approve HOST_PLAN_SHA256 --enrollment-file /absolute/setup/enrollment-0000.json
 ```
 
-Apply validates typed operations and the exact approved digest. It checks existing
-identities, creates only approved missing accounts/directories, installs the
-reviewed executable and restricted runner rule, and installs service configuration
-only when background operation was selected. Enrollment runs as the connector
-account without loading the owner's profile. Local prerequisite results are
-returned separately; preparation alone does not establish readiness.
+Apply validates the approved digest, checks existing identities, and creates
+approved missing accounts and directories. It installs the reviewed executable in
+a protected site path and, for direct execution, installs the restricted runner
+rule. Managed background plans also install system service configuration.
+Enrollment and local preflight run as the connector account. Check the local
+preflight report before starting the connector.
 
 A repeat verifies and reuses completed work. Conflicting identities, permissions
 or files are preserved and reported for administrator correction. No account,
@@ -87,7 +119,11 @@ For an SSH execution host, run the same helper **locally on that host** with
 `--executable-source /local/path/to/enumeray` can select that host's copy of the
 executable only when its bytes match the plan's approved SHA-256. Never transfer
 connector bearer credentials or private SSH keys to the model execution account.
-The site's SSH access and verified `known_hosts` entry remain explicit.
+Use the `credentials_file` path saved in the host plan for the connector
+account's private SSH key map. Provision the matching public key for the remote
+account and the verified host key in the connector account's `known_hosts`.
+See the [SSH credential layout](../connector/README.md#enrollment-and-service-operation)
+for which files belong on each host.
 
 SSH hosts with another OS or CPU can use a different native artifact. Review its
 `execution_executable_sha256` in the host specification and pass that artifact's
@@ -97,19 +133,24 @@ continues to use `executable_sha256`.
 
 ## Start and establish readiness
 
-As the configured connector OS account, use the saved runtime file printed by setup:
+Choose **foreground** for a connector attached to a terminal, or **background**
+for the native service manager. Run the start command printed by setup:
+
+| Startup | Development | Managed |
+| --- | --- | --- |
+| **Foreground** (default) | Run as your current user. | Run as the dedicated connector account after applying the host plan. |
+| **Background** | Run as your logged-in user. Starts a user-level systemd service on Linux or a LaunchAgent on macOS. | An administrator starts the systemd service or LaunchDaemon installed by the reviewed background host plan. On Linux, site policy controls boot enablement. |
+
+For example, development foreground startup and status use the saved runtime file:
 
 ```sh
 enumeray connector start --configuration /absolute/connector/runtime.json --foreground
 enumeray connector status --configuration /absolute/connector/runtime.json
 ```
 
-Foreground start occupies that terminal. Resume setup in another terminal. To
-request the reviewed native background service instead, use `--background`;
-managed background startup requires an administrator invocation. Systemd startup
-starts the installed unit; administrators control boot enablement through site
-policy. LaunchDaemons use the explicitly selected background configuration.
-Native managed-service lifecycle qualification remains a separate activity.
+Foreground start occupies its terminal. Resume the original setup directory in
+another terminal. With background startup, resume in the same terminal after the
+start command returns.
 
 The runtime file contains credential **paths**, not credential values. `--configuration`
 is distinct from the global `--config` profile-file option. Host start/status do
@@ -125,14 +166,18 @@ validation or compute authorization.
 
 ## Trial a starter or existing project
 
-Choose the existing Python starter or an author project containing
-`publication.json`. Python is needed only for models that use it; setup does not
-install scientific runtimes, dependencies or datasets. For Slurm, prepare the
-site-specific batch script before freezing the release.
-The wizard reads an existing project's model ID and examples, offers an already
-installed release, and accepts local file and collection bindings. Saved input
-paths must be absolute so resuming from another working directory selects the
-same inputs.
+Choose **demo** to generate a small Python starter and trial it on your connector,
+**project** to use an author project containing `publication.json`, or **later**
+to finish at connector readiness and prepare a model separately.
+
+For a project, the wizard reads its model ID and named input examples. Choose a
+declared example or provide your own scientific inputs JSON file. The wizard
+also accepts local file and collection bindings and can select an already
+installed release. Saved input and installation paths must be absolute.
+
+Install Python for the demo and prepare the runtime, dependencies and data needed
+by your own project. For Slurm, prepare the site-specific batch script before
+freezing the release.
 For a generated Slurm starter, setup pauses for this work; resume with
 `--confirm-model-preparation` after reviewing the site's allocation and runtime setup.
 
@@ -177,12 +222,15 @@ Provide a version-1 JSON input with `host` (the existing `HostSetupSpec`), `conn
 and optional `first_model`. Start from the existing
 [development host specification](examples/host-setup-development.json),
 [Linux host specification](examples/host-setup-linux.json) or
-[macOS host specification](examples/host-setup-macos.json) and replace all example accounts and absolute paths.
+[macOS host specification](examples/host-setup-macos.json). Replace example accounts
+and absolute paths. The examples already use the hosted API origin.
 
 For background operation set `host.install_service` to `true`; otherwise leave it
 `false`. Managed executable copying needs `executable_source` and
 `executable_sha256`, obtained from the matching reviewed installation. These are
-saved automatically by the interactive wizard.
+saved automatically by the interactive wizard. A managed account can set
+`create: true` to authorize creation when absent. For a macOS account creation
+plan, supply explicitly reviewed unused `uid` and `gid` values.
 
 `first_model` chooses exactly one of `demo: true` or `project: "/absolute/project"`,
 and supplies `model_id` plus `example` or `inputs`. Optional `installed_release`

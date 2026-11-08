@@ -5,7 +5,8 @@ and HTTP API. This repository owns the independent `enumeray` executable, typed
 HTTP client, outbound connector, compute runner and shared wire contracts.
 
 One executable supports model users, model authors and connector owners.
-It connects to https://enumeray.com by default; sign in with `enumeray auth login`.
+It connects to the hosted API at https://api.enumeray.com by default. Sign in
+with `enumeray auth login`.
 The hosted trial provides HUXt solar-wind and REBOUND orbital models on managed
 compute, so trying an analysis needs no connector of your own. Follow
 [your first run](https://doc.enumeray.com/start/first-run/) after installing the CLI.
