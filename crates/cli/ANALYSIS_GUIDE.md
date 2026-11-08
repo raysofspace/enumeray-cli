@@ -5,26 +5,42 @@ the inputs you review, the run receipt and the results you collect. Use the
 same directory to resume an interrupted run.
 
 Before starting, install the CLI and sign in to the service that has your
-model. You need its model ID and permission to run it.
+model. You need its model ID and permission to run it. The commands use the
+`research` profile from the team sign-in example. Replace `research` with the
+profile you signed in to. Use `trial` if you came from the hosted trial.
 [Find a model and get access](https://doc.enumeray.com/users/discovery-access/)
 or [check hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
 
 ## Initialize and review
 
-Use `enumeray model get MODEL_ID` with your model's ID to check the input
-schema, named examples and any file slots. Read the units, required values and
-accepted file types. The examples below all use a new directory named
-`analysis`. Choose one path and substitute your model ID and inputs as needed.
-If you sign in with a named profile, pass the same `--profile NAME` after
-`enumeray` in every command.
+Use `enumeray --profile research model get MODEL_ID` with your model's ID to
+check the required parameters, units and file types. From a folder where you
+can keep your work, create a fresh private working directory for the example.
+
+```sh
+RUN_WORK_DIR=$(mktemp -d "$PWD/enumeray-run.XXXXXX") &&
+  cd "$RUN_WORK_DIR" &&
+  pwd
+```
+
+Choose one input method below. Each one creates an `analysis` directory inside
+this working directory. Keep working from the printed path for the rest of
+the example. Substitute your model ID and inputs if you have your own model.
+
+To run the starter commands as written, ask a teammate to
+[publish and activate the matching starter](https://doc.enumeray.com/authors/publication/#review-and-activate)
+on your service as `example` for JSON inputs or `csv-example` for a file
+input. The downloaded `starter-python-json` is a local starter project. Use
+the model ID your teammate published when you submit to Enumeray.
 
 ### Use a named example
 
 If the model publishes the input example you want, use its exact name. The
-scalar starter, published as `example`, provides `starter-example`.
+JSON starter provides `starter-example` when published as `example`.
 
 ```sh
-enumeray analysis init example --directory analysis --example starter-example
+enumeray --profile research analysis init example --directory analysis \
+  --example starter-example
 ```
 
 ### Supply JSON parameters
@@ -34,11 +50,15 @@ The scalar starter accepts `{"value":2}`. Use the fields and units from
 your model's input schema.
 
 ```sh
-umask 077
-cat > inputs.json <<'JSON'
+(
+  set -eC
+  umask 077
+  cat > example-inputs.json <<'JSON'
 {"value":2}
 JSON
-enumeray analysis init example --directory analysis --inputs inputs.json
+  enumeray --profile research analysis init example --directory analysis \
+    --inputs example-inputs.json
+)
 ```
 
 ### Bind local files
@@ -49,17 +69,20 @@ its `dataset` slot. An empty JSON object is enough because the binding supplies
 that input. For a model that also needs parameters, put them in the JSON object.
 
 ```sh
-umask 077
-cat > file-inputs.json <<'JSON'
+(
+  set -eC
+  umask 077
+  cat > file-inputs.json <<'JSON'
 {}
 JSON
-cat > dataset.csv <<'CSV'
+  cat > dataset.csv <<'CSV'
 index,value
 0,1
 1,2
 CSV
-enumeray analysis init csv-example --directory analysis \
-  --inputs file-inputs.json --file dataset=dataset.csv
+  enumeray --profile research analysis init csv-example --directory analysis \
+    --inputs file-inputs.json --file dataset=dataset.csv
+)
 ```
 
 If the slot accepts more than one media type, add `--media-type SLOT=TYPE`.
@@ -77,7 +100,7 @@ the **Disclosure** of who can access the data, and any **Local input
 bindings**. Check the saved source paths if you attached files.
 
 ```sh
-enumeray analysis status analysis
+enumeray --profile research analysis status analysis
 ```
 
 Initialization saves a copy of the inputs and the execution details. You can
@@ -89,20 +112,21 @@ size and checksum of a bound file without uploading it at this step.
 When you're satisfied with the inputs and where the run will happen, submit it.
 
 ```sh
-enumeray analysis submit analysis
+enumeray --profile research analysis submit analysis
 ```
 
 The first submit freezes the inputs, uploads any bound files and sends the
 run request. After submission returns a receipt, wait for the outcome.
 
 ```sh
-enumeray analysis wait analysis --check-outcome
+enumeray --profile research analysis wait analysis --check-outcome
 ```
 
-Use `enumeray analysis status analysis` for a single check. A run is
-`queued` or `running` while the service prepares, executes or delivers its
-work. A final state is `succeeded`, `failed` or `cancelled`. A local wait
-deadline or Ctrl-C ends observation. Use the same directory to resume waiting.
+Use `enumeray --profile research analysis status analysis` for a single
+check. A run is `queued` or `running` while the service prepares, executes or
+delivers its work. A final state is `succeeded`, `failed` or `cancelled`. A
+local wait deadline or Ctrl-C ends observation. Use the same directory to
+resume waiting.
 [Read logs](https://doc.enumeray.com/users/logs-provenance/) or
 [cancel a run](https://doc.enumeray.com/users/cancellation-retries/#request-cancellation).
 
@@ -120,7 +144,7 @@ initialize a new directory and review the new details.
 When the run reaches a final state, collect its record and available results.
 
 ```sh
-enumeray analysis collect analysis
+enumeray --profile research analysis collect analysis
 ```
 
 Look for **Collection complete: yes** in the terminal. Check the scientific
@@ -167,9 +191,10 @@ If you lost the directory but know the service accepted the run, attach it to
 a new directory. Use one command with the original run ID or receipt.
 
 ```sh
-enumeray analysis attach RUN_UUID --directory recovered-analysis
+enumeray --profile research analysis attach RUN_UUID --directory recovered-analysis
 # Or, if you have the acceptance receipt:
-enumeray analysis attach --receipt run-receipt.json --directory recovered-analysis
+enumeray --profile research analysis attach --receipt run-receipt.json \
+  --directory recovered-analysis
 ```
 
 The receipt is the object in `state/receipt.json` or the nested `receipt` from
@@ -182,7 +207,8 @@ cancellation authority can cancel.
 Repeat an interrupted attach with the same ID or receipt and destination. The
 CLI preserves conflicting evidence and unrelated directories. If you have no
 receipt and do not know whether a run was accepted, search your authorized
-`enumeray run list` history. A missing entry leaves acceptance uncertain.
+`enumeray --profile research run list` history. A missing entry leaves
+acceptance uncertain.
 Preserve the original request before deciding whether to submit another run.
 
 ### Recover a saved request file
@@ -191,14 +217,16 @@ If you have a standalone prepared request file, import it into a private
 analysis directory.
 
 ```sh
-enumeray analysis import --prepared prepared-run.json --directory imported-analysis
+enumeray --profile research analysis import --prepared prepared-run.json \
+  --directory imported-analysis
 ```
 
 The import is local and keeps the request's original service, account and
 retry key. Keep the source file. To submit or recover that exact request,
 sign in to the original service and account, review the imported request and
-explicitly run `enumeray analysis submit imported-analysis`. The service can
-return the original acceptance or evaluate a request that was never accepted.
+explicitly run `enumeray --profile research analysis submit imported-analysis`.
+The service can return the original acceptance or evaluate a request that was
+never accepted.
 If it rejects the request, inspect the response before preparing another run.
 
 ## Copied-folder use

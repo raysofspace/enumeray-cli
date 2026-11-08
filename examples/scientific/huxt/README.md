@@ -1,35 +1,68 @@
 # HUXt: a synthetic rotating fast stream
 
-What happens when a fast stream of solar wind catches slower wind? This HUXt 5.0.3 example lets you vary the two speeds and the width of the fast sector. It models outward flow between 30 and 240 solar radii along one meridian.
+How does a faster stream of solar wind change the speed measured at Earth's
+distance from the Sun? This HUXt 5.0.3 example models outward flow between 30
+and 240 solar radii along one meridian. You can change the speed of either wind
+or the width of the fast sector.
 
-The model starts from a synthetic wind speed profile. It illustrates wind propagation under a fixed set of assumptions. It excludes coronal mass ejections, magnetic fields, density, temperature and the other physics of a full magnetohydrodynamic simulation. Use it to explore how the model responds to different wind profiles.
+The model starts from an idealized wind speed profile. Use it to explore how
+the model responds to that starting profile. It models wind speed alone.
 
 ## Run the fast-stream example
 
-Check [hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
-Once you have access and an approved CLI for the trial's API address, follow
-[your first run](https://doc.enumeray.com/start/first-run/). Choose the
-[HUXt solar-wind example](https://doc.enumeray.com/start/first-run/#huxt-solar-wind).
-The hosted model ID is `demo-huxt` and the example is `fast-stream`. It sets the slow wind to 350 km/s, the fast stream to 700 km/s and the sector width to 30°.
+The default case sets the slow wind to 350 km/s, the fast stream to 700 km/s
+and the sector width to 30°. [Download the sample result](sample-run.zip) to see
+its data, plot and checks before installing anything.
 
-When the walkthrough finishes, read the files in its `first-run` folder.
+To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
+and run this command from `examples/scientific`.
+
+```sh
+.venv/bin/python run_example.py huxt --directory huxt-default
+```
+
+If you have access to the [hosted trial](https://doc.enumeray.com/start/hosted-release/),
+you can also run [`demo-huxt` with `fast-stream`](https://doc.enumeray.com/start/first-run/#huxt-solar-wind).
 
 ## Read the speed field and the 1 AU summary
 
-Open `first-run/bundle.json` for the local paths to these outputs.
+Open these files in the sample ZIP or in `huxt-default` after a local run.
 
-| Output name | What to open |
+| File | What to look for |
 | --- | --- |
-| `wind_field_csv` | `wind-field.csv` contains 30,597 rows of `time_days,radius_au,speed_kms`, sorted by time then radius. |
-| `wind_plot_png` | `wind.png` shows a radius–time speed heatmap and a time series at 1 AU. |
+| `wind.png` | The heatmap shows wind speed over distance and time. The line plot shows speed over time at 1 AU. |
+| `wind-field.csv` | The 30,597 data rows give time in days, distance in AU and speed in km/s, sorted by time and then distance. |
+| `outputs.json` | `min_speed_1au_kms`, `peak_speed_1au_kms` and `peak_time_days` summarize the line plot. |
 
-The CLI saves each file under its own `results/files/<artifact-uuid>/` directory. The summary at `first-run/results/outputs.json` contains `min_speed_1au_kms`, `peak_speed_1au_kms` and `peak_time_days`. For the default inputs, expect a minimum near **401.0803 km/s** and a peak near **802.1606 km/s** at **4.283708 days**. The model includes prescribed residual acceleration, which helps explain why the peak near 1 AU is greater than the inner-boundary fast speed.
+In the default run, speed at 1 AU ranges from **401.0803 km/s** to a peak near
+**802.1606 km/s** at **4.283708 days**. The model adds residual acceleration as
+the wind travels outward, so the peak at 1 AU exceeds the starting fast speed.
 
-The summary interpolates speed at 1 AU between radial cells. The reported peak time is the first saved time whose speed is within `1e-9` relative of the maximum. Keep `first-run/results/provenance.json` with the data and plot. Demo data is temporary, so collect the files you need.
+The model estimates speed at 1 AU by interpolating between neighboring radial
+cells. It reports the first saved time whose speed is within `1e-9` relative
+of the maximum.
+
+For a hosted run, `first-run/bundle.json` lists the local paths to the plot
+and data. The summary is in `first-run/results/outputs.json`. Save
+`first-run/results/provenance.json` with the files you need.
 
 ## Change the inputs
 
-Edit a copy of this project's `inputs.json` and initialize another analysis directory with `--inputs inputs.json`. Keep all three fields and enter finite JSON numbers.
+Save a copy of [the default inputs](inputs.json) as `huxt-faster.json` in
+`examples/scientific`. Change only `fast_speed_kms` from `700` to `750`. Run the
+comparison in a new directory.
+
+```sh
+.venv/bin/python run_example.py huxt --inputs huxt-faster.json --directory huxt-faster
+```
+
+Compare `outputs.json` in the two directories. The higher starting speed raises
+the peak at 1 AU from about **802.16 km/s** to **859.46 km/s** and moves it from
+about **4.284 days** to **4.123 days**. Open both plots to see the change in the
+speed over time. To use the edited file with a hosted model,
+[start a new analysis](https://doc.enumeray.com/users/analyses/) with `--inputs huxt-faster.json`.
+
+Keep all three fields and use finite JSON numbers in these ranges.
 
 | Field | Meaning | Allowed range | Default |
 | --- | --- | --- | --- |
@@ -37,15 +70,32 @@ Edit a copy of this project's `inputs.json` and initialize another analysis dire
 | `fast_speed_kms` | Fast wind at the inner boundary, in km/s | 500–900 | 700 |
 | `stream_width_deg` | Fast sector width, in degrees of longitude | 10–45 | 30 |
 
-The schema rejects missing or extra fields, strings, booleans and out-of-range values. The model maps the sector to 128 equal longitude bins, so a small change in width may leave the selected bins the same.
+The model maps the sector to 128 equal longitude bins, so a small change in
+width may leave the selected bins the same.
 
 ## Numerical setup and checks
 
-Each run covers seven days in the synodic frame. The fast sector is centered at Carrington longitude 330° and the initial Carrington longitude is 360°. The fixed CR2080 rotation makes coordinate and time calculations repeatable. The longitude is the upstream grid meridian nearest zero. The radial step is 1.5 solar radii. The model saves every eight intrinsic CFL timesteps, giving 217 output times and 141 radial samples.
+Each run covers seven days in the synodic frame. The fast sector is centered
+at Carrington longitude 330° and the initial Carrington longitude is 360°.
+The fixed CR2080 rotation makes coordinate and time calculations repeatable.
+The model uses the grid meridian nearest zero, a radial step of 1.5 solar radii
+and saves every eight solver time steps. This gives 217 saved times and 141
+radial samples.
 
-A uniform 350 km/s boundary agrees with the upstream analytic acceleration solution `v(r)=v0*(1+0.15*(1-exp((r0-r)/(50 solar radii))))` to a maximum fractional error of `1e-3`. The default fast-stream case checks the 1 AU values against `reference.json` with relative tolerance `1e-5` and absolute tolerance `1e-3 km/s`. These tests check numerical behavior and the wrapper's mapping of results. Observational accuracy would require a separate validation. Plot bytes may vary with plotting libraries and fonts.
+The test with uniform 350 km/s wind agrees with the analytic acceleration
+solution `v(r)=v0*(1+0.15*(1-exp((r0-r)/(50 solar radii))))` to a maximum
+fractional error of `1e-3`. For the default fast stream, the runner compares
+the speeds at 1 AU with the [saved reference](reference.json). Each comparison
+allows a difference of `1e-3 km/s` plus `1e-5` times the reference speed.
 
-The wrapper permits one thread, 180 seconds and 8 MiB combined CSV and PNG output per run. Solver errors, nonfinite values and exceeded limits produce a failed result. Read the run's failure and logs if that happens. Demo capacity is shared and account queue limits can delay admission. [Troubleshoot a run](https://doc.enumeray.com/troubleshooting/execution/)
+For both default and edited inputs, the runner recomputes the summary from the
+CSV. The peak time must agree within `1e-8` days or a relative difference of
+`1e-9`, whichever is larger. These checks test the numerical result for this
+idealized setup. Observational accuracy requires a separate comparison with
+measurements.
+
+The wrapper allows one thread, 180 seconds and 8 MiB of combined CSV and PNG
+output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
 
 ## Cite and distribute the example
 

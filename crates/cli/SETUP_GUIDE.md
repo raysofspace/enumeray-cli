@@ -12,13 +12,20 @@ for your service and host before starting. [Installation guide](INSTALL.md)
 
 ## Choose a mode and save the journey
 
-Run the wizard as your regular OS user. Sign in with an Enumeray account
-allowed to register a connector. The default service is `https://api.enumeray.com`.
-To use a saved profile, pass `--profile NAME`. If you plan to trial a model,
-you also need model author access.
+Run the wizard as your regular OS user. Use the
+[profile for your team service](https://doc.enumeray.com/start/login/) and
+check its API address. The commands use the profile name `research`. Replace
+it throughout if yours has a different name.
+
+When setup registers a new connector, your signed-in account becomes its
+owner. To use an existing connector, sign in as its owner or a co-admin and
+approve adoption of its matching settings. Ask your service administrator
+if you need permission to register a connector. For a first model, you
+also need a compute grant and permission to create the model or administer
+its existing catalogue entry.
 
 ```sh
-enumeray setup --directory enumeray-setup
+enumeray --profile research setup --directory enumeray-setup
 ```
 
 | Mode | When to choose it | After approving the setup plan |
@@ -37,8 +44,8 @@ credentials and the journal use separate host paths. Restore a backup to the
 original directory and use that path to continue after an interruption.
 
 ```sh
-enumeray setup --directory enumeray-setup
-enumeray setup status --directory enumeray-setup
+enumeray --profile research setup --directory enumeray-setup
+enumeray --profile research setup status --directory enumeray-setup
 ```
 
 Status reads saved progress and authenticated readiness without initiating checks
@@ -162,7 +169,7 @@ resume in the original terminal after the start command returns. Use the same
 profile and configuration file as before, if applicable.
 
 ```sh
-enumeray setup --directory enumeray-setup
+enumeray --profile research setup --directory enumeray-setup
 ```
 
 The runtime file contains credential **paths**, not credential values. `--configuration`
@@ -181,9 +188,10 @@ trial checks the actual installation and results separately.
 
 ## Trial a starter or existing project
 
-Choose **demo** to generate a small Python starter and trial it on your connector,
+Choose **demo** to generate a Python starter and trial it on your connector,
 **project** to use an author project containing `publication.json`, or **later**
-to finish at connector readiness and prepare a model separately.
+to finish at connector readiness. The demo prompts you for a new model ID.
+Choose the supplied `starter-example` to double input `2`.
 
 If you chose **later**, setup is complete when it reports **ready**.
 Continue to the [author handoff](#give-an-author-access-to-the-ready-context)
@@ -211,54 +219,51 @@ for projects requiring special layout or provisioning.
 
 The wizard saves the candidate in `first-release` and its run in `first-trial`
 inside the setup directory. After validation, review the inputs, execution
-location and who can access the data. Submit only when you are satisfied.
-Resume the same setup directory after an interruption or lost reply to
-continue that candidate and trial. Look in `first-trial` for the collected
-results.
+location and who can access the data. Submit when you are satisfied.
+Resume the same setup directory after an interruption or lost reply.
+
+When setup reports `trial_complete`, open `first-trial/results/outputs.json`
+inside the setup directory. The demo with `starter-example` should return
+`{"doubled":4}`. For your own project, compare those outputs with your
+expected results. Keep `first-trial/results/provenance.json` with the trial.
 
 If you want to make the candidate current, first check its scientific result
 and save the proposed release comparison.
 
 ```sh
-enumeray model release review /absolute/setup/first-release
+enumeray --profile research model release review /absolute/setup/first-release
 ```
 
 Read the review before deciding to activate.
 
 ```sh
-enumeray model release activate /absolute/setup/first-release
+enumeray --profile research model release activate /absolute/setup/first-release
 ```
 
-Use the original `--profile` and `--config` when applicable. Existing project
-scientific tests and interpretation remain the author's responsibility. Installation
-or access requiring another person remains a site handoff; setup reports the
-required action without granting that person's authority.
-
-If you chose **demo** or **project**, check for **trial_complete** and confirm
-that `first-trial` contains the collected result and provenance. The model author
-can check the scientific result and
-[review and activate the saved release](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate).
+Use the same profile and, if selected, the same `--config` as the saved setup.
+If setup reports that an installation or access step needs a different account,
+give the responsible person the displayed action.
 
 ## Give an author access to the ready context
 
 After setup reports **ready**, use the connector owner or co-admin account
 on the same Enumeray service. Ask the author for their account UUID from
-`enumeray auth whoami`. Use the connector and context IDs from your setup
+`enumeray --profile research auth whoami`. Use the connector and context IDs from your setup
 plan, and choose limits appropriate to the compute you are sharing.
 
 ```sh
-enumeray connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
+enumeray --profile research connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
   --max-queued-runs 100 --max-outstanding-assignments 4
-enumeray connector grant list CONNECTOR_ID
+enumeray --profile research connector grant list CONNECTOR_ID
 ```
 
 Check that the list includes the author's UUID, intended context and limits.
-Give the author the context ID, approved installation root, execution account,
-runtime requirements and the site's instructions for installing files. The
-compute grant and host installation access are separate.
+Give the author the API address, context ID, approved installation root,
+execution account, runtime requirements and instructions for installing
+files. Arrange host installation access as well as the compute grant.
 
 The author signs in to the same service and runs
-`enumeray connector grant available`. The handoff is complete when that
+`enumeray --profile research connector grant available`. The handoff is complete when that
 command shows the intended context and the author knows where and how to install
 the release. They can then [install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
 For day-to-day service tasks, see

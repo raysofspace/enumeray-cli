@@ -147,29 +147,41 @@ them. Status, logs, cancellation and collection use the folder after acceptance.
 
 Use a collection when your model takes a directory of related files as one
 input. This example sends two files to `collection-example`. The model
-copies them into its `snapshots` output. To follow along, use a signed-in CLI
-profile with permission to run that model. If you own the model and need to
-publish it first, use the [author guide](../AUTHOR_GUIDE.md) with the
-[collection publication](../../../examples/collections/publication.json)
-and [Python wrapper](../../../examples/collections/wrapper.py).
+copies them into its `snapshots` output. The commands use the `research`
+profile from the team sign-in example. Replace it with the profile you signed
+in to. To run the commands as written, your service needs the `collection-example`
+model activated and your account needs permission to run it. To publish it,
+use the [collection publication](../../../examples/collections/publication.json)
+and [Python wrapper](../../../examples/collections/wrapper.py), then
+[review and activate the tested publication](https://doc.enumeray.com/authors/publication/#review-and-activate).
 
 ### Prepare and review a two-file run
 
-Use a fresh private working directory. The `dataset` binding supplies the
-only required input, so the JSON input object can be empty. Keep the analysis
-directory outside the source tree. If you use a named CLI profile, include it
-after `enumeray` on every command.
+From a folder where you can keep your work, create a private working
+directory and stay there for the rest of the example.
 
 ```sh
-umask 077
-mkdir -p collection-inputs/mesh collection-inputs/snapshots
-printf '%s\n' 'grid fixture' > collection-inputs/mesh/grid.bin
-printf '%s\n' 'snapshot fixture' > collection-inputs/snapshots/0001.bin
-printf '%s\n' '{}' > collection-inputs.json
-enumeray analysis init collection-example --directory collection-analysis \
-  --inputs collection-inputs.json --collection dataset=collection-inputs \
-  --media-type dataset=application/octet-stream
-enumeray analysis status collection-analysis
+COLLECTION_WORK_DIR=$(mktemp -d "$PWD/enumeray-collection.XXXXXX") &&
+  cd "$COLLECTION_WORK_DIR" &&
+  pwd
+```
+
+The `dataset` binding supplies the only required input, so the JSON input
+object can be empty. The analysis directory is separate from the source tree.
+
+```sh
+(
+  set -eC
+  umask 077
+  mkdir -p collection-inputs/mesh collection-inputs/snapshots
+  printf '%s\n' 'grid fixture' > collection-inputs/mesh/grid.bin
+  printf '%s\n' 'snapshot fixture' > collection-inputs/snapshots/0001.bin
+  printf '%s\n' '{}' > collection-inputs.json
+  enumeray --profile research analysis init collection-example \
+    --directory collection-analysis --inputs collection-inputs.json \
+    --collection dataset=collection-inputs --media-type dataset=application/octet-stream
+  enumeray --profile research analysis status collection-analysis
+)
 ```
 
 Check both files in the source directory and read the execution location and
@@ -177,25 +189,25 @@ data-access disclosure shown by status. Keep the files in place while their
 uploads are unfinished. Submit only after review.
 
 ```sh
-enumeray analysis submit collection-analysis
+enumeray --profile research analysis submit collection-analysis
 ```
 
 After you have the receipt, wait for the outcome.
 
 ```sh
-enumeray analysis wait collection-analysis --check-outcome
+enumeray --profile research analysis wait collection-analysis --check-outcome
 ```
 
 ### Collect the output in stages
 
-After a successful run, collect the result in one step or try each stage
-below. All three stages use the same run.
+After a successful run, try all three stages below. To collect the whole
+result in one step, use the last command on its own.
 
 ```sh
-enumeray --json analysis collect collection-analysis --evidence-only > collection-evidence.json
-enumeray --json analysis collect collection-analysis \
-  --member snapshots=mesh/grid.bin > collection-partial.json
-enumeray --json analysis collect collection-analysis > collection-complete.json
+enumeray --profile research --json analysis collect collection-analysis --evidence-only
+enumeray --profile research --json analysis collect collection-analysis \
+  --member snapshots=mesh/grid.bin
+enumeray --profile research --json analysis collect collection-analysis
 ```
 
 The first step saves the run record and manifests. The second downloads

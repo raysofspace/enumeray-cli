@@ -17,12 +17,12 @@ The scalar starter turns `2` into `4`. When you replace its calculation, add
 tests with results you can verify for your model. If you are running a model
 that is already published, follow the [analysis guide](ANALYSIS_GUIDE.md).
 
-Run the commands in a terminal. `example` is the scalar model ID and
-`csv-example` is a separate file model. Use your own model ID throughout each
-project. For network commands, select the CLI profile for your service and
-replace sample context IDs, paths and values like `RUN_UUID` with actual
-values. Use a new folder for each intended release or run. Keep the original
-folder when resuming the same operation.
+Run the commands in a terminal. This tutorial generates the scalar model
+`example` and a separate file model `csv-example`. Each is available to
+researchers after you publish it and grant access. Use your own model ID
+throughout your project. For network commands, select the CLI profile for your
+service and replace sample context IDs, paths and values such as `RUN_UUID`.
+Use a new folder for each release or run and keep it when resuming that work.
 
 ## Run the downloaded model examples offline
 
@@ -53,19 +53,29 @@ The block checks the checksum before opening the archive. If that check fails,
 download the archive and its matching checksum again before continuing. The
 extracted root contains `examples-manifest.json`, which records the package
 version, exact public source revision and file hashes. The verifier checks those
-bytes and tests fresh copies of all supplied projects. If you already have a
-verified extraction, you can run `python3 verify-examples.py --root .` from its
-root directory.
+bytes and tests the wrappers, local runtime and HTTP digest examples. For
+HUXt and REBOUND solver runs, follow the
+[local simulation guide](https://doc.enumeray.com/models/local/).
 
-After verification succeeds, open the editable Python scalar starter from the
-download directory.
+After verification succeeds, run the scalar starter on the supplied input.
+Start from the download directory.
 
 ```sh
-cd enumeray-examples-*/starter-kit/python-json &&
-python3 -B -m unittest discover -s . -p 'test_*.py'
+(
+  set -eu
+  cd enumeray-examples-*/starter-kit/python-json
+  project=$PWD
+  work=$(mktemp -d)
+  cd "$work"
+  python3 -B "$project/wrapper.py" execute \
+    --request "$project/fixtures/request.json" --result "$work/result.json"
+  python3 -m json.tool "$work/result.json"
+  printf 'Saved %s\n' "$work/result.json"
+)
 ```
 
-The **model examples** family has the following intentional identity/file map:
+Look for `"doubled": 4` under `outputs`. The request fixture supplies input
+`2`. Use this table to choose the files for another local example.
 
 | Project from the extracted root | Model and fixture |
 | --- | --- |
@@ -507,10 +517,11 @@ and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 
-Once local tests pass and the files are installed, create the catalogue model
-and save a candidate. The `release-r1` folder keeps the candidate ID, readiness
-checks and activation review together. Run `model create` only for a model
-that does not already have a catalogue entry.
+Once local tests pass and the files are installed, validate the publication.
+Create a catalogue entry for a new model. The signed-in account becomes its
+owner. For an existing model, use its owner account or ask its owner for
+co-admin access and start at `model release init`. The `release-r1` folder
+keeps the candidate ID, readiness checks and activation review together.
 
 ```sh
 enumeray model validate --file publication.json

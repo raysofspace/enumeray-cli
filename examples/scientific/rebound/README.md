@@ -1,37 +1,70 @@
 # REBOUND: an isolated Sun–planet orbit
 
-How do the size and shape of an orbit change a planet's trajectory? This REBOUND 5.2.2 example lets you vary an orbit around a one-solar-mass star. The planet has a mass of `3.003e-6` solar masses and begins at its closest point to the star, called periapse.
+How does a more elongated orbit change a planet's distance from its star?
+This REBOUND 5.2.2 example follows an Earth-mass planet around a
+one-solar-mass star. The planet starts at periapse, its closest point to the
+star.
 
-The IAS15 integrator solves an isolated Newtonian two-body problem. The orbit is in the xy plane. The calculation uses the center-of-mass frame and reports positions and velocities relative to the star. This example omits other planets, relativistic effects, tides and collisions. Use it to study the two-body orbit. Predicting the position of the real Earth requires a different model.
+Use it to explore orbits shaped by the gravity of two bodies. The model
+assumes an isolated Newtonian system. It reports positions and velocities
+relative to the star in the plane of the orbit.
 
 ## Run the Earth-like orbit example
 
-Check [hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
-Once you have access and an approved CLI for the trial's API address, follow
-[your first run](https://doc.enumeray.com/start/first-run/). Choose the
-[REBOUND orbit example](https://doc.enumeray.com/start/first-run/#rebound-orbit).
-The hosted model ID is `demo-rebound` and the example is `earth-like-orbit`. It uses a semimajor axis of 1 AU, an eccentricity of 0.0167 and follows two orbits.
+The default case follows two orbits with a semimajor axis of 1 AU and an
+eccentricity of 0.0167. [Download the sample result](sample-run.zip) to see
+its data, plot and checks before installing anything.
 
-When the walkthrough finishes, read the files in its `first-run` folder.
+To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
+and run this command from `examples/scientific`.
+
+```sh
+.venv/bin/python run_example.py rebound --directory rebound-default
+```
+
+If you have access to the [hosted trial](https://doc.enumeray.com/start/hosted-release/),
+you can also run [`demo-rebound` with `earth-like-orbit`](https://doc.enumeray.com/start/first-run/#rebound-orbit).
 
 ## Read the trajectory and check the orbit
 
-Open `first-run/bundle.json` for the local paths to these outputs.
+Open these files in the sample ZIP or in `rebound-default` after a local run.
 
-| Output name | What to open |
+| File | What to look for |
 | --- | --- |
-| `trajectory_csv` | `trajectory.csv` contains 361 rows of `time_years,x_au,y_au,vx_au_per_year,vy_au_per_year`. |
-| `orbit_plot_png` | `orbit.png` shows the path around the star, with equal scales on both axes. |
+| `orbit.png` | The path around the star, with equal scales on both axes. |
+| `trajectory.csv` | The 361 samples give time in years, position in AU and velocity in AU per year. |
+| `outputs.json` | The orbital period, the closest and farthest distances and the relative changes in energy and angular momentum. |
 
-The CLI saves each file under its own `results/files/<artifact-uuid>/` directory. The summary at `first-run/results/outputs.json` includes the initial analytic period and closest and farthest distances from the star. For the default inputs, the distance ranges from **0.9833 AU** at periapse to **1.0167 AU** at apoapse. The fields `max_relative_energy_error` and `max_relative_angular_momentum_error` show the largest sampled fractional changes in specific orbital energy and angular momentum.
+In the default run, the distance ranges from **0.9833 AU** at periapse to
+**1.0167 AU** at apoapse, the farthest point. The fields
+`max_relative_energy_error` and `max_relative_angular_momentum_error` show
+how much those quantities drift from their initial values. Both should stay
+at or below `1e-9` for this example.
 
-A partial orbit can end before the planet returns to its starting point. At high eccentricity, samples are farther apart near periapse because the planet moves faster there. The samples are evenly spaced in time, independently of the integrator's adaptive timestep.
+The samples are evenly spaced in time. In a more elongated orbit, the planet
+moves faster near periapse, so its sampled positions are farther apart there.
 
-Keep `first-run/results/outputs.json` and `first-run/results/provenance.json` with the CSV and plot. Demo data is temporary, so collect the files you need.
+For a hosted run, `first-run/bundle.json` lists the local paths to the plot
+and data. The summary is in `first-run/results/outputs.json`. Save
+`first-run/results/provenance.json` with the files you need.
 
 ## Change the inputs
 
-Edit a copy of this project's `inputs.json` and initialize another analysis directory with `--inputs inputs.json`. Keep all three fields and enter finite JSON numbers.
+Save a copy of [the default inputs](inputs.json) as `rebound-eccentric.json` in
+`examples/scientific`. Change only `eccentricity` from `0.0167` to `0.1`. Run
+the comparison in a new directory.
+
+```sh
+.venv/bin/python run_example.py rebound --inputs rebound-eccentric.json --directory rebound-eccentric
+```
+
+Compare `outputs.json` in the two directories. The closest distance decreases
+from **0.9833 AU** to **0.9 AU** and the farthest distance increases from
+**1.0167 AU** to **1.1 AU**. The period stays the same because the semimajor
+axis and masses stay fixed. To use the edited file with a hosted model,
+[start a new analysis](https://doc.enumeray.com/users/analyses/) with `--inputs rebound-eccentric.json`.
+
+Keep all three fields and use finite JSON numbers in these ranges.
 
 | Field | Meaning | Allowed range | Default |
 | --- | --- | --- | --- |
@@ -39,15 +72,25 @@ Edit a copy of this project's `inputs.json` and initialize another analysis dire
 | `eccentricity` | How far the shape departs from a circle, dimensionless | 0–0.8 | 0.0167 |
 | `orbits` | Duration in initial orbital periods | 0.25–10 | 2 |
 
-The schema rejects missing or extra fields, strings, booleans and out-of-range values. The masses, orientation, integrator and number of output samples stay fixed.
+An `orbits` value less than one ends the calculation before the planet
+completes one orbit.
 
 ## Numerical setup and checks
 
-REBOUND sets the units to years, AU and solar masses before adding the particles and supplies the corresponding gravitational constant. IAS15 uses epsilon `1e-9`. The calculation requires no random seed, external ephemeris or runtime download.
+REBOUND uses years, AU and solar masses, with a planet mass of `3.003e-6`
+solar masses. The IAS15 integrator uses epsilon `1e-9`. It integrates in the
+center-of-mass frame with adaptive time steps. The output sampling interval
+is fixed separately.
 
-The tests solve Kepler's equation `E-e*sin(E)=M` independently at each saved time. The maximum position error relative to semimajor axis must be at most `1e-8`. Relative drift in specific energy and angular momentum must each be at most `1e-9`. Tests cover circular and maximum-eccentricity cases. The example qualification also checks all parameter corners. These comparisons check the isolated problem and its wrapper. Plot bytes may vary with plotting libraries and fonts.
+The runner solves Kepler's equation `E-e*sin(E)=M` independently at each saved
+time and compares the position with the CSV. The largest position difference,
+divided by the semimajor axis, must be at most `1e-8`. The relative drift in
+specific orbital energy and angular momentum must each be at most `1e-9`.
+These checks apply to the isolated two-body problem. Predicting the position
+of the real Earth requires a model that includes other influences.
 
-The wrapper permits one thread, 60 seconds and 8 MiB combined CSV and PNG output per run. Solver errors, nonfinite values, failed conservation checks and exceeded limits produce a failed result. Read the run's failure and logs if that happens. Demo capacity is shared and queue limits apply. [Troubleshoot a run](https://doc.enumeray.com/troubleshooting/execution/)
+The wrapper allows one thread, 60 seconds and 8 MiB of combined CSV and PNG
+output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
 
 ## Cite and distribute the example
 

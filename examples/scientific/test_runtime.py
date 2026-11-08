@@ -1,5 +1,6 @@
 """Dependency-free supervision, offline, protocol and evidence regressions."""
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,9 +12,10 @@ import time
 import unittest
 from unittest import mock
 import uuid
+from zipfile import ZipFile
 
 import qualify
-from runtime import ExecutionFailure, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
+from runtime import ExecutionFailure, FILES, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,6 +28,24 @@ def request(model="huxt"):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_sample_downloads_match_the_default_models_and_recorded_files(self):
+        manifest = json.loads((ROOT / "runtime-manifest.json").read_text())
+        for model, artifacts in FILES.items():
+            with self.subTest(model=model), ZipFile(ROOT / model / "sample-run.zip") as archive:
+                prefix = f"{model}-sample/"
+                expected = {"inputs.json", "outputs.json", *(name for name, _ in artifacts.values())}
+                self.assertCountEqual(archive.namelist(), [prefix + name for name in expected | {"run-record.json"}])
+                self.assertEqual(json.loads(archive.read(prefix + "inputs.json")), request(model)["inputs"])
+                record = json.loads(archive.read(prefix + "run-record.json"))
+                self.assertEqual(record["kind"], "local-scientific-example")
+                self.assertEqual(record["model"], model)
+                self.assertEqual(record["model_sha256"], hashlib.sha256((ROOT / model / "model.py").read_bytes()).hexdigest())
+                self.assertEqual(record["runtime"], {key: manifest[key] for key in record["runtime"]})
+                self.assertEqual(record["files"].keys(), expected)
+                for name, identity in record["files"].items():
+                    data = archive.read(prefix + name)
+                    self.assertEqual(identity, {"size_bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+
     def test_parameter_domains_are_closed_finite_and_bounded(self):
         for model, parameters in PARAMETERS.items():
             defaults = request(model)["inputs"]

@@ -99,22 +99,28 @@ before renewing credentials or recovering from a lost reply.
 ## Script with structured output
 
 This walkthrough saves the result of one run so another program can use it.
-Use `jq`, a signed-in CLI profile and access to the scalar starter published
-as `example`. Start in a new private working directory. If you use a named
-profile, pass the same `--profile NAME` after `enumeray` on every command.
+You need `jq`, the [signed-in profile](https://doc.enumeray.com/start/login/)
+for your team service and run access to `example`. This is the scalar starter
+an author [publishes and shares](https://doc.enumeray.com/authors/publication/#review-and-activate)
+on that service. If you have access to another model, substitute its ID,
+inputs and expected result. The commands use `research` for the profile.
+Replace it throughout if yours has a different name.
 
 ### Prepare one run
 
 ```sh
-(
-  set -eu
-  umask 077
-  printf '%s\n' '{"value":2}' > inputs.json
-  enumeray --json model get example > model.json
-  enumeray --json analysis init example --inputs inputs.json \
-    --directory scripted-analysis > initialized.json
-  enumeray --json analysis status scripted-analysis > reviewed-analysis.json
-)
+WORK_DIR=$(mktemp -d "$PWD/enumeray-script.XXXXXX") &&
+  cd "$WORK_DIR" &&
+  pwd &&
+  (
+    set -eu
+    umask 077
+    printf '%s\n' '{"value":2}' > inputs.json
+    enumeray --profile research --json model get example > model.json
+    enumeray --profile research --json analysis init example --inputs inputs.json \
+      --directory scripted-analysis > initialized.json
+    enumeray --profile research --json analysis status scripted-analysis > reviewed-analysis.json
+  )
 ```
 
 Read [the four files](#read-the-four-files-before-submitting) before
@@ -124,23 +130,24 @@ access. To change the inputs before submission, edit
 
 ### Submit, wait and collect
 
-Run this stage after review. After interruption, repeat it with the same
-analysis directory.
+Run this stage after review in the private directory printed above. After
+interruption, repeat it from that directory.
 
 ```sh
 (
   set -eu
   umask 077
   ANALYSIS=scripted-analysis
-  enumeray --json analysis submit "$ANALYSIS" > submission.json
-  if enumeray --json analysis wait "$ANALYSIS" --check-outcome --interval 2 --deadline 3600 > terminal-run.json; then
+  enumeray --profile research --json analysis submit "$ANALYSIS" > submission.json
+  if enumeray --profile research --json analysis wait "$ANALYSIS" \
+    --check-outcome --interval 2 --deadline 3600 > terminal-run.json; then
     outcome=0
   else
     outcome=$?
   fi
   case "$outcome" in
     0|3|4)
-      enumeray --json analysis collect "$ANALYSIS" > collection.json
+      enumeray --profile research --json analysis collect "$ANALYSIS" > collection.json
       jq -e '.schema_version == 1 and .complete == true' collection.json >/dev/null
       ;;
     5|130)

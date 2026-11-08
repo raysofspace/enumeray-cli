@@ -1,65 +1,102 @@
-# Maintained scientific demonstrations
+# Run a simulation locally
 
-These are small, real solver integrations: [HUXt solar wind](huxt/README.md) and
-[REBOUND orbital dynamics](rebound/README.md). These hosted examples have
-preinstalled solvers and an Enumeray-operated connector. Users need only the Enumeray executable and a
-verified account; they do not need Python or a connector on their own machine.
+Run a solar-wind or orbit simulation on your computer. You can start by looking
+at a checked result, then install the solvers and repeat the experiment. You
+can do both without an Enumeray account.
 
-Each model directory contains its authored `publication.json`, a complete editable
-`inputs.json`, a model card and scientific implementation. Both publications use
-the same immutable installed package and protocol-1 `wrapper.py`. File outputs
-are declared separately from small numerical JSON summaries.
+## Inspect a sample result
 
-For an offline author checkout, use **Python 3.12.16** on macOS or Linux:
+Download and unzip a result. Open the PNG first to see what the model calculated.
+
+| Example | What to look for | Download |
+| --- | --- | --- |
+| [HUXt solar wind](https://doc.enumeray.com/models/huxt/) | The fast stream reaches 1 AU. The speed there peaks near 802.16 km/s at 4.284 days. | [HUXt sample ZIP](huxt/sample-run.zip) |
+| [REBOUND orbit](https://doc.enumeray.com/models/rebound/) | An Earth-like orbit ranges from 0.9833 to 1.0167 AU from its star. | [REBOUND sample ZIP](rebound/sample-run.zip) |
+
+Each ZIP contains the plot, CSV data, `inputs.json` with the parameters,
+`outputs.json` with the numerical summary and `run-record.json` with the checks.
+
+## Set up the solvers
+
+On macOS or Linux, install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+to get the exact Python version and packages. Allow a few gigabytes for the
+environment and download cache.
+
+Download and extract the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz).
+Use the [archive checksum instructions](https://doc.enumeray.com/authors/author-guide/#run-the-downloaded-model-examples-offline)
+to check the download. From the extracted archive's top-level folder, run these
+commands to install the pinned Python and solver dependencies.
 
 ```sh
 cd examples/scientific
-python3.12 -m venv /tmp/enumeray-scientific
-/tmp/enumeray-scientific/bin/python -m pip install --require-hashes -r requirements.lock
-/tmp/enumeray-scientific/bin/python -m unittest discover -s . -p test_models.py
-/tmp/enumeray-scientific/bin/python qualify.py --extrema
+uv venv --python 3.12.16
+uv pip install --python .venv/bin/python --require-hashes -r requirements.lock
 ```
 
-The requirements file includes the complete upstream dependency sets, including
-HUXt's notebook/solar packages. They enlarge the installation; the hosted cases
-use one CPU thread and require no HPC, GPU, observational download or network
-connection during scientific execution. The HUXt ephemeris comes with its locked
-distribution. `runtime-manifest.json` records its checksum, the solver releases,
-the exact interpreter and dependency-lock checksum.
+If a native dependency needs a source build, install a C compiler, such as
+Xcode Command Line Tools on macOS or `build-essential` on Debian and Ubuntu.
+Use these two commands in place of the last install command to pin the build
+tools as well.
 
-On a platform requiring native source builds (including Linux ARM), first install
-`build-requirements.lock` with `pip install --require-hashes`, then install
-`requirements.lock` using `--require-hashes --no-build-isolation`. The separate
-build lock pins setuptools, wheel, Cython and the same NumPy used at runtime;
-the compiler toolchain belongs to the image build stage. No solver version changes
-are needed. Both lock checksums are in the runtime manifest.
+```sh
+uv pip install --python .venv/bin/python --require-hashes -r build-requirements.lock
+uv pip install --python .venv/bin/python --require-hashes --no-build-isolation -r requirements.lock
+```
 
-Without installing scientific dependencies, check the protocol/supervisor:
+Setup downloads packages. The simulation itself can run offline and uses one
+CPU thread. The HUXt package includes the ephemeris used by this example.
+
+## Run an example
+
+From `examples/scientific`, run HUXt with the default solar-wind parameters.
+
+```sh
+.venv/bin/python run_example.py huxt --directory huxt-default
+```
+
+For the default orbit, run REBOUND from the same folder.
+
+```sh
+.venv/bin/python run_example.py rebound --directory rebound-default
+```
+
+The runner checks the installed versions and saves the same set of files as the
+sample ZIP in the directory you choose. Open the plot and `outputs.json` there.
+Use a new directory for each run so you can compare results side by side.
+
+To try a change, follow the [HUXt speed comparison](https://doc.enumeray.com/models/huxt/#change-the-inputs)
+or [REBOUND eccentricity comparison](https://doc.enumeray.com/models/rebound/#change-the-inputs).
+Each changes one value and shows what to look for in the new output.
+
+## Understand the checks
+
+`run-record.json` records the Python and solver versions, dependency lock
+hashes and SHA-256 hashes of the result files. Those hashes let you check that
+the files still have the bytes recorded for that run. The numerical checks
+answer a different question. HUXt's default speed series is compared with its
+saved reference. REBOUND's trajectory is compared with a solution of Kepler's
+equation and checked for conservation of energy and angular momentum.
+
+Plots can vary with fonts and plotting libraries. Use the CSV data and the
+numerical checks to compare calculations. These are simplified models, so the
+checks establish agreement for the stated setups. Testing a prediction about
+the real solar wind or the real Earth would require observations and a model
+suited to that question.
+
+The record describes the local calculation. For the identity, receipts and
+provenance of a hosted run, see [Logs and provenance](https://doc.enumeray.com/users/logs-provenance/).
+
+## Test the example code
+
+For work on the example implementation, run the protocol and supervisor tests
+with system Python. The solver tests use the locked environment.
 
 ```sh
 python3 -B -m unittest discover -s . -p test_runtime.py
+.venv/bin/python -B -m unittest discover -s . -p test_models.py
 ```
 
-Scientific tests and `qualify.py` execute the installed solvers. Qualification
-compares numerical outputs, exercises all eight parameter-range corners per model
-when `--extrema` is supplied, and emits JSON with wall time, peak solver RSS and
-the tested identities. Its acceptance budgets are 60 seconds for each
-default example, 120 seconds for a corner case, and 1 GiB peak solver
-RSS. Actual site qualification must pass on the deployment hardware.
-
-The wrapper enforces 180 seconds for HUXt and 60 seconds for REBOUND, including
-interpreter startup and imports. The bounded one-meridian HUXt case runs the
-locked solver with Numba compilation disabled to reduce cold-start time.
-CSV and PNG files together are at most 8 MiB per run (with the same upper bound
-on each file). The wrapper bounds CPU
-time, disables core dumps, caps native threads, rejects outbound socket connections
-in the scientific child and confines runtime data/cache writes to its workspace.
-Timeout and cancellation terminate and reap that child; Linux additionally binds
-its lifetime to the supervisor. Preserve a timed-out workspace as evidence and
-submit changed work in a new analysis directory.
-
-The deployed connector has a separate credential-free model account. Scientific
-definitions and test results are distinct from host isolation and service
-qualification. `verify_collected.py --model huxt --analysis ANALYSIS` (or
-`--model rebound`) checks actual CLI-collected CSV/PNG artifacts, their checksums
-and the numerical assertions. It does not contact the service.
+[The qualification script](qualify.py) can also test every corner of each
+input range with `--extrema` and record elapsed time and peak memory. For a
+downloaded hosted analysis, [the collected-results checker](verify_collected.py)
+checks file hashes and numerical outputs without contacting the service.
