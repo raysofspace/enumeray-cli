@@ -1,33 +1,30 @@
 # Model author guide
 
-Use this complete guide to work from a local starter to a shared model. Define
-and test the science, agree on an installation with the connector owner, then
-save a release and trial its exact candidate. Review the trial before activating
-and sharing the publication. Use the [analysis guide](ANALYSIS_GUIDE.md) for
-execution, recovery and automation.
+Use this guide to take a model from a local test to a version other people can
+run. Your part is to describe the inputs and results, connect your calculation
+to the wrapper and check the science. The connector owner helps you arrange
+where the model will run and gives your account permission to publish there.
 
-The independently distributed `enumeray` CLI creates editable Python 3.9+ projects
-with one editable publication declaration without an API checkout or credentials.
-The [complete model examples download](https://doc.enumeray.com/reference/manifests/#run-the-model-examples-offline)
-also supplies ready-to-run projects: Python 3.9+ is sufficient for their local tests,
-before installing a CLI or obtaining publication access.
-Examples demonstrate contracts; replace their scientific calculation and assert
-results appropriate to your model before publishing.
+| I want to… | Start here |
+| --- | --- |
+| Try a local example | [Download the projects and run the tests](#run-the-downloaded-model-examples-offline). You need Python 3.9 or newer to run them. |
+| Adapt a model | [Generate a starter and map your inputs and outputs](#scaffold-and-map-your-science). You can test it before signing in. |
+| Publish a tested model | [Arrange installation](#install-an-immutable-release-and-select-compute), then [trial the candidate and activate it](#save-a-release-resume-readiness-review-and-activate). |
+| Give other people access | [Choose who can find and run the model](#choose-visibility-and-access-explicitly) or [give a named reviewer access to a candidate](#hand-a-candidate-to-another-administrator). |
+| Change the version users run | [Publish an update or restore a prior version](#updates-and-rollback). |
 
-For an optional trial as a model user, sign in with `enumeray auth login`
-and follow the [hosted HUXt and REBOUND trial](https://doc.enumeray.com/start/first-run/).
-The demo supplies its own installation and compute. Publishing your model starts
-with the local tests and needs an agreed model mapping and execution environment.
+The scalar starter turns `2` into `4`. When you replace its calculation, add
+tests with results you can verify for your model. If you are running a model
+that is already published, follow the [analysis guide](ANALYSIS_GUIDE.md).
 
-Commands run in a terminal, usually from the generated project. `example` is the
-scalar model ID; `csv-example` is a separate file model. Choose your own IDs before
-scaffolding and keep them consistent through installation and registration.
-Replace uppercase values such as `RUN_UUID`, `USER_UUID` and `TRANSFER_ID` with
-actual service response values. The CLI defaults to https://api.enumeray.com.
-Configure a separate profile for another service. Replace the example context IDs
-and release paths with values supplied by your site. New release/analysis operations
-need new directories, and independent upload/download operations need new
-destinations; retain the original directories and state for exact retries.
+Choose an unused model ID in Enumeray's shared catalogue before generating
+your project. A lab or project prefix helps distinguish it. Keep the same ID
+from `model init` through publication and share it with your users. Treat
+`example` and `csv-example` in sample declarations and reference commands
+as illustrative IDs. [Sign in to Enumeray](https://doc.enumeray.com/start/login/)
+before publishing. Replace sample context IDs, paths and values such as
+`RUN_UUID`. Use a new folder for each release or run and keep it when
+resuming that work.
 
 ## Run the downloaded model examples offline
 
@@ -39,7 +36,8 @@ Unicode spelling. You can run these tests without an API, credentials or a
 source checkout.
 
 ```sh
-python3 - <<'PY'
+(
+  python3 - <<'PY' &&
 from hashlib import sha256
 from pathlib import Path
 archive = Path("model-examples.tar.gz")
@@ -47,22 +45,39 @@ expected = Path("model-examples.tar.gz.sha256").read_text().split()[0]
 if sha256(archive.read_bytes()).hexdigest() != expected:
     raise SystemExit("Archive checksum mismatch")
 PY
-python3 -m tarfile -e model-examples.tar.gz
-cd enumeray-examples-*
-python3 verify-examples.py --root .
+  python3 -m tarfile -e model-examples.tar.gz &&
+    cd enumeray-examples-* &&
+    python3 verify-examples.py --root .
+)
 ```
 
-The versioned root contains `examples-manifest.json`, which records the package
-version, exact public source revision and file hashes. Verification checks those
-bytes and runs fresh copies of all supplied projects. From an already extracted
-package root, only the last command is needed. To edit one Python scalar starter:
+The block checks the checksum before opening the archive. If that check fails,
+download the archive and its matching checksum again before continuing. The
+extracted root contains `examples-manifest.json`, which records the package
+version, exact public source revision and file hashes. The verifier checks those
+bytes and tests the wrappers, local runtime and HTTP digest examples. For
+HUXt and REBOUND solver runs, follow the
+[local simulation guide](https://doc.enumeray.com/models/local/).
+
+After verification succeeds, run the scalar starter on the supplied input.
+Start from the download directory.
 
 ```sh
-cd starter-kit/python-json
-python3 -B -m unittest discover -s . -p 'test_*.py'
+(
+  set -eu
+  cd enumeray-examples-*/starter-kit/python-json
+  project=$PWD
+  work=$(mktemp -d)
+  cd "$work"
+  python3 -B "$project/wrapper.py" execute \
+    --request "$project/fixtures/request.json" --result "$work/result.json"
+  python3 -m json.tool "$work/result.json"
+  printf 'Saved %s\n' "$work/result.json"
+)
 ```
 
-The **model examples** family has the following intentional identity/file map:
+Look for `"doubled": 4` under `outputs`. The request fixture supplies input
+`2`. Use this table to choose the files for another local example.
 
 | Project from the extracted root | Model and fixture |
 | --- | --- |
@@ -73,11 +88,11 @@ The **model examples** family has the following intentional identity/file map:
 | `examples/collections/` | `collection-example`; `fixtures/request.json` and `fixtures/workspace/` copy two nested members into `snapshots/`, with `member_count: 2`; empty sets are valid |
 | `examples/scalar-publication.json`, `examples/slurm-scalar-publication.json` | Installed `scalar-double` / named example `double-two`; the separate `scalar-inputs.json` uses `value: 21`, expected `doubled: 42`; these declarations require a matching installed `run-model` entrypoint |
 
-This guide generates `example` and `csv-example` instead of the bundled starter
-IDs. The connector's single-user journey separately generates `development-double`
+Use a model ID you choose when adapting a bundled starter. The connector's
+single-user journey separately uses `development-double`
 under `models/development-double-r1/`. Choose one project and keep its model ID,
 publication and request fixtures together; do not combine fixtures by filename.
-The scalar tutorial uses `/opt/enumeray/models/example/r1`, the installed scalar
+The scalar tutorial uses `/opt/enumeray/models/my-lab-double/r1`, the installed scalar
 templates use `/opt/enumeray/models/scalar-double/r1`, and the collection declaration
 uses `/opt/models/collection-example`. These are example installed roots to agree
 with a site, separate from the extracted project and per-run workspace. Bundled
@@ -94,13 +109,11 @@ inputs and outputs; contract fixtures are separate from those runnable offerings
 
 ## Responsibilities and execution choices
 
-The **model owner** owns scientific mapping, schemas, examples, wrappers, immutable
-installed releases, model administration and model access decisions. The
-**connector owner** enrolls and operates connectors, registers approved
-contexts and installation roots, configures execution identities/SSH credentials,
-and grants compute permission. Coordinate with that owner to obtain OS access or
-have the release installed. A compute grant neither creates an OS account nor
-installs software; installation access alone does not grant Enumeray compute use.
+Agree with the connector owner on a context, installation directory and
+execution account. The model owner supplies the wrapper, schemas, examples,
+software and any installed data. The connector owner sets up compute and
+issues the grant to publish there. Arrange separately who can copy the files
+to the host and verify the execution account can read them.
 
 Choose two independent dimensions:
 
@@ -213,18 +226,25 @@ runtime/dependencies and installed datasets. They are author claims. Keep runtim
 lockfiles/container digests and dataset checksums with immutable releases when
 needed; connector-observed executable/batch-file hashes are separate evidence.
 
-Use `model create example --file publication.json` to import ID/name/description
-once. It does not register, activate or update existing catalogue metadata.
+Use `model create MODEL_ID --file publication.json` to create the catalogue
+entry with the ID, name and description in your declaration.
 There is one authored file; release operations save their own immutable evidence.
 
 ## Scaffold and map your science
 
 ```sh
-enumeray model init example --directory example
+MODEL_ID=my-lab-double
+enumeray model init "$MODEL_ID" --directory "$MODEL_ID" &&
+  cd "$MODEL_ID" &&
+  python3 -B -m unittest discover -s . -p 'test_*.py'
+```
+
+For a different starter, run a command from the parent directory. Replace
+the sample IDs and destination names before publishing.
+
+```sh
 enumeray model init csv-example --directory csv-example --io files
 enumeray model init solver-example --directory solver-example --kind executable --io files --driver slurm
-cd example
-python3 -B -m unittest discover -s . -p 'test_*.py'
 ```
 
 The destination must be new and its parent must exist. Defaults are Python,
@@ -233,7 +253,8 @@ Scientific identities are editable; operation and candidate IDs are generated
 when an explicit release is initialized. The wrapper reads model/scientific
 content from `publication.json` and accepts a valid publication ID in each
 request, allowing an unchanged installation to serve a new candidate or rollback.
-Keep the declaration with the installed wrapper; it is never rewritten by launch.
+Keep the declaration with the installed wrapper so it can read the model's
+contract when it starts.
 
 Edit `model.py` for Python calculations and `implementation.py` for mapping.
 Executable starters demonstrate a fixed argv native command using `demo_solver.py`.
@@ -433,58 +454,63 @@ failure annotation.
 
 ## Install an immutable release and select compute
 
-Coordinate installation under a site-approved release directory, such
-as `/opt/enumeray/models/example/r1`. Copy the complete project and your solver,
-runtime requirements and datasets. Ensure the execution account can traverse
-directories, read all resources and execute `wrapper.py`. Set read-only release
-permissions appropriate to the site; keep writable scratch/output work separate.
-Resolve resources relative to the release, not the job's current directory.
-Do not modify an installed release referenced by a publication or accepted work.
-New release directories and declared entrypoint/batch-file paths cannot occupy
-`work_root/UUID` or descendants of that reserved run directory for any registered
-execution context. Registration rejects this with
-`reserved_run_installation_path`; ordinary broad installation/work-root overlap
-is allowed, including a separate `work_root/releases/r1` release path. Historical
-publication retries preserve their original records, and connector cleanup
-permanently protects known legacy releases overlapping run data and canonical
-aliases observed during validation.
-
-For example, on the execution host from the tested project, assuming the site's
-owner has prepared the parent and installation permissions:
-
-```sh
-RELEASE_DIR=/opt/enumeray/models/example/r1
-mkdir "$RELEASE_DIR"
-cp -R . "$RELEASE_DIR/"
-chmod a+rx "$RELEASE_DIR/wrapper.py"
-python3 -B -m unittest discover -s "$RELEASE_DIR" -p 'test_*.py'
-chmod -R a-w "$RELEASE_DIR"
-```
-
-Use site-specific read/execute permissions for private resources. Verify access
-and the wrapper's `/usr/bin/env python3` interpreter as the execution account;
-your workstation's successful test is insufficient. Copy native binaries,
-dependencies and installed datasets as needed. The destination must be new.
-
-For Slurm, edit `model.sbatch` before installing it: account, partition, cluster,
-resources, modules, virtual environment/container/MPI setup. Keep the worker in
-the foreground via `exec "$1" local-worker --directory "$2"`. The connector
-supplies the worker executable and job directory. Exported runtime setup and
-allocation variables reach the wrapper. Dependencies, release and workspace paths
-must be available on compute nodes. Add `execution.slurm_script: "model.sbatch"`
-for Slurm; omit it for process. Local tests do not submit a scheduler job.
+Sign in and find a context your connector owner has granted you access to.
 
 ```sh
 enumeray auth login
 enumeray connector grant available
 ```
 
-Select an available context, inspect its driver/location/disclosure and edit
-`execution.context_id` plus `execution.release_path` in `publication.json`.
-The entrypoint executable is release-relative, followed by fixed arguments.
-Context configuration owns hosts, SSH credentials, launchers and shared roots.
-Registration resolves your active grant and derives installation identity claims;
-authors supply neither grant UUIDs nor provider binding keys.
+Check the context's driver, location and data-access information. Put its ID
+and the approved absolute release path in `execution.context_id` and
+`execution.release_path` in `publication.json`. The entrypoint is relative to
+the release directory, followed by its fixed arguments. The connector owner
+manages hosts, SSH credentials, launchers and shared roots. Registration selects
+your active grant and derives the installation identity.
+
+For Slurm, prepare `model.sbatch` with the account, partition, cluster and
+resources for your site. Set up modules, the runtime, container or MPI there.
+Use `exec "$1" local-worker --directory "$2"` to keep the worker in the
+foreground. The connector supplies the worker executable and job directory.
+Exported runtime setup and allocation variables reach the wrapper. Make the
+dependencies, release and workspace paths available to the compute nodes.
+Set `execution.slurm_script` to `"model.sbatch"` for Slurm and leave it out for
+process execution.
+
+For either driver, have the connector owner prepare the approved parent and
+installation access. On the execution host, start in the tested project and
+copy it to a new release directory. Set `RELEASE_DIR` to the path from your
+declaration.
+
+```sh
+RELEASE_DIR=/opt/enumeray/models/my-lab-double/r1
+mkdir "$RELEASE_DIR" &&
+  cp -R . "$RELEASE_DIR/"
+```
+
+Copy the solver, runtime dependencies and datasets that live outside the
+project. Include the completed Slurm script if the context uses one. Give the
+execution account permission to traverse the parents, read the required files
+and execute the wrapper. Use the site's method to test as that account. For the
+Python starter, replace the sample path with your installed release path.
+
+```sh
+(
+  cd /opt/enumeray/models/my-lab-double/r1 &&
+    test -x wrapper.py &&
+    python3 -B -m unittest discover -p 'test_*.py'
+)
+```
+
+Once the files, runtime and access checks pass, have the installer apply the
+site's read-only permissions to the release. Resolve installed resources
+relative to the release and write scratch files and results to the job
+workspace. Use a new directory for changed files. Keep the release and declared
+entrypoint or batch script outside every context's per-run `work_root/UUID`
+directories. Registration reports `reserved_run_installation_path` for paths
+in that area. A sibling path such as `work_root/releases/r1` can work if the
+context allows it. The connector protects known releases and their observed
+aliases if they overlap retained run data.
 
 Environment settings are bounded string runtime configuration, never credentials.
 They cannot override `HOME`, `PATH`, `PYTHONDONTWRITEBYTECODE`, or names beginning
@@ -501,16 +527,29 @@ and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 
-After local scientific tests and installation, create the model once and save a
-release. Use this directory to keep the candidate, readiness checks, trial evidence
-and activation review tied to the same publication.
+Once local tests pass and the files are installed, return to the editable
+project. Read the model ID from the declaration and validate the publication.
+Keep using this shell for the remaining steps.
 
 ```sh
-enumeray model validate --file publication.json
-enumeray model create example --file publication.json
-enumeray model release init example --file publication.json --directory release-r1
-enumeray model release resume release-r1
-enumeray model release status release-r1
+MODEL_ID=$(python3 -c 'import json; print(json.load(open("publication.json"))["model"]["id"])') &&
+  enumeray model validate --file publication.json
+```
+
+Create a catalogue entry for a new model. The signed-in account becomes its
+owner. If the ID belongs to another model, choose a new ID for your starter
+before continuing. For an existing model you administer, skip creation.
+
+```sh
+enumeray model create "$MODEL_ID" --file publication.json
+```
+
+The release directory keeps the candidate ID, readiness checks and
+activation review together.
+
+```sh
+enumeray model release init "$MODEL_ID" --file publication.json --directory release-r1 &&
+  enumeray model release resume release-r1
 ```
 
 Initialization requires the complete declaration and matching model ID, assigns one candidate ID and freezes the source, normalized machine request and observed current publication. It reads API identity/model authority but does not register or activate. A fresh initialization into a new directory explicitly requests a new candidate; resume the existing directory for a retry.
@@ -541,35 +580,54 @@ needs no grant inventory; review/activation requires `models:manage` and availab
 server-reported release authority. Trial submission has its separate
 run/artifact scopes and explicit review.
 
-Registration resolves your active context grant and derives the installation key. Exact retries preserve that captured grant. Identical model/context/settings and scientific installation identities can reuse a retained installation; changed installation settings or identities obtain a new key. A permanently revoked installation cannot be reused, including after grant reissue. Removed author fields (`grant_id`, `provider_binding_id`, duplicate installation claims) remain rejected.
+Registration selects your active grant for the context and derives an
+installation key. Exact retries keep that grant. Matching settings and
+scientific identifiers can reuse a retained installation. Changed settings
+or identifiers get a new key. A revoked installation stays unavailable even
+if a grant is reissued. Keep `grant_id`, `provider_binding_id` and other
+derived installation claims out of the editable declaration.
 
 On readiness failure, inspect validation messages and coordinate context, grant, path and execution-account corrections with the connector owner. Changed immutable science or installation settings require a new operation. Local validation checks contracts and settings; API registration checks authority/context policy; connector readiness checks installed entrypoint/batch files and execution/backend access. Readiness does not attest scientific correctness or every runtime dependency.
 
+### Run the candidate and check its results
+
 Use the full Candidate ID displayed by `model release status release-r1` as
 `PUBLICATION_ID`, or adapt its displayed trial-init command. Before activation,
-exercise the exact ready candidate in a separate analysis directory:
+exercise the ready candidate in a separate analysis directory. The scalar
+starter provides `starter-example` with input `2`.
 
 ```sh
 PUBLICATION_ID='REPLACE_WITH_FULL_CANDIDATE_ID_FROM_RELEASE_STATUS'
-cat > trial-inputs.json <<'JSON'
-{"value":2}
-JSON
-enumeray analysis init example --candidate "$PUBLICATION_ID" \
-  --inputs trial-inputs.json --directory trial-r1
-# Review the exact installation, execution location and full disclosure.
-enumeray analysis submit trial-r1
-enumeray analysis wait trial-r1 --check-outcome
-enumeray analysis status trial-r1
-enumeray analysis logs trial-r1
-enumeray analysis collect trial-r1
-enumeray model release status release-r1
+enumeray analysis init "$MODEL_ID" --candidate "$PUBLICATION_ID" \
+  --example starter-example --directory trial-r1
 ```
+
+Read the saved inputs, installation, location and data-access information.
+Run `enumeray analysis status trial-r1` if you need to see the saved details
+again. When you are ready, submit the trial folder and wait for the run.
+
+```sh
+enumeray analysis submit trial-r1 &&
+  enumeray analysis wait trial-r1 --check-outcome
+```
+
+After the run succeeds, collect its outputs and compare them with your
+expected result. The scalar example should report `{"doubled":4}` in
+`trial-r1/results/outputs.json`. With Slurm, the trial also exercises the
+scheduler and the runtime on the compute nodes.
+
+```sh
+enumeray analysis collect trial-r1
+```
+
+If the run fails, inspect `enumeray analysis status trial-r1` and
+`enumeray analysis logs trial-r1` before continuing.
 
 Initialization displays and saves the exact candidate installation, readiness,
 execution location, scientific-data access disclosure, captured grant and any
 named delegation. Review them before explicitly submitting. This also works for a
 first ready candidate when the model has no current publication. Use
-`--example NAME` instead of `--inputs FILE` for a named candidate example. Bind
+`--inputs FILE` to supply your own values. Bind
 ordinary files with `--file SLOT=PATH` and collections with
 `--collection SLOT=DIR` or `--collection-manifest SLOT=MANIFEST.json`, using the
 candidate's declarations and any required `--media-type SLOT=TYPE`. Completed
@@ -606,15 +664,25 @@ Trial success is advisory and never automatically activates or gates activation.
 Trials do not change the current publication, public admission or access policy.
 Validated, authorized retained publications can also be trialled after activation.
 
+### Review and activate
+
+Save the proposed publication comparison once you finish the scientific checks.
+
 ```sh
 enumeray model release review release-r1
-enumeray model release activate release-r1
-enumeray model get example
+```
+
+Read the comparison, then activate the candidate when you are satisfied with
+the change.
+
+```sh
+enumeray model release activate release-r1 &&
+  enumeray model get "$MODEL_ID"
 ```
 
 Review captures the observed current publication, including no current publication on first activation. If it changes, inspect the competing update and run review again before explicit activation. Initialization and registration never activate or share.
 
-Check that `model get example` shows the candidate as the current publication.
+Check that `model get` shows the candidate as the current publication.
 Accepted runs retain their original publication. Set access explicitly before
 handing the model ID and its scientific examples to a user.
 
@@ -760,18 +828,18 @@ outputs, including after a successful partial or evidence-only collection step.
 `analysis cancel file-analysis` requests cancellation; inspect confirmed status
 rather than inferring termination from a request or disconnected connector.
 
-Independent artifact/collection utilities remain available for reusable data;
-completed artifact references can be supplied in analysis input JSON as
+Use the artifact and collection commands for reusable data. Supply a completed
+artifact reference in analysis input JSON as
 `{ "artifact_id": "UUID" }`. File wrappers receive staged workspace paths in
 `input_files`, then report output paths and media types in `files`. Connectors
 publish those bytes as verified artifact references. Never fabricate public
-output artifact IDs inside the wrapper. Authorized `run list/get/events` and
-other evidence reads remain available by ID for investigation.
+output artifact IDs inside the wrapper. Use `run list`, `run get` and
+`run events` to investigate runs you have permission to read.
 
-For a legacy operation from the former `run prepare` command, preserve the file,
-run `analysis import --prepared run.json --directory imported-analysis`, then
-explicitly run `analysis submit imported-analysis` to reconcile its original
-request/key. The removed preparation/submission commands have no aliases.
+If you have a saved prepared request and need to find out whether it was
+accepted, keep the file and run
+`analysis import --prepared run.json --directory imported-analysis`. Then
+run `analysis submit imported-analysis` to reconcile the same request and key.
 For accepted work whose directory was lost, use `analysis attach RUN_UUID
 --directory recovered-analysis` or supply its raw acceptance receipt with
 `--receipt`. See the included [analysis recovery guide](ANALYSIS_GUIDE.md#recover-an-existing-execution)
@@ -878,10 +946,10 @@ sweep. Uncertain work and pending delivery keep their files and installation
 references. Archived evidence and launch replay guards remain on the connector
 and compute hosts; this cleanup does not change downloaded artifacts or run
 provenance.
-Deletion requires the service's run-directory reservation capability and a saved
-protected-release inventory. An older service, missing protection evidence or
-manual/older cache entries without known installation metadata block cleanup
-while scientific execution and delivery continue.
+Deletion requires run-directory reservations from the service, a saved
+protected-release inventory and known installation metadata. If any are
+missing, the connector retains the files while execution and delivery
+continue.
 
 ## Move to a replacement execution context
 
@@ -992,8 +1060,8 @@ If you maintain the public CLI or its fixtures, follow the
 The captured compute-grant holder can explicitly authorize another active model
 administrator to trial and activate the same candidate. The reviewer does not need
 a separate compute grant. A delegation applies only to this publication; it cannot
-be used to register another installation or delegate authority onward. Single-author
-releases remain supported, and independent approval is optional.
+be used to register another installation or delegate authority onward. An author
+with the required access can also trial and activate their own release.
 
 Inspect `model release status release-r1` for `model_generation`, then use that
 observed value for the handoff (replace the example generation below):
@@ -1011,13 +1079,28 @@ Give the reviewer the model and candidate publication IDs. In their own profile:
 ```bash
 enumeray model release init example --candidate CANDIDATE_ID --directory review-r1
 enumeray analysis init example --candidate CANDIDATE_ID --inputs inputs.json --directory review-trial-r1
-# Review the pinned installation, disclosure and named delegation.
+```
+
+Review the installation, data access and delegation shown for the trial.
+When ready, submit the trial and collect its result.
+
+```bash
 enumeray analysis submit review-trial-r1
 enumeray analysis wait review-trial-r1 --check-outcome
 enumeray analysis collect review-trial-r1
 enumeray model release status review-r1
-# Inspect review-trial-r1/results/ and complete your scientific checks.
+```
+
+Inspect `review-trial-r1/results/` and complete the scientific checks before
+saving the review.
+
+```bash
 enumeray model release review review-r1
+```
+
+Read the review, then activate explicitly.
+
+```bash
 enumeray model release activate review-r1
 ```
 

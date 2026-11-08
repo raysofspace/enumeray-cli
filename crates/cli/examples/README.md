@@ -61,12 +61,11 @@ model, or ask its owner for an already accessible model. Context IDs, release pa
 and scientific identities are examples to replace before publication. Creating
 local files does not provision compute or install a model.
 
-Run the following user commands from the package root, whose `examples/` directory
-contains this file. Use a logged-in profile and choose a new private analysis
-directory for each intended execution. Inspect the model and the saved destination/disclosure
-before submitting. The [analysis guide](../ANALYSIS_GUIDE.md) explains editable and
-frozen inputs, retries, logs/cancellation, copied-folder recovery and the complete
-[noninteractive JSON recipe](../ANALYSIS_GUIDE.md#script-with-structured-output).
+Start from the package root, whose `examples/` directory contains this file.
+Sign in to Enumeray and use a new private working directory for each
+intended run.
+The [analysis guide](../ANALYSIS_GUIDE.md) covers how to review inputs and
+recover work from a saved directory.
 
 For trusted local experiments, [development-process-context.json](development-process-context.json)
 provides the explicit process/direct development policy. Replace its absolute
@@ -77,78 +76,199 @@ launch-capable invocation.
 ## Scalar publication
 
 The supplied [process declaration](scalar-publication.json) and
-[Slurm declaration](slurm-scalar-publication.json) both describe `scalar-double`.
-Their installed entrypoint must implement that contract; choose the matching
-context template and follow the author installation procedure first.
+[Slurm declaration](slurm-scalar-publication.json) use the example ID
+`scalar-double`. To run the scalar starter, get its published ID and access
+from the author. If you publish the model, use the matching context template
+and follow the author guide for installation and testing.
 
 ```sh
-umask 077
-enumeray model get scalar-double
-enumeray analysis init scalar-double --inputs examples/scalar-inputs.json \
-  --directory scalar-analysis
-# Review the saved publication, destination/disclosure and editable inputs.json.
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID"
+```
+
+From the package root, record the path to the supplied input file before
+switching to a fresh working directory. Use the same shell and stay in the
+new directory for the rest of the example.
+
+```sh
+SCALAR_INPUTS="$PWD/examples/scalar-inputs.json"
+SCALAR_WORK_DIR=$(mktemp -d "$PWD/enumeray-scalar.XXXXXX") &&
+  cd "$SCALAR_WORK_DIR" &&
+  enumeray analysis init "$MODEL_ID" \
+    --inputs "$SCALAR_INPUTS" --directory scalar-analysis &&
+  enumeray analysis status scalar-analysis
+```
+
+Check where the run will happen and who can access its data. Review
+`scalar-analysis/inputs.json` before submitting.
+
+```sh
 enumeray analysis submit scalar-analysis
 enumeray analysis wait scalar-analysis --check-outcome
 enumeray analysis collect scalar-analysis
 ```
 
-The supplied input is `{"value":21}`; the scalar-double fixture returns
+The supplied input is `{"value":21}`. The scalar starter returns
 `{"doubled":42}` in `scalar-analysis/results/outputs.json`. Edit the analysis's
-`inputs.json` before its first submit to choose another value. Submit freezes it;
-repeat submit with the same directory after interruption to recover the same
-execution. A different intended execution needs a fresh directory and review.
+`inputs.json` before its first submit to choose another value. Submit freezes
+the inputs. After interruption, repeat submit with the same directory to
+recover the same execution. For a new run, use a fresh directory.
 
 ## File starter
 
-Create the source project with `enumeray model init csv-example --directory
-csv-example --io files`, run its local tests and complete the author publication
-procedure. Once that file model is accessible, create two tiny input rows outside
-the new analysis directory:
+The author tutorial uses `csv-example` as the file starter's ID. Ask your
+team for the published ID and access. If you're preparing the model for
+your team, follow the [author guide](../AUTHOR_GUIDE.md).
+
+Set `MODEL_ID` to the published ID and create a fresh private working directory.
+Use the same shell and stay in that directory for the rest of the commands.
 
 ```sh
-umask 077
-cat > dataset.csv <<'CSV'
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID" &&
+  FILE_WORK_DIR=$(mktemp -d "$PWD/enumeray-file.XXXXXX") &&
+  cd "$FILE_WORK_DIR" &&
+  pwd
+```
+
+Create the two-row dataset beside the new analysis directory. The `dataset`
+binding supplies the only required input, so the input JSON can be empty.
+
+```sh
+(
+  set -eC
+  umask 077
+  cat > dataset.csv <<'CSV'
 index,value
 0,1
 1,2
 CSV
-cat > file-inputs.json <<'JSON'
+  cat > file-inputs.json <<'JSON'
 {}
 JSON
-enumeray model get csv-example
-enumeray analysis init csv-example --inputs file-inputs.json \
-  --file dataset=dataset.csv --directory file-analysis
-# Review the destination/disclosure and the local dataset binding.
+  enumeray analysis init "$MODEL_ID" --inputs file-inputs.json \
+    --file dataset=dataset.csv --directory file-analysis
+  enumeray analysis status file-analysis
+)
+```
+
+Review the local `dataset` binding and check where the file will go and who
+can access it before submitting.
+
+```sh
 enumeray analysis submit file-analysis
 enumeray analysis wait file-analysis --check-outcome
 enumeray analysis collect file-analysis
 ```
 
-The binding supplies the required `dataset` reference and uploads the source
-automatically. The expected ordinary output is `sample_count: 2`; `bundle.json`
-maps `processed_dataset` to a verified CSV containing rows `0,2` and `1,4`.
-Keep original source bytes unchanged while upload is unfinished and retain them
-separately when needed: the analysis records their path/checksum without copying
-them. Status, logs, cancellation and collection use the folder after acceptance.
+The CLI uploads the bound file when you submit. Open `results/outputs.json`
+inside `file-analysis` and check that `sample_count` is `2`. Use `bundle.json`
+to find the verified `processed_dataset` CSV containing rows `0,2` and `1,4`.
+Keep the original file unchanged until the upload finishes. Retain a separate
+copy if you need it later. The analysis records its path and checksum.
 
 ## Collection example
 
-The [collection publication](../../../examples/collections/publication.json)
-and [Python wrapper](../../../examples/collections/wrapper.py)
-describe `collection-example`, with input `dataset` and output `snapshots`.
-Install and publish that model through the author workflow, then follow the
-[complete two-member setup](../ANALYSIS_GUIDE.md#bind-local-collections): it creates
-`mesh/grid.bin`, `snapshots/0001.bin` and `{}` scientific inputs, binds the directory
-and records every member's original size/checksum before upload. Review and submit
-that folder, then use the guide's [staged collection commands](../ANALYSIS_GUIDE.md#collect-verified-evidence)
-to collect manifests, one selected member and finally all outputs.
+Use a collection when your model takes a directory of related files as one
+input. This example sends two files to a starter that copies them into its
+`snapshots` output. Its template uses `collection-example` as the model ID.
+Ask the author for the published ID and access.
 
-Evidence-only and partial collection can exit 0 with `complete: false`. Verify
-`complete: true` and `bundle.json` for every output; scientific success, failure or
-cancellation is recorded independently. Repeated collection never launches the
-model again. For a deliberately selected input set, use a collection manifest
-instead of a directory binding. Independent artifact/collection utilities remain
-available for reusable data; accepted-run IDs remain useful for authorized
-investigation and attachment.
+If you're publishing the starter, take the complete `examples/collections/`
+project from the [verified examples archive](https://doc.enumeray.com/authors/overview/#run-the-downloaded-examples-offline).
+Keep `publication.json`, `wrapper.py`, `protocol.py`, the fixtures and tests
+together. Use Python 3.9 or newer on the execution host. If you choose a
+different model ID, use it in the declaration, wrapper and request fixture.
+[Test the collection wrapper locally](https://doc.enumeray.com/authors/wrappers/#collection-inputs-and-outputs),
+then follow the [publication guide](https://doc.enumeray.com/authors/publication/#agree-on-installation-and-execution)
+to install, trial, review and activate it.
 
-Host preparation specifications: [Linux managed](host-setup-linux.json), [macOS managed](host-setup-macos.json) and [development](host-setup-development.json). Edit accounts, paths, IDs and limits before generating a plan. Generation applies no host changes.
+### Prepare and review a two-file run
+
+Set `MODEL_ID` to the published ID. Run the block from a folder where you
+can keep your work. Use the same shell and stay in the printed directory
+for the rest of the example.
+
+```sh
+MODEL_ID='REPLACE_WITH_PUBLISHED_MODEL_ID'
+enumeray model get "$MODEL_ID" &&
+  COLLECTION_WORK_DIR=$(mktemp -d "$PWD/enumeray-collection.XXXXXX") &&
+  cd "$COLLECTION_WORK_DIR" &&
+  pwd
+```
+
+The `dataset` binding supplies the only required input, so the JSON input
+object can be empty. The analysis directory is separate from the source tree.
+
+```sh
+(
+  set -eC
+  umask 077
+  mkdir -p collection-inputs/mesh collection-inputs/snapshots
+  printf '%s\n' 'grid fixture' > collection-inputs/mesh/grid.bin
+  printf '%s\n' 'snapshot fixture' > collection-inputs/snapshots/0001.bin
+  printf '%s\n' '{}' > collection-inputs.json
+  enumeray analysis init "$MODEL_ID" \
+    --directory collection-analysis --inputs collection-inputs.json \
+    --collection dataset=collection-inputs --media-type dataset=application/octet-stream
+  enumeray analysis status collection-analysis
+)
+```
+
+Check both files in the source directory and read the execution location and
+data-access disclosure shown by status. Keep the files in place while their
+uploads are unfinished. Submit only after review.
+
+```sh
+enumeray analysis submit collection-analysis
+```
+
+After you have the receipt, wait for the outcome.
+
+```sh
+enumeray analysis wait collection-analysis --check-outcome
+```
+
+### Collect the output in stages
+
+After a successful run, try all three stages below. To collect the whole
+result in one step, use the last command on its own.
+
+```sh
+enumeray --json analysis collect collection-analysis --evidence-only
+enumeray --json analysis collect collection-analysis \
+  --member snapshots=mesh/grid.bin
+enumeray --json analysis collect collection-analysis
+```
+
+The first step saves the run record and manifests. The second downloads
+`mesh/grid.bin` from the `snapshots` output. On a fresh collection, both
+report `complete: false`. The last step downloads the remaining files,
+reports `complete: true` and writes `collection-analysis/bundle.json`.
+
+Open `collection-analysis/results/outputs.json` and check that
+`member_count` is `2`. Use the paths in the bundle to find
+`mesh/grid.bin` and `snapshots/0001.bin` within the downloaded collection.
+Both should match their respective source files. If a transfer stops, repeat
+the same collection command with the same directory.
+
+### Choose which files to send
+
+Use `--collection SLOT=PATH` to include the regular files under a directory.
+If the slot accepts several media types, set `--media-type SLOT=TYPE` to use
+one type for the entire directory. For a selected list of files or different
+types by file, put the manifest at the source root and initialize with
+`--collection-manifest SLOT=MANIFEST.json`. For a previously uploaded
+collection, put its completed `collection_id` in the input JSON.
+
+A collection can have up to 10,000 members and a manifest of up to 16 MiB.
+The model can impose lower limits. The 10,000-file total includes standalone
+files and collection members in each direction. Keep original source bytes
+separately when you need them. [File and collection limits](https://doc.enumeray.com/reference/limits/)
+
+## Host preparation specifications
+
+Choose the [Linux managed](host-setup-linux.json), [macOS managed](host-setup-macos.json)
+or [development](host-setup-development.json) specification. Edit accounts,
+paths, IDs and limits before generating a plan. Generating a plan only
+prepares it for review.

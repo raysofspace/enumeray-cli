@@ -1,19 +1,27 @@
 # Guided connector setup
 
-Use `enumeray setup` to prepare a connector, save its configuration, check host
-readiness and trial a first model. Install the matching executable using the
-[installation guide](INSTALL.md). Package availability and qualification remain
-separate from source development; use the matching source build while a qualified
-package is unavailable.
+Use `enumeray setup` to connect your compute to Enumeray at
+`https://api.enumeray.com`. The wizard saves your choices, shows what the
+host administrator needs to prepare and checks readiness after the
+connector starts. You can stop at readiness or test it with a model.
+
+## Before you start
+
+- [Install the CLI](INSTALL.md) on the connector host. Run the wizard as
+  your regular OS user.
+- [Sign in to Enumeray](https://doc.enumeray.com/start/login/) as the account
+  that will own a new connector. To adopt an existing connector, sign in
+  as its owner or a co-admin and review its saved settings.
+- For shared compute, arrange for a host administrator to prepare separate
+  connector and execution accounts. On your own machine, development mode
+  runs trusted models under your account.
+- To try the demo, install Python 3.9 or newer on the execution host. For
+  your own project, prepare its runtime and data and use an account
+  allowed to create the model or administer its existing catalogue entry.
 
 ## Choose a mode and save the journey
 
-Run setup as your regular OS user with an Enumeray account that can register a
-connector. A first-model trial also requires model author authority. The wizard
-uses your selected profile and offers browser login if needed. For the hosted
-service at `enumeray.com`, setup defaults to `https://api.enumeray.com` and login
-opens `auth.enumeray.com` without URL configuration. If you saved a profile for
-another deployment, use `--profile NAME` to select the intended profile.
+Run the wizard from a directory where you can keep its files.
 
 ```sh
 enumeray setup --directory enumeray-setup
@@ -29,12 +37,16 @@ You can select a mode in the wizard or pass `--mode development` or
 executable, execution location, data access disclosure, startup and first-model
 choices in the saved plan before approval.
 
-The private setup directory retains the original profile/API binding, operation
-identities, host plan and progress. User login credentials stay in the private
-profile store; connector credentials and journals have their own host paths.
-Restore setup backups at their original path; copied setup checkpoints are refused
-so one parent operation cannot fork fresh candidate/trial identities.
-Repeat the same directory after interruption:
+After approval, setup registers the connector and context, then gives
+your signed-in account a compute grant for that context before checking
+host readiness. If an active grant already exists for your account and
+context, setup asks you to adopt it with its current limits. The
+first-model trial uses that saved grant.
+
+Keep the setup directory. It holds your account, the host plan and
+progress. Login credentials stay in your profile store. Connector
+credentials and the journal use separate host paths. Restore a backup to the
+original directory and use that path to continue after an interruption.
 
 ```sh
 enumeray setup --directory enumeray-setup
@@ -42,10 +54,10 @@ enumeray setup status --directory enumeray-setup
 ```
 
 Status reads saved progress and authenticated readiness without initiating checks
-or repairing a host. Offline or unauthorized observations remain unknown. Restore
-an expired login for the same API/account and resume the original directory.
-Changing mode, origin or frozen settings requires a new reviewed plan; preserve
-existing journals, credentials and release evidence.
+or repairing a host. Offline or unauthorized observations remain unknown.
+If your login expires, sign back in to the original account and resume the
+saved directory. Changing the mode or host settings requires a new
+reviewed plan. Keep existing journals, credentials and release evidence.
 
 ## Development setup under your current user
 
@@ -61,12 +73,13 @@ existing journals, credentials and release evidence.
 
 ## Managed setup with separate accounts
 
-Select a dedicated connector account. You can require an existing connector
-account or authorize the administrator to create it if absent. Same-host
-execution defaults to your current OS account. The wizard also accepts a
-different existing local account or an existing account on the SSH host.
-Use a reviewed [scripted host specification](#script-the-same-saved-workflow)
-if the administrator must create the execution account.
+Choose a dedicated connector account to hold credentials and a separate
+account to run models. The host administrator can create the connector
+account as part of the approved plan. For same-host execution the wizard
+defaults to your current OS account. It can also use another existing
+local account or an existing SSH account. If the administrator needs to
+create the execution account, use a reviewed
+[scripted host specification](#script-the-same-saved-workflow).
 
 Choose an execution driver and connection independently. These choices support
 four combinations across Linux and macOS hosts:
@@ -141,16 +154,27 @@ for the native service manager. Run the start command printed by setup:
 | **Foreground** (default) | Run as your current user. | Run as the dedicated connector account after applying the host plan. |
 | **Background** | Run as your logged-in user. Starts a user-level systemd service on Linux or a LaunchAgent on macOS. | An administrator starts the systemd service or LaunchDaemon installed by the reviewed background host plan. On Linux, site policy controls boot enablement. |
 
-For example, development foreground startup and status use the saved runtime file:
+For development foreground startup, run the printed command in its own
+terminal. Use the actual runtime file path from your setup plan.
 
 ```sh
 enumeray connector start --configuration /absolute/connector/runtime.json --foreground
+```
+
+Leave that terminal running. In a second terminal on the connector host, run
+the host status check as the account running the connector.
+
+```sh
 enumeray connector status --configuration /absolute/connector/runtime.json
 ```
 
-Foreground start occupies its terminal. Resume the original setup directory in
-another terminal. With background startup, resume in the same terminal after the
-start command returns.
+In the second terminal, return to the directory where you started setup and
+resume the same operation as the setup user. With background startup, you can
+resume in the original terminal after the start command returns.
+
+```sh
+enumeray setup --directory enumeray-setup
+```
 
 The runtime file contains credential **paths**, not credential values. `--configuration`
 is distinct from the global `--config` profile-file option. Host start/status do
@@ -159,25 +183,30 @@ same journal. An interrupted manual-recovery session still requires external
 proof that its previous process stopped and an explicit
 `--confirm-prior-process-stopped`; stale contact is insufficient.
 
-Setup runs publication-independent prerequisites and displays **configured**,
-**connected** and **ready** separately, with corrections and responsible roles.
-A local host report cannot replace authenticated connector evidence, scientific
-validation or compute authorization.
+Read all three checks in setup. **Configured** means Enumeray has a context
+and enrollment. **Connected** means the connector has contacted the service
+with its current credential. **Ready** means the service also has the
+configuration acknowledgement and passing host checks it needs. If a check
+is blocked, setup shows the next action and who can take it. A first-model
+trial checks the actual installation and results separately.
 
 ## Trial a starter or existing project
 
-Choose **demo** to generate a small Python starter and trial it on your connector,
+Choose **demo** to generate a Python starter and trial it on your connector,
 **project** to use an author project containing `publication.json`, or **later**
-to finish at connector readiness and prepare a model separately.
+to finish at connector readiness. The demo prompts you for a new model ID.
+Choose the supplied `starter-example` to double input `2`.
+
+If you chose **later**, setup is complete when it reports **ready**.
+Continue to the [author handoff](#give-an-author-access-to-the-ready-context)
+when you want an author to publish on this connector.
 
 For a project, the wizard reads its model ID and named input examples. Choose a
 declared example or provide your own scientific inputs JSON file. The wizard
 also accepts local file and collection bindings and can select an already
 installed release. Saved input and installation paths must be absolute.
 
-Install Python for the demo and prepare the runtime, dependencies and data needed
-by your own project. For Slurm, prepare the site-specific batch script before
-freezing the release.
+For Slurm, prepare the site-specific batch script before freezing the release.
 For a generated Slurm starter, setup pauses for this work; resume with
 `--confirm-model-preparation` after reviewing the site's allocation and runtime setup.
 
@@ -190,33 +219,56 @@ Original projects and earlier installed releases are preserved. Automatic stagin
 is bounded and refuses symbolic links; use the existing site installation route
 for projects requiring special layout or provisioning.
 
-The wizard saves one candidate release and one analysis directory, waits for
-validation, and requests explicit trial submission after review of the saved
-inputs, execution destination and disclosure. Repeating setup reconciles the same
-candidate and trial, including uncertain submission replies. Collected evidence
-remains in `first-trial`; the release operation is `first-release` inside the setup
-directory. A successful trial does not activate a publication.
+The wizard saves the candidate in `first-release` and its run in `first-trial`
+inside the setup directory. After validation, review the inputs, execution
+location and who can access the data. Submit when you are satisfied.
+Resume the same setup directory after an interruption or lost reply.
 
-Review the retained evidence and perform activation separately when appropriate:
+When setup reports `trial_complete`, open `first-trial/results/outputs.json`
+inside the setup directory. The demo with `starter-example` should return
+`{"doubled":4}`. For your own project, compare those outputs with your
+expected results. Keep `first-trial/results/provenance.json` with the trial.
+
+If you want to make the candidate current, first check its scientific result
+and save the proposed release comparison.
 
 ```sh
-enumeray model release review /absolute/setup/first-release
-enumeray model release activate /absolute/setup/first-release
+enumeray model release review enumeray-setup/first-release
 ```
 
-Use the original `--profile` and `--config` when applicable. Existing project
-scientific tests and interpretation remain the author's responsibility. Installation
-or access requiring another person remains a site handoff; setup reports the
-required action without granting that person's authority.
+Read the review before deciding to activate.
 
-If you chose **later**, setup is complete when it reports **ready**. The
-connector owner can continue with
+```sh
+enumeray model release activate enumeray-setup/first-release
+```
+
+If setup reports that an installation or access step needs a different account,
+give the responsible person the displayed action.
+
+## Give an author access to the ready context
+
+After setup reports **ready**, use your connector owner or co-admin
+account. Ask the author for their account UUID from `enumeray auth whoami`.
+Use the connector and context IDs from your setup plan, and choose limits
+appropriate to the compute you are sharing.
+
+```sh
+enumeray connector grant create CONNECTOR_ID --context CONTEXT_ID --user AUTHOR_UUID \
+  --max-queued-runs 100 --max-outstanding-assignments 4
+enumeray connector grant list CONNECTOR_ID
+```
+
+Check that the list includes the author's UUID, intended context and limits.
+Give the author the context ID, approved installation root, execution
+account, runtime requirements and instructions for installing files.
+Arrange host installation access as well as the compute grant.
+
+The author runs `enumeray connector grant available`. The handoff is
+complete when the command shows the intended context and the author knows
+where and how to install the release. They can then
+[install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
+For day-to-day service tasks, see
 [service operation](../connector/README.md#enrollment-and-service-operation).
-
-If you chose **demo** or **project**, check for **trial_complete** and confirm
-that `first-trial` contains the collected result and provenance. The model author
-can check the scientific result and
-[review and activate the saved release](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate).
 
 ## Script the same saved workflow
 
@@ -226,7 +278,7 @@ and optional `first_model`. Start from the existing
 [development host specification](examples/host-setup-development.json),
 [Linux host specification](examples/host-setup-linux.json) or
 [macOS host specification](examples/host-setup-macos.json). Replace example accounts
-and absolute paths. The examples already use the hosted API origin.
+and absolute paths. Keep `host.api_base_url` at `https://api.enumeray.com`.
 
 For background operation set `host.install_service` to `true`; otherwise leave it
 `false`. Managed executable copying needs `executable_source` and
@@ -249,7 +301,7 @@ enumeray setup --directory setup-operation --non-interactive --approve SETUP_PLA
 # After reviewing the saved analysis, --submit-trial explicitly submits/resumes it.
 ```
 
-Noninteractive setup requires an authenticated selected profile. Existing records
+Noninteractive setup requires an existing Enumeray login. Existing records
 need explicit `--adopt-existing`; conflicting settings are never overwritten.
 A server-assigned enrollment secret cannot be recovered by repeating connector
 creation. Preserve any saved document and identity directory. If none is usable,

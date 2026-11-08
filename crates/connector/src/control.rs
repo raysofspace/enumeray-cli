@@ -23,7 +23,7 @@ pub struct EnrollOptions {
     #[arg(long)]
     directory: PathBuf,
     /// API origin, inferred from the enrollment document or retained identity when omitted.
-    /// First enrollment with a legacy document or raw token needs an explicit origin.
+    /// For first enrollment, provide the origin if the document omits it or you use a raw token.
     #[arg(long)]
     api_base_url: Option<String>,
     /// Private file containing only the one-time enrollment token; alternative to --enrollment-file.
@@ -132,7 +132,7 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
         identity
     } else {
         let origin = requested_origin.ok_or_else(|| {
-            failure("use --api-base-url for a first enrollment with a legacy document or raw token")
+            failure("use --api-base-url for a first enrollment with a document that omits the API origin or a raw token")
         })?;
         let credential_id = Uuid::new_v4();
         let mut secret = [0_u8; 32];

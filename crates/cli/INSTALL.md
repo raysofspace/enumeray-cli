@@ -1,83 +1,46 @@
 # Install and use Enumeray
 
-One `enumeray` executable provides user commands, connector operation and the
-compute runner. Install the same qualified package on each required host.
-Users need no API checkout, PostgreSQL, database credentials, Python or installer
-to run the executable. Select a qualified archive for your operating system and
-CPU. The supported matrix is macOS **15 or newer** and Linux **glibc 2.28 or newer**,
-each on x86-64 and ARM64. Alpine/musl, Windows and older systems are outside this
-matrix. Each platform must pass its own oldest-supported-environment checks before
-publication. A build on a newer system alone does not qualify that minimum.
+Install the `enumeray` command on the computer where you will submit runs.
+The same executable provides the CLI, connector and compute runner.
+The CLI connects to Enumeray at `https://api.enumeray.com`.
 
-Use the qualified package for your service when available. Direct downloads
-and the project Homebrew tap are the supported distribution channels. For
-development evaluation when your selected service has no qualified package,
-[build from the public revision supplied by the service owner](#build-from-a-pinned-checkout).
-
-After installation, sign in and follow the
-[hosted trial](https://doc.enumeray.com/start/first-run/) to run the supplied HUXt
-or REBOUND model without operating a connector. For your own compute, use
-[guided connector setup](SETUP_GUIDE.md) to select a mode, prepare the host,
-establish readiness and trial a first model with saved progress.
-
-**Alpha: 0.1.0-alpha.3.** Commands and APIs may change. Alpha updates may require
-a separate fresh installation; no in-place upgrade compatibility is promised.
-Read the target release's instructions before upgrading. Keep valuable existing
-state with its matching binaries; installation and removal never recreate or
-clear credentials, configuration or connector journals. The persistent baseline
-remains provisional. Alpha labeling does not relax execution, authorization or
-recovery checks.
+For a first-time workstation install, start with the
+[short installation guide](https://doc.enumeray.com/start/install-cli/). This
+reference includes archive verification, offline installation, source builds
+and maintenance for installations that hold saved work.
 
 ## Before choosing a package
 
-For a fresh disposable trial on the public demo, open the
-[hosted release selection](https://doc.enumeray.com/start/hosted-release/) before
-downloading. Use the exact tag, target, origin and evidence linked there. If the
-page shows a qualification hold, stop and use its named contact. For a historical
-incident, keep the exact archive and comparison receipt and use the guides and
-examples inside that archive or its matching source release.
+For the demo, [check hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
+Use the release approved by Enumeray. If your lab provides the CLI on its
+computers, ask which release it supports.
 
-For an offline or institutional handoff, use the selection from the responsible
-site owner and retain the verified files and transfer evidence. For durable state,
-follow the [maintenance order](#upgrade-deliberately) before
-replacing any component.
+Choose the route for your computer and situation.
 
-Obtain the approved public source revision or release,
-matching service selection/receipt and responsible installation contact from the
-service or site owner. Use the exact release evidence even when the version or
-baseline label agrees with this guide.
-Confirm that the selected version is published for your chosen channel;
-Homebrew additionally requires its qualified tap formula. The examples below
-do not establish availability. If no qualified package is identified, use the pinned source
-evaluation route agreed with the service owner; do not guess a revision or reuse
-an older pilot's durable state.
+| What you need | Where to start |
+| --- | --- |
+| Install an approved Homebrew formula | [Homebrew on macOS](#homebrew-on-macos) |
+| Install a specific published binary | [Verify and install an archive](#verify-and-install-an-archive) |
+| Install on a machine without internet access | [Offline and SSH/HPC hosts](#offline-and-sshhpc-hosts) |
+| Compile an approved published release | [Build from a release source archive](#build-from-a-release-source-archive) |
+| Build from an approved source selection | [Build from the exact public commit supplied by Enumeray](#build-from-a-pinned-checkout) |
+| Replace an installation with saved work | [Plan the change with the service and compute owners](#upgrade-deliberately) |
 
-Use a terminal with a POSIX shell (`sh`), `curl`, `tar`, `mkdir`, `install`,
-`mktemp`, `mv`, `rm` and a SHA-256 utility (`shasum` on macOS or `sha256sum` on
-Linux). Source acquisition additionally needs Git, a trusted Rustup installation
-and the platform's native compiler/linker. Obtain these tools through your
-institution's approved package or toolchain process. Signature verification
-requires **Cosign v3 on a trusted connected host**, obtained independently of the
-Enumeray download; an unverified tool shipped beside an archive cannot establish
-its trust. Confirm tools with `command -v TOOL` and `cosign version` before
-following a recipe. Python 3.9+ is needed only for supplied author examples, and
-`jq` only for scripted JSON/HTTP workflows.
+The binary targets are macOS 15 or later and Linux with glibc 2.28 or later,
+each on Intel x86-64 and ARM64. Check the architecture with `uname -m` and the
+system with `sw_vers -productVersion` on macOS or `getconf GNU_LIBC_VERSION`
+on Linux. Choose a supported host if your system is older, uses musl or runs
+Windows. The site owner supplies the separate checks for Slurm, SSH and any
+managed service configuration.
 
-Confirm the host's CPU and minimum system before downloading: `uname -m` reports
-`arm64`/`aarch64` or `x86_64`; `sw_vers -productVersion` reports macOS, and
-`getconf GNU_LIBC_VERSION` reports glibc on Linux. Stop for an unknown architecture,
-missing glibc or an older system. A different target's binary is not an upgrade
-route. Slurm/OpenSSH versions and institutional storage/runtime behavior require
-the site's selected backend evidence; the package matrix alone does not qualify
-them or native systemd/launchd service management.
-
-Work in a new download directory you control. Keep the verified archives,
-metadata and receipt after installation; the executable alone cannot recover
-all verification evidence.
+Once `enumeray --version` works, [sign in](#login-and-profiles). Use a browser
+for interactive sign-in. Use the [connector setup guide](SETUP_GUIDE.md)
+if you also need to connect a computer that runs models.
 
 ## Homebrew on macOS
 
-Once the project tap's qualified formula is published:
+Use Homebrew when the tap publishes the formula for the approved release.
+The formula selects the archive for your Mac.
 
 ```sh
 brew tap raysofspace/tap
@@ -85,31 +48,46 @@ brew install raysofspace/tap/enumeray
 enumeray --version
 ```
 
-The single formula selects the Intel or Apple Silicon archive and installs its
-guides and compatibility metadata under `$(brew --prefix enumeray)/share/enumeray`.
-It has no service definition or startup hook. For upgrades, follow the maintenance
-steps below, then run `brew upgrade raysofspace/tap/enumeray`. Use `brew pin enumeray`
-to retain the installed version; `brew unpin enumeray` allows later upgrades.
-Homebrew installs the tap's current formula. Use a versioned direct archive when
-an exact historical version is required. Remove the package with
-`brew uninstall enumeray`; separately managed credentials and journals remain.
+Homebrew installs the tap's published version. To install a specific version,
+use the archive below. Find the packaged guides and `compatibility.json` under
+`$(brew --prefix enumeray)/share/enumeray`. To compare the installed executable
+with its release evidence, follow [Inspect the selected installation](#inspect-the-selected-installation)
+and use `ENUMERAY_BIN=enumeray`.
+
+For a replacement, follow [the maintenance procedure](#upgrade-deliberately)
+before running `brew upgrade raysofspace/tap/enumeray`. Use
+`brew pin enumeray` to keep an installed version and `brew unpin enumeray` to
+allow upgrades. `brew uninstall enumeray` removes the package. Keep separately
+managed credentials and journals with the work they belong to.
 
 ## Verify and install an archive
 
-Check the repository's [releases](https://github.com/raysofspace/enumeray-cli/releases)
-for qualified packages. Draft artifacts do not establish release qualification.
-Each archive contains one executable plus its license, compatibility/source
-metadata, guides and examples. There is no custom installer or self-updater.
-Use an explicit published version and target; do not use a draft or infer service
-compatibility from a version number. This example selects Apple Silicon macOS;
-replace `TARGET` with `x86_64-apple-darwin`, `aarch64-unknown-linux-gnu` or
-`x86_64-unknown-linux-gnu` as appropriate:
+### Download the selected archive
+
+Use the approved published version from the
+[release assets](https://github.com/raysofspace/enumeray-cli/releases).
+Each binary archive contains the executable, license, compatibility information,
+guides and examples. Choose the target for the computer where it will run.
+
+| Computer | Target |
+| --- | --- |
+| Apple Silicon Mac | `aarch64-apple-darwin` |
+| Intel Mac | `x86_64-apple-darwin` |
+| ARM64 Linux with glibc | `aarch64-unknown-linux-gnu` |
+| Intel or AMD x86-64 Linux with glibc | `x86_64-unknown-linux-gnu` |
+
+Replace both placeholders below with the approved version without its leading
+`v` and the target from the table. Use a terminal with a POSIX shell, `curl`,
+`tar`, `install` and a SHA-256 tool (`shasum` on macOS or `sha256sum` on
+Linux). For the next step, install Cosign v3 from a trusted source separately
+from the archive. Use a directory you control and keep the three downloaded
+files together.
 
 ```sh
-mkdir -p "$HOME/enumeray-downloads/alpha-evaluation"
-cd "$HOME/enumeray-downloads/alpha-evaluation"
-VERSION=0.1.0-alpha.2
-TARGET=aarch64-apple-darwin
+mkdir -p "$HOME/enumeray-downloads"
+cd "$HOME/enumeray-downloads"
+VERSION=REPLACE_WITH_APPROVED_VERSION
+TARGET=REPLACE_WITH_YOUR_TARGET
 REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-$TARGET.tar.gz"
@@ -120,9 +98,11 @@ curl --fail --location --proto '=https' --tlsv1.2 --output "$CHECKSUM" "$BASE_UR
 curl --fail --location --proto '=https' --tlsv1.2 --output "$CHECKSUM.sigstore.json" "$BASE_URL/$CHECKSUM.sigstore.json"
 ```
 
-Verify on a trusted connected host with a separately trusted Cosign v3. The
-qualified-release workflow signs from `main`; the requested version is bound by
-the signed checksum filename and the release/source metadata:
+### Verify the download
+
+Verify on a trusted connected host. Cosign checks that the checksum file was
+signed by the release workflow. The SHA-256 check compares the downloaded
+archive with that signed file. Extraction runs after both checks pass.
 
 <!-- archive-verification -->
 ```sh
@@ -143,25 +123,25 @@ the signed checksum filename and the release/source metadata:
 )
 ```
 
-After that block succeeds, set `EXTRACTED="$PWD/${ARCHIVE%.tar.gz}"`.
+If either check fails, stop and obtain the correct signed files. After both
+pass, set `EXTRACTED="$PWD/${ARCHIVE%.tar.gz}"`. Keep the archive and signed
+checksum for your records.
 
+### Compare the package with the service
 
-Stop immediately if either verification command fails. Keep the signed checksum
-and archive together. Read `compatibility.json` and the source identity before
-using the package with a service. Do not skip signature verification because a
-checksum from the same untrusted download happens to match.
+Read the archive’s `compatibility.json` and run
+`"$EXTRACTED/enumeray" --json compatibility inspect`. Follow
+[the installation check](#inspect-the-selected-installation) with this
+extracted executable and the evidence for the approved release. Continue when
+the required checks report a match. If you’re replacing a working installation,
+[check the maintenance steps](#upgrade-deliberately) before you copy the file.
 
-Choose any writable prefix, with `$HOME/.local` as the default. The commands below
-stage beside the destination and rename on the same filesystem, so an interrupted
-copy leaves the previous executable in place. Use a prefix you manage directly;
-use Homebrew to update executables owned by that package manager.
-Coordinate connector/runner maintenance before replacing an existing package.
-Run `"$EXTRACTED/enumeray" --json compatibility inspect` before replacement and
-compare it with the package metadata and selected service as described below;
-invoke that extracted binary for the pre-install compatibility check. Stop on a
-wrong target, mismatch or missing required evidence before replacing a working
-executable. `--local-only` establishes only its declared installed-file scope,
-not permission to reuse an incompatible journal.
+### Copy the verified executable
+
+The example installs to `$HOME/.local/bin`. Set `PREFIX` to use another
+directory you control. The copy stages and checks the executable in the
+destination directory before replacing the file. Use Homebrew for executables
+managed by Homebrew.
 
 <!-- manual-install-copy -->
 ```sh
@@ -184,52 +164,55 @@ export PATH="$HOME/.local/bin:$PATH"
 enumeray --version
 ```
 
-Keep the extracted metadata/guides wherever convenient; the executable runs
-independently. Removal is simply `rm "${PREFIX:-$HOME/.local}/bin/enumeray"` after stopping any
-daemon that uses it. Remove only the path you installed. This leaves your user
-configuration, credentials, connector journal and scientific work untouched.
+When `enumeray --version` prints the selected version, continue to
+[sign-in](#login-and-profiles). Keep the extracted guides, metadata and
+verification receipt for the package you installed. To remove a direct
+installation, stop any daemon that uses it and remove only the executable you
+installed. Its profile, connector journal and scientific work are stored
+separately.
 
 ## Offline and SSH/HPC hosts
 
-Verify the signature and archive checksum on a trusted connected host first.
-Transfer the verified archive, signed checksum, signature bundle,
-release/service receipts, compatibility/source metadata and installation receipt
-through your approved authenticated SSH transfer. Record which connected host
-verified them, the artifact SHA-256 and how the recipient authenticated that
-handoff. Recheck the archive's SHA-256 at the destination using that verified
-checksum, then extract and install as above. A successful local checksum only
-checks the transfer against that trusted handoff; it does not independently
-repeat online signature verification. The connected verifier can give the
-recipient a prior matching signed-release installation receipt and its SHA-256
-through an independently authenticated channel. On the offline recipient, use
-`compatibility check --transferred-receipt FILE --transferred-sha256 SHA256
---local-only --receipt NEWFILE` to compare the installed bytes within that
-explicit local scope. The resulting trust is `authenticated_transfer`, not a
-claim of freshly repeated online signing or observation of a live service. Cosign is needed on the verification host; the offline execution host
-needs no Python, installer or network access for installation. Retain the
-verification evidence with the downloads for later reuse.
+First verify the archive signature and checksum on a trusted computer with
+internet access. Transfer the archive, signed checksum, signature bundle,
+release and service receipts, compatibility and source details, and installation
+receipt over your approved authenticated channel. Record which computer verified
+the files, the SHA-256 of the archive and how the recipient authenticated the
+handoff.
 
-SSH execution needs OpenSSH on the connector host and the matching Enumeray
-executable on each remote execution host. Slurm compute nodes need the same
-qualified executable. Install it at the path approved by the site operator.
+On the destination, compare the archive with the verified SHA-256 before
+extracting and installing it. The connected verifier can provide the matching
+signed-release installation receipt and its SHA-256 through an independently
+authenticated channel. Use
+`compatibility check --transferred-receipt FILE --transferred-sha256 SHA256 --local-only --receipt NEWFILE`
+to compare the installed file. The check reports `authenticated_transfer` for
+this local check. Retain the verified files and receipts together.
 
+Install the matching executable on each remote host that runs it, at the
+path approved by the site operator. SSH requires OpenSSH on the connector host.
+For Slurm, make the executable accessible to the compute nodes.
 
 ## Build from a release source archive
 
 Each qualified release also provides `enumeray-VERSION-source.tar.gz`, its
 `.sha256` checksum and `.sha256.sigstore.json` signature bundle. Select the same
-explicit release version as the service and download these three files from the
-public release:
+explicit release version as the service. Replace the version placeholder with
+the approved version without its leading `v`, then download these three files.
 
+<!-- source-archive-acquisition -->
 ```sh
-VERSION=0.1.0-alpha.2
+VERSION=REPLACE_WITH_APPROVED_VERSION
+REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-source.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"
-BASE_URL="https://github.com/raysofspace/enumeray-cli/releases/download/$TAG"
-for file in "$ARCHIVE" "$CHECKSUM" "$CHECKSUM.sigstore.json"; do
-  curl --fail --location --proto '=https' --tlsv1.2 --output "$file" "$BASE_URL/$file"
-done
+BASE_URL="https://github.com/$REPOSITORY/releases/download/$TAG"
+(
+  set -eu
+  for file in "$ARCHIVE" "$CHECKSUM" "$CHECKSUM.sigstore.json"; do
+    curl --fail --location --proto '=https' --tlsv1.2 --output "$file" "$BASE_URL/$file"
+  done
+)
 ```
 
 Apply the signature and SHA-256 verification steps above to these filenames
@@ -255,13 +238,10 @@ or establish compatibility with another service release.
 
 ## Build from a pinned checkout
 
-Use this development evaluation route when no qualified release package has
-been supplied. The service owner must provide the **full 40-character public
-commit** matching the selected service, not `main`, a guessed tag or an abbreviated
-commit. Replace the deliberate placeholder below before running the block. Use
-a new destination directory; Git refuses to clone over an existing checkout.
-The public repository is sufficient: no private API checkout, database or API
-credentials are needed to build the client.
+Use this route if Enumeray supplies a development selection. Set the
+**full 40-character public commit** from that selection before running the block. Use
+a new destination directory. Install Git, Rustup and the platform compiler and
+linker on the build host. The public repository contains the client sources.
 
 <!-- pinned-source-acquisition -->
 ```sh
@@ -290,50 +270,40 @@ selects Rust 1.98.1. Cargo downloads the locked dependencies and needs network
 access on the build host; an offline build needs that toolchain and the complete
 locked dependency cache provisioned first. A source build records its actual
 source identity and is **unsigned development evidence**, not a qualified release.
-Keep the checkout or matching source archive, lockfile and build identity with
-its selected service pair. Check out a different commit in a separate directory;
-do not overwrite the matching executable needed to drain an earlier pilot.
+Keep the checkout, lockfile and build identity with the service selection.
+Use a separate directory for another revision. Keep the matching executable
+for any active work you still need to finish.
 
 ## Inspect the selected installation
 
-`enumeray --version` confirms an executable starts. Use the machine-readable
-identity to inspect what was actually built:
+Use this check to confirm that the executable and service match the package
+or source pair selected for your installation. To see the executable’s
+version, target, source and supported protocols, run:
 
 ```sh
 enumeray --json compatibility inspect
 ```
 
-The identity names the package/version/target, public repository and exact
-revision/tree/lockfile/content digest, source cleanliness and API, connector,
-runner and wrapper protocol versions. The archive's `compatibility.json` must
-agree with the embedded executable identity. The content digest identifies
-modified development sources; it does not turn that build into a signed release.
-A matching protocol number or source revision alone does not establish a match.
+For a binary archive, compare the output with its `compatibility.json`. A
+matching version label alone is insufficient. The signed release check needs
+the release manifest, the service publication receipt, and the four reports
+for the supported platforms. The block below downloads and checks them. It
+requires `jq`, `curl` and a separately trusted Cosign v3.
 
-For a qualified release, acquire its complete signed evidence from the **same
-selected `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL`** used for the archive above.
-This step additionally requires `jq`, `curl` and the independently trusted
-**Cosign v3** on the connected verification host. The four native report files
-are evidence for the selected release's supported platform set; downloading them
-does not install other targets. Confirm that the selected version's release
-assets are published before downloading; an example version alone does not
-establish availability.
-
-The block uses the hosted API by default. For another deployment, set
-`API_ORIGIN` to the address supplied by its owner. It uses the verified
-extracted executable for a check **before replacement**. For
-an already installed package, replace the `ENUMERAY_BIN` assignment with
-`ENUMERAY_BIN=enumeray`. `EVIDENCE` must name a new directory: an interrupted or
-failed attempt leaves its original files intact, so select a fresh directory for
-a retry instead of overwriting retained evidence.
+Set `VERSION`, `REPOSITORY`, `TAG` and `BASE_URL` from
+[Download the selected archive](#download-the-selected-archive) for the
+release you installed or extracted. For an installed CLI, including Homebrew,
+set `ENUMERAY_BIN=enumeray`. To check an extracted binary before installing
+it, set `ENUMERAY_BIN="$EXTRACTED/enumeray"`. The block compares release
+evidence with Enumeray at `https://api.enumeray.com`. Run each attempt from
+a new working directory to keep the evidence from earlier attempts.
 
 <!-- release-evidence-acquisition -->
 ```sh
 EVIDENCE="$PWD/release-evidence-$TAG"
-ENUMERAY_BIN="$EXTRACTED/enumeray"
+ENUMERAY_BIN="${ENUMERAY_BIN:-$EXTRACTED/enumeray}"
 (
   set -eu
-  API_ORIGIN="${API_ORIGIN:-https://api.enumeray.com}"
   mkdir "$EVIDENCE"
   for file in release-manifest.json release-manifest.json.sigstore.json \
               service-publish.json service-publish.sigstore.json; do
@@ -361,21 +331,18 @@ ENUMERAY_BIN="$EXTRACTED/enumeray"
     curl --fail --location --proto '=https' --tlsv1.2 \
       --output "$EVIDENCE/$report" "$BASE_URL/$report"
   done
-  "$ENUMERAY_BIN" --api "$API_ORIGIN" --json compatibility check \
+  "$ENUMERAY_BIN" --api https://api.enumeray.com --json compatibility check \
     --manifest "$EVIDENCE/release-manifest.json" \
     --service-receipt "$EVIDENCE/service-publish.json" \
     --receipt "$EVIDENCE/installation-receipt.json"
 )
 ```
 
-Any failed download, manifest verification, selected-version check or report-name
-validation stops the block before compatibility checking. The CLI then rechecks
-both workflow signatures, the exact service publication authorization and all
-manifest-bound native report digests. A downloaded publication receipt is not
-trusted merely because the manifest's signature passed. Keep this complete
-evidence directory, the archive and its verified checksum with the resulting
-installation receipt. Supply any required peer/context observations to the check
-as described below; absent live evidence must remain explicit.
+The block stops if it cannot download or verify a required file. The CLI
+checks both signatures, the selected service authorization and each report's
+digest. Keep the evidence directory, archive and verified checksum with the
+installation receipt. Supply any peer or context observations required by
+your site.
 
 For a development evaluation, use the explicit service/public selection supplied
 by its owner with `--development-selection FILE` instead of the manifest and
@@ -418,121 +385,80 @@ site as its examples, not from an unrelated current site.
 
 ## Login and profiles
 
-With a fresh configuration, the CLI connects to https://api.enumeray.com.
-Sign in directly:
+Sign in to Enumeray. The CLI uses `https://api.enumeray.com` by default.
 
 ```sh
-enumeray auth login
-enumeray auth whoami
+enumeray auth login &&
+  enumeray auth whoami
 ```
 
-Login discovers the service's identity provider automatically; the hosted service
-uses auth.enumeray.com. Choose registration in the browser if you need an account,
-then complete email verification and sign in. If onboarding exceeds the login
-wait, finish registration and run `enumeray auth login` again. Continue with the
-[hosted trial](https://doc.enumeray.com/start/first-run/) to run HUXt or REBOUND
-on the supplied connector.
+In the browser, choose **Register** if you need an account, verify your email,
+then finish signing in. If the CLI stops waiting, complete registration and run
+`auth login` again. `auth whoami` confirms the account.
 
-For another service, save its administrator-supplied origin in a separate profile:
+Run `enumeray auth profiles` to list saved logins. The CLI uses `default`
+when you omit `--profile`. You can use another named profile to keep a script
+token or a separate account apart from your main login.
 
-```sh
-enumeray --profile research auth configure https://research.example.org
-enumeray --profile research auth login
-enumeray --profile research auth whoami
-```
-
-Check the account in `auth whoami` before accepting an invitation or requesting
-access. Use the same profile for the [model access workflow](https://doc.enumeray.com/users/discovery-access/).
-
-Browser login uses PKCE and a temporary loopback callback. `--no-browser` prints
-the URL for a browser on the **same host**; a laptop browser cannot complete a
-login waiting on an SSH/HPC host's loopback listener. For remote CLI use with the
-hosted service, create a scoped personal token from a signed-in account and import
-it privately:
+For a CLI running on a remote host without a browser, create a personal token
+from a signed-in account. Copy the private token file to the intended host using
+your approved method and import its `token` field with `jq`. Use an unused
+profile name such as `analysis` for the script token.
 
 ```sh
 enumeray auth token-create analysis-script \
   --scopes models:read,runs:create,runs:read,me:read --output token.json
-jq -er '.token' token.json | enumeray --profile analysis auth login --token-stdin
-enumeray --profile analysis auth whoami
+jq -er '.token' token.json | enumeray --profile analysis auth login --token-stdin &&
+  enumeray --profile analysis auth whoami
 ```
 
-For another service, configure the `analysis` profile with that same service's
-origin before importing its token. An unconfigured named profile uses
-https://api.enumeray.com even when a different profile selects another service.
+Use the signed-in account for token creation. Add only the scopes the script
+needs, including `me:read` for import and checkpoint recovery. The default
+token lifetime is 30 days. Issue a replacement when it expires. Use
+`auth token-list` to find token IDs and `auth token-revoke TOKEN_UUID` to
+revoke one. After a lost creation reply, check the inventory before issuing a
+replacement.
 
-Import only the `token` value. Add artifact/upload scopes for files and
-`runs:cancel` for cancellation. Tokens retain the account's resource restrictions;
-`me:read` verifies the identity during stdin login and checkpoint recovery. The
-CLI defaults to a 30-day token lifetime; renew personal tokens by issuance rather
-than browser refresh. Inspect `auth token-list` and revoke unused tokens with
-`auth token-revoke TOKEN_UUID`. After a lost creation reply, inspect inventory
-and revoke uncertain credentials before deliberately creating another.
-
-Profiles and credential state are private. `--profile` selects a saved login
-and service. The name is `default` when you omit this option. `--config` selects
-another profiles file. Origin selection uses `--api` first, then the selected
-saved profile, then https://api.enumeray.com. `enumeray auth profiles` lists the
-saved names and origins. Reuse an existing profile for the hosted API, including
-one saved with the earlier https://enumeray.com address. Configure an alternate
-deployment's origin before importing its token.
-API origin changes clear saved credentials, and `--api` never forwards a profile token to a different
-origin. An explicit `ENUMERAY_TOKEN` takes precedence over the selected profile;
-pair it with its intended origin. Saved browser sessions renew automatically
-before expiry while commands are active; `auth refresh` remains available for
-explicit renewal and one-time migration of an already-expired legacy profile.
-Expired or revoked refresh sessions and unknown renewal outcomes need another
-login. Preserve the same API/account and saved operation when recovering.
-`auth logout` removes local credentials without
-revoking provider sessions or server-side personal tokens.
+Browser sessions renew while the CLI is in use. If renewal fails, sign in to
+the same account and repeat the command with the original saved folder.
+`auth logout` removes local credentials. End browser sessions and revoke
+provider tokens through the identity provider. See
+[sign-in help](https://doc.enumeray.com/start/login/) for browser and profile
+troubleshooting.
 
 ## Choose a workflow
 
 | Goal | Included help |
 | --- | --- |
 | Run scalar, file or collection analyses | [Analysis guide](ANALYSIS_GUIDE.md) |
-| Script with structured output | [Complete JSON recipe](ANALYSIS_GUIDE.md#script-with-structured-output) |
+| Script with structured output | [Complete JSON recipe](CLI_AUTOMATION.md#script-with-structured-output) |
 | Create, install, trial and publish a model | [Author guide](AUTHOR_GUIDE.md) |
 | Work through supplied publications and inputs | [Example walkthrough](examples/README.md) |
 | Connect compute and trial a model | [Guided connector setup](SETUP_GUIDE.md) |
 | Operate an existing connector | [Complete connector guide](../connector/README.md) |
 
-The archive includes standalone connector and driver guides; their local links
-work after extraction without a checkout. It includes complete
-Python/executable JSON/file starter projects
-under `starter-kit/`. `model init` creates an editable project without credentials.
-The package examples require the stated installed release and compute grant;
-publication JSON is different from a scientific input object or HTTP request.
-
-Use analysis directories for CLI execution, including candidate trials. Review
-the saved publication, destination/disclosure and inputs before `analysis submit`.
-Repeat operations in their original directory after interruption. A new intended
-execution uses a new directory. Collection completeness is independent of scientific
-success; inspect `bundle.json` and retain original input bytes separately.
-
-Use `--json` when saving or parsing structured output. Runtime errors are JSON on
-stderr; argument errors remain plain text and exit 2. Native commands otherwise
-show human output. Listings fetch one bounded page; preserve filters and opaque
-cursors while continuing. ID-based run investigation and independent data utilities
-remain available; consult built `--help` for exact command syntax.
+The archive includes complete examples under `starter-kit/`. Use the analysis
+guide to review inputs, submit, check status and collect outputs in one folder.
+If a command is interrupted, resume in that folder. Use a separate folder when
+you intend to start another run.
 
 ## Credential and command boundaries
 
-User commands use CLI profiles. `enumeray connector enroll/run` use explicit
-connector credential files and never load a user login. `enumeray connector inspect`
-and cleanup inspection use the private journal; `enumeray compute-runner` and
-internal workers do not load API credentials. Host commands emit JSON; the runner
-retains its versioned stdin/stdout protocol. Installing the executable starts no
-service. Managed execution continues to require a separate model account.
+Use the CLI profile for user commands. For connector enrollment and startup,
+use the connector’s credential file. Keep connector journals private.
+`enumeray connector inspect` reads the journal, and the compute runner uses
+its own protocol without API credentials. Installing the executable places
+the file on disk. Follow [connector setup](SETUP_GUIDE.md) to configure and
+start a service.
 
 ## Upgrade deliberately
 
-The current alpha supports fresh evaluations and recovery with the **same
-selected build**, not in-place migration between arbitrary development revisions.
-`persistent-v1` is still a candidate. Legacy record readers and login-profile
-conversion handle their explicitly supported formats; they do not establish
-binary, database, connector-journal or compute-session migration. A model
-publication rollback is also separate from rolling back Enumeray itself.
+Use this section when replacing an installation that holds valuable work.
+Confirm with the service owner that the proposed binaries support the saved
+state. Same-build recovery uses the matching software and records. For a
+development revision without a supported change path, use a fresh evaluation
+with separate state and identities. A model publication rollback follows the
+[author guide](AUTHOR_GUIDE.md).
 
 Before any binary, credential or service change, prepare this inventory with the
 service, connector and execution-host owners:
@@ -580,15 +506,13 @@ identities, while valuable old state stays intact and readable with its matching
 software. A real cross-release upgrade/rollback pair needs its own selected,
 supported release-policy rehearsal before it can be advertised.
 
-Fresh WIP installations use only `enumeray`; the former `enumeray-connector`
-executable is not supported. Installation and removal do not alter privately
-managed state. The [connector recovery guidance](../connector/README.md#enrollment-and-service-operation)
-explains same-build interruption recovery. Service operators coordinate schema,
-backup and restore decisions under their service runbook. Package installation,
-matched build evidence and successful fixtures are separate from scientific
-validation, native service lifecycle and production-site qualification.
+For a connector interruption, see
+[enrollment and service operation](../connector/README.md#enrollment-and-service-operation).
+The service owner coordinates database and storage backup or restore. The
+installation receipt records the software and evidence checked for the
+selected scope. Use the model’s scientific checks and the site’s own
+qualification process for those separate decisions.
 
 The [documentation project](https://doc.enumeray.com/)
-provides role-based pages and current command/API references. Its current site
-may describe a newer build; use its visible source stamp and identity download
-before combining it with retained historical evidence.
+provides role-based pages and current command/API references. Use the documentation revision and identity download in the footer to select
+guidance that matches the installation you are checking.

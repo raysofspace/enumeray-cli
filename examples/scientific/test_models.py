@@ -7,8 +7,9 @@ import tempfile
 import unittest
 
 from qualify import environment_receipt, uniform_wind_check
-from runtime import run_model
-from verify_collected import load_model, verify_science, verify_collected
+from run_example import run_example
+from runtime import FILES, run_model
+from verify_collected import load_model, verify_collected
 
 ROOT = Path(__file__).resolve().parent
 
@@ -22,14 +23,25 @@ class ScientificModelTests(unittest.TestCase):
 
     def test_both_example_runs_publish_verified_csv_png_and_numerical_summaries(self):
         for model in ("huxt", "rebound"):
-            with self.subTest(model=model), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(model=model), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "results"
                 values = json.loads((ROOT / model / "inputs.json").read_text())
-                outputs, files = run_model(model, values, Path(directory))
-                evidence = verify_science(model, values, outputs,
-                                          {key: Path(directory) / item["path"] for key, item in files.items()})
-                self.assertTrue(evidence)
+                run_example(model, directory)
+                record_path = directory / "run-record.json"
+                record_bytes = record_path.read_bytes()
+                record = json.loads(record_bytes)
+                self.assertEqual(json.loads((directory / "inputs.json").read_text()), values)
+                self.assertTrue(record["scientific_checks"])
+                names = {"inputs.json", "outputs.json", *(name for name, _ in FILES[model].values())}
+                self.assertEqual(record["files"].keys(), names)
+                with self.assertRaisesRegex(ValueError, "already exists"):
+                    run_example(model, directory)
+                self.assertEqual(record_path.read_bytes(), record_bytes)
+                for name, identity in record["files"].items():
+                    data = (directory / name).read_bytes()
+                    self.assertEqual(identity, {"size_bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
                 with self.assertRaises(FileExistsError):
-                    run_model(model, values, Path(directory))
+                    run_model(model, values, directory)
 
     def test_rebound_circular_and_eccentric_extremes_match_kepler(self):
         import numpy as np

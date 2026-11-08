@@ -3,7 +3,7 @@
 - [Execute standalone artifact, collection and saved-body run workflows](HTTP_WORKFLOWS.md).
 - [Reproduce exact collection identity bytes](COLLECTION_IDENTITY.md) using
   `collection-identity.py` and the downloadable `digest-vectors/` directory.
-- [Migrate candidate CLI output and generated SDK methods](COMPATIBILITY.md).
+- [Generate an SDK and read CLI output contracts](COMPATIBILITY.md).
 
 `scenarios.json` contains complete, inert request/response specimens grouped by
 one coherent scenario. The scalar run's original queued acceptance receipt and
@@ -26,5 +26,5 @@ The service exports these exact specimens as named OpenAPI media examples and
 validates their schemas, formats and relationships. The website publishes the
 same file and examples. Runtime transaction tests exercise independent clients
 and the accompanying raw HTTP recipe against a disposable service. Replace
-fixture identities with the account, model, publication and connector values
-actually approved for your service before submitting work.
+fixture identities with the account, model, publication and connector IDs
+you can use in Enumeray before submitting work.

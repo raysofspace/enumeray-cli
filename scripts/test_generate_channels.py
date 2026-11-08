@@ -162,6 +162,26 @@ class DocumentedAcquisitionTests(unittest.TestCase):
         guide = (ROOT / "crates/cli/INSTALL.md").read_text()
         return re.search(r"<!-- " + marker + r" -->\n```sh\n(.*?)\n```", guide, re.DOTALL)[1]
 
+    def test_source_archive_recipe_supplies_the_release_repository_for_signature_verification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            curl = directory / "curl"
+            curl.write_text('#!/bin/sh\nfor argument do last=$argument; done\nprintf "%s\\n" "$last"\n')
+            curl.chmod(0o755)
+            version = "0.1.0"
+            repository = "raysofspace/enumeray-cli"
+            recipe = self.recipe("source-archive-acquisition").replace("REPLACE_WITH_APPROVED_VERSION", version)
+            env = {**os.environ, "PATH": str(directory) + os.pathsep + os.environ["PATH"]}
+            env.pop("REPOSITORY", None)
+            output = subprocess.check_output(["sh", "-euc", recipe + '\nprintf "%s\\n" "$REPOSITORY"'],
+                                             cwd=directory, env=env, text=True)
+            archive = f"enumeray-{version}-source.tar.gz"
+            base = f"https://github.com/{repository}/releases/download/v{version}"
+            self.assertEqual(output.splitlines(), [
+                f"{base}/{archive}", f"{base}/{archive}.sha256",
+                f"{base}/{archive}.sha256.sigstore.json", repository,
+            ])
+
     def test_unselected_source_revision_stops_before_any_network_or_build_command(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

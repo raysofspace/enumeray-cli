@@ -1,17 +1,18 @@
 # Connector drivers and connections
 
-If you operate an existing connector, start with
-[execution contexts](https://doc.enumeray.com/infrastructure/contexts/) or use
-[Choosing a context](#choosing-a-context) in the offline guide.
-If you develop a backend, start with the [runner protocol](#exercise-the-runner-protocol),
-then use the [interface boundaries](#code-boundaries),
-[compatibility rules](#recovery-and-compatibility) and [verification](#verification).
+Use this reference to implement a connector driver or connection. A driver
+owns the job from preparation through launch, observation and cancellation.
+A connection gets the request to the runner and transfers files. The model
+wrapper reads the scientific inputs and writes results. Start by tracing a
+runner request through those boundaries, then check how the backend recovers
+the same job after a lost reply.
 
-An execution context combines a **driver**, which owns the job lifecycle, with a
-**connection**, which reaches the compute runner. Model wrappers own scientific
-inputs, outputs and runtime setup. Connector deployment is an operational choice:
-a service on a workstation, a cluster submission host, or an external gateway can
-use the same context contracts.
+| I want to… | Start here |
+| --- | --- |
+| Set up process or Slurm with direct or SSH access | [Choose a context](#choosing-a-context) or follow the [operator setup guide](https://doc.enumeray.com/infrastructure/contexts/). |
+| Understand the runner requests | [Exercise the runner protocol](#exercise-the-runner-protocol) and read the [code boundaries](#code-boundaries). |
+| Implement a backend | [Add a driver](#adding-a-driver) or [add a connection](#adding-a-connection-or-deployment). |
+| Check behavior under interruption | [Recovery rules](#recovery-and-compatibility), [cancellation races](#user-cancellation-and-completion-races) and [verification](#verification). |
 
 ## Choosing a context
 
@@ -27,7 +28,8 @@ A script may load modules, activate Python, or run Apptainer in the foreground.
 Use `slurm` when the scheduler owns allocation, queuing and cancellation. Do not
 hide `sbatch` in a process wrapper and return immediately: that would track the
 submission script instead of the scientific job. SSH describes access, never job
-ownership. Containers are a wrapper/runtime choice in this initial implementation.
+ownership. Configure containers in the wrapper or batch file as part of the
+model runtime.
 
 Choose the matching [context template](#register-a-context-without-reading-the-code).
 Edit the paths and site settings, then register the context with the CLI.
@@ -251,7 +253,9 @@ in the [interface boundaries](#code-boundaries).
 
 ## Code boundaries
 
-This section is for backend developers changing the connector or runner.
+Follow the request from connection to driver and runner. Keep credentials on
+the connector side. The compute side owns the durable evidence that links an
+action to its original job.
 
 - `contracts/src/execution.rs`: tagged driver and connection configuration,
   access and path validation. Publication requirements derive `process` or `slurm` from the context.
@@ -279,9 +283,9 @@ and `unavailable`, bounded to 16 KiB. The connector splits this bounded read-ahe
 into 2 KiB durable deliveries. Final batch reads and archive operations fence
 allocation release; archive chunks reuse the 256 KiB file transfer bound.
 Requests/responses are bounded to 4 MiB and transfer chunks to 256 KiB. Wrapper
-protocol version 1 is independent of this compute protocol: scalar/JSON
-inputs and outputs, and declared versioned artifact references, retain their
-existing model schemas. No connection-specific model schema is needed.
+protocol version 1 is independent of this compute protocol. The model's own
+schemas describe scientific values and declared artifact references across
+all connections.
 
 `cleanup-run` carries the exact acknowledged terminal result, final live-log
 delivery evidence, terminal archive status and saved installation-protection
@@ -294,9 +298,9 @@ reply resumes the same intent; previously saved release proof survives later
 scheduler accounting loss. Missing evidence or an unavailable host retains data.
 Root launch/completion records, lock inodes and compact log manifests remain;
 prepare, staging and start cannot reopen a retired launch. Published object
-versions and known protected releases remain outside cleanup. Older services
-without `run_payload_namespace_reserved`, or unavailable protection inventories,
-permit ordinary execution/delivery while withholding deletion authority.
+versions and known protected releases stay outside cleanup. If the service
+does not advertise `run_payload_namespace_reserved` or the protection inventory
+is unavailable, continue execution and delivery and keep the payloads.
 An overlapping protected release or declared executable/batch file blocks the
 whole run's cleanup; an ancestor release directory alone does not block unrelated
 scratch. Canonical aliases observed during validation acquire durable protection
@@ -386,13 +390,12 @@ pending cancellation when revoked, and collects.
 Slurm can recover a lost receipt by the unique launch name. Missing or ambiguous
 evidence remains blocked. Pending cancellation never stops a running model.
 
-All project-owned contracts are at version 1: journal, archive, installation cache,
-compute job, compute protocol, and wrapper protocol. During unreleased development,
-change these first versions in place; do not add compatibility branches or bumps.
-Unknown versions are rejected without modification. Before resetting development
-state after a breaking change, stop the connector and verify that old jobs have
-stopped; retain unresolved journals for reconciliation. Re-register contexts and
-publications with matching manifests and binaries.
+Use matching binaries and manifests for a backend. The journal, archive,
+installation cache, compute job, compute protocol and wrapper protocol use
+version 1. Unknown versions stop processing and preserve the record. In a
+disposable development environment, stop the connector and verify that jobs
+have stopped before resetting state. Keep any unresolved journal so you can
+reconcile the original jobs.
 
 ## Verification
 

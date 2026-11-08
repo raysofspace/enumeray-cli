@@ -1,5 +1,7 @@
 """Dependency-free supervision, offline, protocol and evidence regressions."""
+import base64
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,9 +13,10 @@ import time
 import unittest
 from unittest import mock
 import uuid
+from zipfile import ZipFile
 
 import qualify
-from runtime import ExecutionFailure, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
+from runtime import ExecutionFailure, FILES, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,6 +29,58 @@ def request(model="huxt"):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_sample_run_bundle_links_real_output_bytes_and_example_run_records(self):
+        model = ROOT / "rebound"
+        prefix = "rebound-run-bundle/"
+        with ZipFile(model / "sample-run-bundle.zip") as collection, ZipFile(model / "sample-run.zip") as sample:
+            bundle = json.loads(collection.read(prefix + "bundle.json"))
+            inspection = json.loads(collection.read(prefix + bundle["inspection"]))
+            provenance = json.loads(collection.read(prefix + bundle["provenance"]))
+            inputs = json.loads(collection.read(prefix + bundle["effective_inputs"]))
+            outputs = json.loads(collection.read(prefix + bundle["scientific_outputs"]))
+            self.assertIs(bundle["complete"], True)
+            self.assertEqual(bundle["scientific_state"], "succeeded")
+            for key in ("run_id", "publication_id"):
+                self.assertEqual(bundle[key], inspection[key])
+                self.assertEqual(bundle[key], provenance["run"][key])
+            self.assertEqual(provenance["publication"]["context_id"], inspection["context_id"])
+            self.assertEqual(inspection["effective_inputs"], inputs)
+            self.assertEqual(inputs, request("rebound")["inputs"])
+            self.assertEqual(inspection["result"], provenance["result"])
+            self.assertEqual(inspection["result"]["outputs"], outputs)
+            expected_paths = [prefix + name for name in ("bundle.json", bundle["inspection"],
+                                                         bundle["provenance"], bundle["effective_inputs"],
+                                                         bundle["scientific_outputs"])]
+            self.assertEqual(bundle["outputs"].keys(), FILES["rebound"].keys())
+            for pin in provenance["output_artifacts"]:
+                item = bundle["outputs"][pin["name"]]
+                expected_paths.append(prefix + item["path"])
+                data = collection.read(prefix + item["path"])
+                self.assertEqual(data, sample.read("rebound-sample/" + pin["filename"]))
+                self.assertEqual(len(data), item["size_bytes"])
+                self.assertEqual(item["artifact_id"], outputs[pin["name"]]["artifact_id"])
+                self.assertEqual(pin["checksum"], item["checksum"])
+                self.assertEqual(item["checksum"]["value"], base64.b64encode(hashlib.sha256(data).digest()).decode("ascii"))
+            self.assertCountEqual(collection.namelist(), expected_paths)
+
+    def test_sample_downloads_match_the_default_models_and_recorded_files(self):
+        manifest = json.loads((ROOT / "runtime-manifest.json").read_text())
+        for model, artifacts in FILES.items():
+            with self.subTest(model=model), ZipFile(ROOT / model / "sample-run.zip") as archive:
+                prefix = f"{model}-sample/"
+                expected = {"inputs.json", "outputs.json", *(name for name, _ in artifacts.values())}
+                self.assertCountEqual(archive.namelist(), [prefix + name for name in expected | {"run-record.json"}])
+                self.assertEqual(json.loads(archive.read(prefix + "inputs.json")), request(model)["inputs"])
+                record = json.loads(archive.read(prefix + "run-record.json"))
+                self.assertEqual(record["kind"], "local-scientific-example")
+                self.assertEqual(record["model"], model)
+                self.assertEqual(record["model_sha256"], hashlib.sha256((ROOT / model / "model.py").read_bytes()).hexdigest())
+                self.assertEqual(record["runtime"], {key: manifest[key] for key in record["runtime"]})
+                self.assertEqual(record["files"].keys(), expected)
+                for name, identity in record["files"].items():
+                    data = archive.read(prefix + name)
+                    self.assertEqual(identity, {"size_bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+
     def test_parameter_domains_are_closed_finite_and_bounded(self):
         for model, parameters in PARAMETERS.items():
             defaults = request(model)["inputs"]

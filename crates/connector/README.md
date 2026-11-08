@@ -1,44 +1,47 @@
 # Enumeray connector
 
-Start with [guided connector setup](../cli/SETUP_GUIDE.md) to prepare approved
-hosts, enroll a connector, check readiness and trial a model. Use this complete
-guide for operation, manual preparation and offline reference.
+The connector receives run assignments from Enumeray, starts models under
+the approved execution account and sends results back. It contacts
+`https://api.enumeray.com` over outbound HTTPS. Its journal records work and
+transfer progress so the connector can resume after interruption.
 
-In guided development setup, your current user runs local process jobs directly.
-The setup can prepare its user-level paths and optional background service without
-`sudo` or `setup apply-host`. Managed setup uses separate OS accounts. An
-administrator applies the reviewed host changes before either a foreground start
-or a system service start.
+For first-time setup, use the [guided connector setup](../cli/SETUP_GUIDE.md).
+This guide also covers manual setup and day-to-day operation. Choose the
+procedure you need.
 
-The connector is a library used by the unified `enumeray` executable. Its normal
-dependency graph contains the
-shared contracts and HTTP/runtime libraries; it needs neither PostgreSQL access nor
-server-side storage credentials. The API is reached through outbound HTTP(S).
+| I need to… | Start here |
+| --- | --- |
+| Prepare managed compute | [Generate a host plan and check it](#prepare-configuration-and-check-host-prerequisites), then [enroll and start the service](#enrollment-and-service-operation). |
+| Run a trusted model on my own machine | [Set up single-user development](#single-user-development). |
+| Give an author compute access | [Manage ownership and grants](#connector-ownership-and-compute-access). |
+| Diagnose, pause or recover an enrolled connector | [Choose the command for the situation](#which-connector-command-to-use), or [tune capacity and drain for maintenance](#tune-and-drain-service-capacity). |
+| Run jobs on a scheduler | [Prepare the compute runner and Slurm batch file](#compute-runner-and-slurm). |
+| Keep diagnostic logs | [Configure retention and optional archives](#rotating-logs-and-optional-archives). |
 
-Choose the job driver and the connection independently. The
-[execution context guide](https://doc.enumeray.com/infrastructure/contexts/)
-explains `process` and `slurm` over `direct` or `ssh`. The included
-[driver and connection guide](EXTENDING.md#choosing-a-context) covers the same
-choices offline and separates the backend developer reference.
+Choose the job driver and connection separately. The driver decides whether
+Enumeray tracks a foreground process or a Slurm job. The connection decides
+whether the runner is on the connector host or reached over SSH.
+[Choosing a context](EXTENDING.md#choosing-a-context)
 
 ## Prepare configuration and check host prerequisites
 
-Start from the [Linux managed host specification](../cli/examples/host-setup-linux.json),
-[macOS managed host specification](../cli/examples/host-setup-macos.json), or
-[single-user development host specification](../cli/examples/host-setup-development.json). Edit the
-identifiers, accounts, absolute site paths and limits. The examples already use
-the hosted API. Change `api_base_url` for another deployment. On macOS, the
-administrator must check for collisions before choosing names and numeric IDs.
+Generate a host plan before changing host accounts or installing a service.
+Choose the example for [managed Linux](../cli/examples/host-setup-linux.json),
+[managed macOS](../cli/examples/host-setup-macos.json), or
+[single-user development](../cli/examples/host-setup-development.json).
+Save it as `host-setup.json` and edit the IDs, accounts, absolute paths and
+limits. Keep `api_base_url` set to `https://api.enumeray.com`. On macOS, ask
+the administrator to check that the account names and numeric IDs are free.
 
 ```sh
 enumeray connector configuration generate --file host-setup.json --directory host-plan
 ```
 
-No login is required. The new private directory contains `plan.json`, `context.json`,
-restricted launcher/native service templates and `REVIEW.md`. Existing destinations
-are refused. Generation never creates accounts, installs software, enrolls a
-connector or starts a service. Each typed action names its host, destination,
-responsible role and prerequisites. Review these before applying host changes.
+Open `host-plan/REVIEW.md` to see each proposed change, the host where it
+would run and the account responsible for it. The directory also contains
+`plan.json`, `context.json` and launcher and service templates. This command
+only writes a new plan directory and needs no login. Review the plan before
+an administrator applies it.
 
 The version-1 specification contains `context` (the existing context spec),
 `connector_account` and `execution_account` (platform, name, group, home, creation
@@ -127,9 +130,7 @@ permissions still protect against other users; they cannot isolate processes
 running as the same user. Managed execution with separate identities remains the
 default, including when a connector permits development contexts.
 
-This recipe uses the hosted Enumeray API with an ordinary CLI login and Python 3
-for the example model. For another deployment, sign in with its profile and use
-that profile for the owner commands throughout.
+This recipe requires an Enumeray account and Python 3 for the example model.
 The connector initiates outbound requests; no inbound laptop connection, local
 API/database, new host account or sudo configuration is required. Development
 execution does not enable insecure HTTP or bypass authentication, ownership,
@@ -313,16 +314,14 @@ The explicit [development exception](#single-user-development) permits trusted
 same-user process/direct execution. File jobs also require
 the service's verified versioned storage.
 
-Choose IDs once, then create the connector and one-time enrollment on the
-owner's CLI machine. The unconfigured CLI uses the hosted API at
-`https://api.enumeray.com`. For another deployment, use its authenticated profile
-for owner commands.
+Choose IDs once, then sign in to Enumeray and create the connector with its
+one-time enrollment document on the owner's CLI machine.
 
 ```sh
 umask 077
-enumeray auth login
-enumeray connector create lab-connector --label 'Lab connector' \
-  --max-outstanding-assignments 4 --output enrollment.json
+enumeray auth login &&
+  enumeray connector create lab-connector --label 'Lab connector' \
+    --max-outstanding-assignments 4 --output enrollment.json
 ```
 
 The owner CLI reports success only after validating and saving a private enrollment
@@ -355,22 +354,20 @@ enumeray connector run --journal connector-state/journal \
   --recovery-mode exclusive-local
 ```
 
-The saved enrollment document carries the issuing API origin. For a first
-enrollment with an older document or a raw `--enrollment-token-file`, pass
-`--api-base-url` with the issuing API origin. Enrollment writes
-its machine identity and generated bearer token to private durable storage before
-sending the enrollment request. Retry an uncertain enrollment with the same
-state directory and enrollment file; do not create a new identity. Even after its
-original expiry, a committed enrollment can replay its receipt while the generated
-credential remains active. If an unused enrollment expired, request a replacement
-into a new file; an identity that never enrolled can use it with the same directory.
+The enrollment document supplies the API address. For first enrollment with
+`--enrollment-token-file` or a document without an address, add
+`--api-base-url https://api.enumeray.com`. Enrollment saves the machine
+identity and token before sending the request. After a lost reply, repeat
+the command with the same directory and file. An accepted enrollment can return its receipt after the
+document expires while its credential is active. If an unused document
+expires, request another in a new file. An identity that never enrolled can
+use the replacement with the same directory.
 After successful enrollment, use the credential rotation procedure below with a
-new credential directory and the original journal. `--allow-insecure-http` is an
-explicit development/private-network exception; HTTPS is required otherwise.
+new credential directory and the original journal.
 
 The `run` command uses the retained journal's API origin on restart. For a new
 journal it uses the origin from the enrollment record next to the token. If you
-moved the token separately, pass its issuing origin with `--api-base-url`.
+moved the token separately, pass `--api-base-url https://api.enumeray.com`.
 The command remains in the foreground. Its service account must own the
 state directory and no execution account may read it. Stop a foreground test
 before starting its service. `exclusive-local` is appropriate only for one
@@ -458,16 +455,9 @@ the remote host. The remote account needs an SSH-compatible shell and SFTP acces
 | `publish-log-archives` | Finish retained terminal archive delivery | Publishes diagnostics without scientific execution |
 | `compute-runner` | Connector transport/backend integration | Runs a typed credential-free action under the approved execution identity |
 
-`run` is the production entry point. The step commands are useful for a
-disposable loopback test when the connector service is stopped:
-
-```sh
-enumeray connector init --journal one-off-journal \
-  --api-base-url http://127.0.0.1:8080 --connector-id lab-connector
-enumeray connector claim-once --journal one-off-journal --token-file connector-state/token
-enumeray connector inspect --journal one-off-journal
-enumeray connector execute-once --journal one-off-journal --token-file connector-state/token
-```
+Use `connector run` for the supervised service. For local backend
+development, see the [one-off command reference](https://doc.enumeray.com/reference/cli/connector-init/).
+Use a separate test journal and credentials issued by the test fixture.
 
 The next `claim-once` archives assignments whose scientific result and delivery
 are complete before reserving new capacity. Their receipts and cleanup queue
@@ -526,12 +516,12 @@ active uploads and pending log archives block completion. Stale contact never pr
 completion. Generation changes or resume stop the wait, and its deadline leaves
 maintenance enabled. JSON mode emits only the final status.
 
-After the wait succeeds, send SIGINT/SIGTERM to the original connector. Its default
-drain is 30 seconds; allow a longer service-manager stop timeout. Interrupted work
-retains evidence for restart. After maintenance, start the same service, reread the
-generation and use `connector resume ... --generation N [--dry-run]`. The legacy
-`connector update --file` shape `{"draining":true,"expected_generation":3}` remains
-a maintenance request. Label/capacity changes use `connector configure`.
+After the wait succeeds, stop the original connector with SIGINT or SIGTERM.
+Allow the service manager more than the default 30-second drain. The journal
+keeps evidence for restart if work is interrupted. When maintenance is done,
+start the same service, read the generation and use
+`connector resume ... --generation N`, with `--dry-run` to preview.
+To change a label or capacity, use `connector configure`.
 
 `connector withdraw-authority ... --generation N [--dry-run]` is a separate
 reversible control: it blocks new acceptance/claims and prelaunch work, requests
@@ -566,11 +556,11 @@ retention with `--completed-retention-seconds`, and the sweep cadence with
 `--cleanup-interval-seconds`. Active or uncertain execution, pending delivery,
 live transfer ownership and unreachable compute hosts remain retained.
 
-The worker resumes a durable queue of unfinished cleanup. Newly archived runs
-enter that queue before leaving the active journal, and interrupted or blocked
-runs remain queued for later passes. On upgrade, bounded discovery passes add
-unfinished legacy archives once. Completed runs leave the queue while their
-archived authority, compact cleanup checkpoints and replay guards remain.
+The worker resumes cleanup from a saved queue. It queues archived runs before
+they leave the active journal and discovers unfinished archives missing from
+the queue in bounded batches. A blocked or interrupted run stays queued for
+another pass. After cleanup, the journal retains the result, checkpoint and
+evidence that prevents another launch.
 
 Inspect or dry-run against the live journal without taking its process lock.
 Relative journal paths are supported. Stop the service before applying a manual
@@ -590,19 +580,15 @@ journal and compute replay records for recovery and historical provenance;
 `inspect` and cleanup reports show retention and blocked work without inputs or
 credentials.
 
-Installation protection is refreshed for each deletion attempt. Permanent
-per-run checkpoints retain delivery authority and progress; the full connector
-installation inventory is stored separately instead of copied into every run.
-Older checkpoints containing that inventory are compacted when revisited.
+The connector refreshes installation protection before each deletion attempt.
+Each run keeps its delivery and cleanup checkpoint. The installation inventory
+is saved separately.
 
-Automatic and manual deletion require the service's run-directory reservation
-capability and a persisted inventory of protected installation releases. If an
-older service omits that capability, the protection inventory is unavailable, or
-manual/older cache entries lack known installation metadata, cleanup retains
-payloads while ordinary scientific execution and delivery continue. Known legacy
-installation releases overlapping a run directory, including canonical aliases
-observed during validation, remain permanently protected even after configuration
-retirement; cleanup cannot treat their installed files as disposable run data.
+Automatic and manual deletion require the service's run-directory reservations,
+a saved inventory of protected releases and known installation metadata. If
+any are missing, cleanup keeps the files while execution and delivery continue.
+A known release that overlaps a run directory, including an alias seen during
+validation, stays protected even after its publication configuration is retired.
 Unknown or unseeded protection on any compute host blocks payload deletion across
 the connector. Configuration reconciliation retains affected cache references;
 successfully protected bindings can still be pruned independently. Ordinary
@@ -619,12 +605,14 @@ private cache for accepted work and retained candidates. This verifies those ins
 imported library or data file; model/runtime/dataset identities remain provider
 claims. Keep complete release directories immutable.
 
-New process contexts require an explicit connector-owned `driver.scratch`
-policy for total workspace bytes, entries, depth, scan interval, cache routing and
-links. See [process scratch settings](https://doc.enumeray.com/infrastructure/contexts/#process-scratch-policy).
-The connector retains that policy in each worker snapshot. Existing contexts and
-jobs without it keep legacy limits; adopting a new policy requires a replacement
-context. Configured process jobs use private `.enumeray/tmp` and optionally
+When registering a process context, set `driver.scratch` for workspace bytes,
+entries, depth, scan interval, cache location and links. The connector records
+the policy with each job. A retained context or job uses its saved settings,
+including when its record has no scratch policy. Register a replacement context
+to change the policy.
+[Process scratch settings](https://doc.enumeray.com/infrastructure/contexts/#process-scratch-policy)
+
+Configured process jobs use private `.enumeray/tmp` and optionally
 `.enumeray/cache` under the workspace, reclaimed by ordinary completed-run cleanup.
 Scanning is sampled and yields between bounded chunks; hard quotas remain a site
 responsibility. Artifact/result/log limits remain independent. Slurm continues to
@@ -868,23 +856,14 @@ can return a completion report. Requests use the persisted job ID and cluster an
 can safely repeat after a lost reply. Drivers declare internal `cancel_pending`
 and `cancel_running` capabilities. Validation reports readiness, installed file
 digests and the execution identity.
-The optional private `scheduler_evidence` and `startup_evidence` fields are carried by completion and journal
-execution records. Legacy records remain readable without rewriting them. Deploy
-matching connector and compute-runner binaries together; private decoders are strict.
-See the [extension guide](EXTENDING.md) for complete version-1 protocol examples.
+Completion and journal records can carry private `scheduler_evidence` and
+`startup_evidence`. The connector reads those fields when present. Install
+matching connector and compute-runner binaries. The runner checks the private
+protocol version and fields before acting. [Protocol examples](EXTENDING.md)
 
-This changes the development configuration contract. Slurm context manifests
-use only `kind` and `worker_path` in `driver`. The former `allowed_clusters` and
-`default_cluster` controls are removed; cluster selection belongs to the model
-batch file. Move resource and account settings into each model's batch file and
-register a publication with `slurm_script`. Drain accepted work with the previous
-binary before upgrading, and preserve its journal as evidence.
-Resource profiles and presets are also removed from publication requirements, contexts,
-publication descriptors, admission, accepted runs and assignment receipts. Remove
-these fields from external manifests; wrappers and batch files own resource requests.
-As described in the repository's development setup, recreate disposable databases
-and connector configuration after incompatible changes: stored contexts are
-immutable, and old contexts and installation caches use the previous contract.
+For Slurm, put `kind` and `worker_path` in the context's `driver`, and set
+`slurm_script` in the publication. Set cluster, account and resource requests
+in the model's batch file. Contexts keep their registered execution settings.
 
 ## Wrapper protocol 1 and files
 
