@@ -172,10 +172,16 @@ copy if you need it later. The analysis records its path and checksum.
 Use a collection when your model takes a directory of related files as one
 input. This example sends two files to a starter that copies them into its
 `snapshots` output. Its template uses `collection-example` as the model ID.
-Ask the author for the published ID and access. To publish the starter, use
-the [collection publication](../../../examples/collections/publication.json)
-and [Python wrapper](../../../examples/collections/wrapper.py), then
-[review and activate the tested publication](https://doc.enumeray.com/authors/publication/#review-and-activate).
+Ask the author for the published ID and access.
+
+If you're publishing the starter, take the complete `examples/collections/`
+project from the [verified examples archive](https://doc.enumeray.com/authors/overview/#run-the-downloaded-examples-offline).
+Keep `publication.json`, `wrapper.py`, `protocol.py`, the fixtures and tests
+together. Use Python 3.9 or newer on the execution host. If you choose a
+different model ID, use it in the declaration, wrapper and request fixture.
+[Test the collection wrapper locally](https://doc.enumeray.com/authors/wrappers/#collection-inputs-and-outputs),
+then follow the [publication guide](https://doc.enumeray.com/authors/publication/#agree-on-installation-and-execution)
+to install, trial, review and activate it.
 
 ### Prepare and review a two-file run
 

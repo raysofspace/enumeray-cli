@@ -102,9 +102,8 @@ This walkthrough saves the result of one run so another program can use it.
 You need `jq`, an [Enumeray sign-in](https://doc.enumeray.com/start/login/)
 and run access to the scalar starter an author
 [publishes and shares](https://doc.enumeray.com/authors/publication/#review-and-activate).
-The tutorial uses `example` as its model ID. Set `MODEL_ID` below to the
-published ID the author gives you. If you use another model, adapt the inputs
-and expected result.
+Set `MODEL_ID` below to the published ID the author gives you. If you use
+another model, adapt the inputs and expected result.
 
 ### Prepare one run
 

@@ -199,15 +199,20 @@ Each qualified release also provides `enumeray-VERSION-source.tar.gz`, its
 explicit release version as the service. Replace the version placeholder with
 the approved version without its leading `v`, then download these three files.
 
+<!-- source-archive-acquisition -->
 ```sh
 VERSION=REPLACE_WITH_APPROVED_VERSION
+REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
 ARCHIVE="enumeray-$VERSION-source.tar.gz"
 CHECKSUM="$ARCHIVE.sha256"
-BASE_URL="https://github.com/raysofspace/enumeray-cli/releases/download/$TAG"
-for file in "$ARCHIVE" "$CHECKSUM" "$CHECKSUM.sigstore.json"; do
-  curl --fail --location --proto '=https' --tlsv1.2 --output "$file" "$BASE_URL/$file"
-done
+BASE_URL="https://github.com/$REPOSITORY/releases/download/$TAG"
+(
+  set -eu
+  for file in "$ARCHIVE" "$CHECKSUM" "$CHECKSUM.sigstore.json"; do
+    curl --fail --location --proto '=https' --tlsv1.2 --output "$file" "$BASE_URL/$file"
+  done
+)
 ```
 
 Apply the signature and SHA-256 verification steps above to these filenames

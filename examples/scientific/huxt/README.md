@@ -12,7 +12,8 @@ the model responds to that starting profile. It models wind speed alone.
 
 The default case sets the slow wind to 350 km/s, the fast stream to 700 km/s
 and the sector width to 30°. [Download the sample result](sample-run.zip) to see
-its data, plot and checks before installing anything.
+its data, plot and checks before installing anything. The extracted
+examples archive includes `huxt/sample-run.zip` under `examples/scientific`.
 
 To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
 and run this command from `examples/scientific`.
@@ -48,9 +49,9 @@ and data. The summary is in `first-run/results/outputs.json`. Save
 
 ## Change the inputs
 
-Save a copy of [the default inputs](inputs.json) as `huxt-faster.json` in
-`examples/scientific`. Change only `fast_speed_kms` from `700` to `750`. Run the
-comparison in a new directory.
+From `examples/scientific` in the extracted archive, open `huxt/inputs.json`.
+Save a copy as `huxt-faster.json` beside `run_example.py`. Change only
+`fast_speed_kms` from `700` to `750`, then run the comparison.
 
 ```sh
 .venv/bin/python run_example.py huxt --inputs huxt-faster.json --directory huxt-faster

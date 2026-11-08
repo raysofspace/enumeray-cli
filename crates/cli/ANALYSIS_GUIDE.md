@@ -29,10 +29,9 @@ If you're using your own model, supply the inputs it declares.
 
 To follow the starter inputs below, ask a teammate to
 [publish and activate the matching starter](https://doc.enumeray.com/authors/publication/#review-and-activate)
-and grant your account access. The author tutorial uses `example` for the
-JSON starter and `csv-example` for the file starter. Use the ID your teammate
-actually published. The downloaded `starter-python-json` is a local starter
-project.
+and grant your account access. Use the ID your teammate published for the
+JSON or file starter. You can run the downloaded `starter-python-json`
+project locally using the [model author guide](https://doc.enumeray.com/authors/overview/#run-the-downloaded-examples-offline).
 
 ### Use a named example
 

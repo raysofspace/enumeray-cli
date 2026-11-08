@@ -13,7 +13,8 @@ relative to the star in the plane of the orbit.
 
 The default case follows two orbits with a semimajor axis of 1 AU and an
 eccentricity of 0.0167. [Download the sample result](sample-run.zip) to see
-its data, plot and checks before installing anything.
+its data, plot and checks before installing anything. The extracted
+examples archive includes `rebound/sample-run.zip` under `examples/scientific`.
 
 To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
 and run this command from `examples/scientific`.
@@ -55,9 +56,9 @@ and data. The summary is in `first-run/results/outputs.json`. Save
 
 ## Change the inputs
 
-Save a copy of [the default inputs](inputs.json) as `rebound-eccentric.json` in
-`examples/scientific`. Change only `eccentricity` from `0.0167` to `0.1`. Run
-the comparison in a new directory.
+From `examples/scientific` in the extracted archive, open `rebound/inputs.json`.
+Save a copy as `rebound-eccentric.json` beside `run_example.py`. Change only
+`eccentricity` from `0.0167` to `0.1`, then run the comparison.
 
 ```sh
 .venv/bin/python run_example.py rebound --inputs rebound-eccentric.json --directory rebound-eccentric

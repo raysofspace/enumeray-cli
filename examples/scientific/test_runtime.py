@@ -29,10 +29,10 @@ def request(model="huxt"):
 
 
 class RuntimeTests(unittest.TestCase):
-    def test_sample_collection_links_real_output_bytes_and_example_run_records(self):
+    def test_sample_run_bundle_links_real_output_bytes_and_example_run_records(self):
         model = ROOT / "rebound"
-        prefix = "rebound-collection/"
-        with ZipFile(model / "sample-collection.zip") as collection, ZipFile(model / "sample-run.zip") as sample:
+        prefix = "rebound-run-bundle/"
+        with ZipFile(model / "sample-run-bundle.zip") as collection, ZipFile(model / "sample-run.zip") as sample:
             bundle = json.loads(collection.read(prefix + "bundle.json"))
             inspection = json.loads(collection.read(prefix + bundle["inspection"]))
             provenance = json.loads(collection.read(prefix + bundle["provenance"]))

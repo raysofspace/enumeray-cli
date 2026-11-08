@@ -15,13 +15,16 @@ Download and unzip a result. Open the PNG first to see what the model calculated
 
 Each ZIP contains the plot, CSV data, `inputs.json` with the parameters,
 `outputs.json` with the numerical summary and `run-record.json` with the checks.
+If you already extracted the examples archive, use `huxt/sample-run.zip`
+or `rebound/sample-run.zip` under `examples/scientific`.
 
-## Inspect an Enumeray collection
+## Inspect a downloaded run bundle
 
-Download the [example REBOUND collection](rebound/sample-collection.zip) and
-extract `rebound-collection`. This teaching fixture uses data from the
-local orbit calculation. Its run and publication IDs, compute location and
-access disclosure are examples.
+Download the [example REBOUND run bundle](rebound/sample-run-bundle.zip), or
+use `rebound/sample-run-bundle.zip` from the extracted archive. Unzip it to
+get `rebound-run-bundle`. This teaching fixture uses data from the local
+orbit calculation. Its run and publication IDs, compute location and access
+disclosure are examples.
 
 1. Open `bundle.json` to check the run ID and find the verified plot and CSV.
 2. Open `results/inspection.json` to see the inputs, model publication,
@@ -34,7 +37,7 @@ After [setting up the solvers](#set-up-the-solvers), run the checker from
 `examples/scientific`. Replace the example path with the extracted folder.
 
 ```sh
-.venv/bin/python verify_collected.py --model rebound --analysis /path/to/rebound-collection
+.venv/bin/python verify_collected.py --model rebound --analysis /path/to/rebound-run-bundle
 ```
 
 Look for `"verified": true`. The checker reads local files and verifies the
