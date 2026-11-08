@@ -61,12 +61,11 @@ model, or ask its owner for an already accessible model. Context IDs, release pa
 and scientific identities are examples to replace before publication. Creating
 local files does not provision compute or install a model.
 
-Run the following user commands from the package root, whose `examples/` directory
-contains this file. Use a logged-in profile and choose a new private analysis
-directory for each intended execution. Inspect the model and the saved destination/disclosure
-before submitting. The [analysis guide](../ANALYSIS_GUIDE.md) explains editable and
-frozen inputs, retries, logs/cancellation, copied-folder recovery and the complete
-[noninteractive JSON recipe](../CLI_AUTOMATION.md#script-with-structured-output).
+Start from the package root, whose `examples/` directory contains this file.
+The commands use `research` as the profile. Substitute the profile you
+signed in to. Use a new private working directory for each intended run.
+The [analysis guide](../ANALYSIS_GUIDE.md) covers how to review inputs and
+recover work from a saved directory.
 
 For trusted local experiments, [development-process-context.json](development-process-context.json)
 provides the explicit process/direct development policy. Replace its absolute
@@ -78,70 +77,92 @@ launch-capable invocation.
 
 The supplied [process declaration](scalar-publication.json) and
 [Slurm declaration](slurm-scalar-publication.json) both describe `scalar-double`.
-Their installed entrypoint must implement that contract; choose the matching
-context template and follow the author installation procedure first.
+To follow the example, you need `scalar-double` activated on your service
+and permission to run it. If you publish the model, use the matching context
+template and follow the author guide for installation and testing.
 
 ```sh
-umask 077
-enumeray model get scalar-double
-enumeray analysis init scalar-double --inputs examples/scalar-inputs.json \
-  --directory scalar-analysis
-enumeray analysis status scalar-analysis
+enumeray --profile research model get scalar-double
+```
+
+From the package root, record the path to the supplied input file before
+switching to a fresh working directory. Stay there for the rest of this example.
+
+```sh
+SCALAR_INPUTS="$PWD/examples/scalar-inputs.json"
+SCALAR_WORK_DIR=$(mktemp -d "$PWD/enumeray-scalar.XXXXXX") &&
+  cd "$SCALAR_WORK_DIR" &&
+  enumeray --profile research analysis init scalar-double \
+    --inputs "$SCALAR_INPUTS" --directory scalar-analysis &&
+  enumeray --profile research analysis status scalar-analysis
 ```
 
 Check where the run will happen and who can access its data. Review
 `scalar-analysis/inputs.json` before submitting.
 
 ```sh
-enumeray analysis submit scalar-analysis
-enumeray analysis wait scalar-analysis --check-outcome
-enumeray analysis collect scalar-analysis
+enumeray --profile research analysis submit scalar-analysis
+enumeray --profile research analysis wait scalar-analysis --check-outcome
+enumeray --profile research analysis collect scalar-analysis
 ```
 
-The supplied input is `{"value":21}`; the scalar-double fixture returns
+The supplied input is `{"value":21}`. The scalar-double fixture returns
 `{"doubled":42}` in `scalar-analysis/results/outputs.json`. Edit the analysis's
-`inputs.json` before its first submit to choose another value. Submit freezes it;
-repeat submit with the same directory after interruption to recover the same
-execution. A different intended execution needs a fresh directory and review.
+`inputs.json` before its first submit to choose another value. Submit freezes
+the inputs. After interruption, repeat submit with the same directory to
+recover the same execution. For a new run, use a fresh directory.
 
 ## File starter
 
-Create the source project with `enumeray model init csv-example --directory
-csv-example --io files`, run its local tests and complete the author publication
-procedure. Once that file model is accessible, create two tiny input rows outside
-the new analysis directory:
+To follow this example, your team needs to activate the file starter as
+`csv-example` on your service and give your account access. Check with
+`enumeray --profile research model get csv-example`. If you're preparing the
+model for your team, follow the [author guide](../AUTHOR_GUIDE.md).
+
+Create a fresh private working directory for the example and stay there
+for the rest of the commands.
 
 ```sh
-umask 077
-cat > dataset.csv <<'CSV'
+FILE_WORK_DIR=$(mktemp -d "$PWD/enumeray-file.XXXXXX") &&
+  cd "$FILE_WORK_DIR" &&
+  pwd
+```
+
+Create the two-row dataset beside the new analysis directory. The `dataset`
+binding supplies the only required input, so the input JSON can be empty.
+
+```sh
+(
+  set -eC
+  umask 077
+  cat > dataset.csv <<'CSV'
 index,value
 0,1
 1,2
 CSV
-cat > file-inputs.json <<'JSON'
+  cat > file-inputs.json <<'JSON'
 {}
 JSON
-enumeray model get csv-example
-enumeray analysis init csv-example --inputs file-inputs.json \
-  --file dataset=dataset.csv --directory file-analysis
-enumeray analysis status file-analysis
+  enumeray --profile research analysis init csv-example --inputs file-inputs.json \
+    --file dataset=dataset.csv --directory file-analysis
+  enumeray --profile research analysis status file-analysis
+)
 ```
 
 Review the local `dataset` binding and check where the file will go and who
 can access it before submitting.
 
 ```sh
-enumeray analysis submit file-analysis
-enumeray analysis wait file-analysis --check-outcome
-enumeray analysis collect file-analysis
+enumeray --profile research analysis submit file-analysis
+enumeray --profile research analysis wait file-analysis --check-outcome
+enumeray --profile research analysis collect file-analysis
 ```
 
-The binding supplies the required `dataset` reference and uploads the source
-automatically. The expected ordinary output is `sample_count: 2`; `bundle.json`
-maps `processed_dataset` to a verified CSV containing rows `0,2` and `1,4`.
-Keep original source bytes unchanged while upload is unfinished and retain them
-separately when needed: the analysis records their path/checksum without copying
-them. Status, logs, cancellation and collection use the folder after acceptance.
+The CLI uploads the bound file when you submit. Open `results/outputs.json`
+inside `file-analysis` and check that `sample_count` is `2`. Use `bundle.json`
+to find the verified `processed_dataset` CSV containing rows `0,2` and `1,4`.
+Keep the original file unchanged until the upload finishes. Retain a separate
+copy if you need it later. The analysis records its path and checksum.
 
 ## Collection example
 
