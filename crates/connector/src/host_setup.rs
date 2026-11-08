@@ -1171,6 +1171,27 @@ mod tests {
             token
         );
         assert!(read_enrollment(&path, "different").is_err());
+        document["api_base_url"] = json!("https://api.enumeray.com");
+        write(&document);
+        assert_eq!(
+            read_enrollment(&path, "example")
+                .unwrap()
+                .api_base_url
+                .as_deref(),
+            Some("https://api.enumeray.com")
+        );
+        let serialized = document.to_string();
+        for (repeated, replacement) in [
+            ("api_base_url", "https://deployment.example".to_owned()),
+            ("enrollment_token", URL_SAFE_NO_PAD.encode([8_u8; 32])),
+        ] {
+            let duplicate = format!(
+                r#"{},{repeated:?}:{replacement:?}}}"#,
+                serialized.strip_suffix('}').unwrap()
+            );
+            fs::write(&path, duplicate).unwrap();
+            assert!(read_enrollment(&path, "example").is_err(), "{repeated}");
+        }
         document["unexpected_secret"] = json!("not an enrollment field");
         write(&document);
         assert!(read_enrollment(&path, "example").is_err());

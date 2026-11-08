@@ -192,7 +192,7 @@ pub struct ConnectorEnrollment {
 
 /// A private CLI enrollment document. Older saved documents have no API origin.
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(try_from = "Value")]
+#[serde(from = "EnrollmentFileFields")]
 pub struct ConnectorEnrollmentFile {
     #[serde(flatten)]
     pub enrollment: ConnectorEnrollment,
@@ -200,19 +200,29 @@ pub struct ConnectorEnrollmentFile {
     pub api_base_url: Option<String>,
 }
 
-impl TryFrom<Value> for ConnectorEnrollmentFile {
-    type Error = serde_json::Error;
+// Deserialize the flat record directly so Serde rejects duplicate and unknown
+// fields before either the origin or the credential can be used.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnrollmentFileFields {
+    id: Uuid,
+    connector_id: String,
+    enrollment_token: String,
+    expires_at: String,
+    api_base_url: Option<String>,
+}
 
-    fn try_from(mut value: Value) -> Result<Self, Self::Error> {
-        let api_base_url = value
-            .as_object_mut()
-            .and_then(|object| object.remove("api_base_url"))
-            .map(serde_json::from_value)
-            .transpose()?;
-        Ok(Self {
-            enrollment: serde_json::from_value(value)?,
-            api_base_url,
-        })
+impl From<EnrollmentFileFields> for ConnectorEnrollmentFile {
+    fn from(fields: EnrollmentFileFields) -> Self {
+        Self {
+            enrollment: ConnectorEnrollment {
+                id: fields.id,
+                connector_id: fields.connector_id,
+                enrollment_token: fields.enrollment_token,
+                expires_at: fields.expires_at,
+            },
+            api_base_url: fields.api_base_url,
+        }
     }
 }
 

@@ -48,6 +48,12 @@ struct Identity {
     origin: String,
 }
 
+#[derive(Deserialize)]
+struct EnrollmentCredential {
+    enrollment_token: String,
+    api_base_url: Option<String>,
+}
+
 /// Match the enrollment record to the token rather than inferring its origin
 /// from directory layout alone.
 pub(crate) fn enrolled_token_origin(token_file: &Path) -> Result<Option<String>> {
@@ -83,23 +89,14 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
     let content =
         String::from_utf8(bytes).map_err(|_| failure("invalid private enrollment credential"))?;
     let (enrollment_token, document_origin) = if options.enrollment_file.is_some() {
-        let value: Value =
+        let document: EnrollmentCredential =
             serde_json::from_str(&content).map_err(|_| failure("invalid enrollment document"))?;
-        let token = value["enrollment_token"]
-            .as_str()
-            .ok_or_else(|| failure("enrollment document lacks enrollment_token"))?
-            .to_owned();
-        let origin = value
-            .get("api_base_url")
-            .map(|origin| {
-                validate_origin(
-                    origin
-                        .as_str()
-                        .ok_or_else(|| failure("invalid enrollment document API origin"))?,
-                )
-            })
+        let origin = document
+            .api_base_url
+            .as_deref()
+            .map(validate_origin)
             .transpose()?;
-        (token, origin)
+        (document.enrollment_token, origin)
     } else {
         (content, None)
     };

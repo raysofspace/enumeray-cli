@@ -162,6 +162,34 @@ async fn enrollment_retry_preserves_machine_and_generated_credential_after_lost_
 }
 
 #[tokio::test]
+async fn duplicate_origin_or_token_is_rejected_before_enrollment() {
+    let root = tempfile::tempdir().unwrap();
+    fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let source = root.path().join("enrollment.json");
+    let directory = root.path().join("identity");
+    for document in [
+        r#"{"enrollment_token":"first-secret","enrollment_token":"second-secret","api_base_url":"http://127.0.0.1:9"}"#,
+        r#"{"enrollment_token":"first-secret","api_base_url":"http://127.0.0.1:1","api_base_url":"http://127.0.0.1:9"}"#,
+    ] {
+        fs::write(&source, document).unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o600)).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_enumeray"))
+            .args(["connector", "enroll", "--directory"])
+            .arg(&directory)
+            .arg("--enrollment-file")
+            .arg(&source)
+            .output()
+            .await
+            .unwrap();
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("invalid enrollment document"), "{stderr}");
+        assert!(!stderr.contains("secret"));
+        assert!(!directory.exists());
+    }
+}
+
+#[tokio::test]
 async fn enrollment_creates_a_relative_directory_and_bounds_the_credential_read() {
     let root = std::env::temp_dir().join(format!("enumeray-enrollment-{}", Uuid::new_v4()));
     fs::create_dir(&root).unwrap();

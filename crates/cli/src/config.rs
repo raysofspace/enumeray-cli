@@ -1,7 +1,6 @@
 use crate::args::Args;
 use enumeray_client::EnumerayClient;
 use enumeray_client::Error;
-use enumeray_contracts::DEFAULT_API_ORIGIN;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::time::Duration;
 use std::{
@@ -12,6 +11,7 @@ use std::{
 };
 
 const MAX_JSON_BYTES: usize = 1024 * 1024;
+const DEFAULT_API_ORIGIN: &str = "https://api.enumeray.com";
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
