@@ -1,101 +1,131 @@
 # Analysis directories
 
-Keep one intended execution, its reviewed inputs, exact retries and verified
-results in one private analysis directory. Initialize it, review the inputs and
-execution disclosure, submit deliberately, then observe and collect using that
-directory. Start a new directory when you intend another execution.
+Use one private directory for each run you intend to submit. It holds the
+inputs you review, the run receipt and the results you collect. If a command is
+interrupted, use the same directory to continue that run. If you want another
+execution, create a new directory and review its inputs.
 
-**Role:** Model user, candidate author/reviewer or authorized run reader. **Prerequisites:** An authenticated CLI profile for remote commands. New work requires access to the selected publication and upload/artifact scopes when using files; fresh candidate trials also require current model administration, execution access and the captured grant or an exact named delegation. Accepted-run recovery uses existing run-read authority; local prepared-operation import needs no credentials. **Files:** A private directory for one intended execution; original local input bytes remain external.
-
-## Try the hosted scientific models
-
-Sign in with your regular hosted Enumeray profile. The CLI uses the hosted API
-at https://api.enumeray.com when the selected profile has no saved origin.
-If you already use a named hosted profile, add `--profile NAME` to the commands
-below. See the [login guide](https://doc.enumeray.com/start/login/) to check
-which origin each profile uses.
-
-```sh
-enumeray auth login
-enumeray auth whoami
-```
-
-Confirm your account before continuing. The trial supplies the installed
-models and connector. Follow the
-[first-run walkthrough](https://doc.enumeray.com/start/first-run/) for a full
-HUXt or REBOUND walkthrough, or use this REBOUND recipe:
-
-```sh
-enumeray model get demo-rebound
-enumeray analysis init demo-rebound --example earth-like-orbit --directory orbit-analysis
-# Review the scientific inputs, execution location and disclosure before submitting.
-enumeray analysis submit orbit-analysis
-enumeray analysis wait orbit-analysis --check-outcome
-enumeray analysis collect orbit-analysis
-```
-
-Use `demo-huxt` with example `fast-stream` and a new directory for the solar-wind
-example. Collection writes scientific JSON to `results/outputs.json` and maps
-the CSV and PNG outputs to local files in `bundle.json`. These bounded models
-let you try the workflow before planning a scientific pilot with your own model
-and compute owners. They are distinct from the contract fixtures below.
+This guide assumes you have the CLI, an account for the intended service and
+access to a model that accepts submissions. You need the model ID and either a
+named example or a JSON input file. For HUXt or REBOUND on the public trial,
+start with the hosted walkthrough to check availability and install the right
+CLI. [Hosted first run](https://doc.enumeray.com/start/first-run/)
 
 ## Initialize and review
 
-Use your supplied service profile and model access when working outside the
-trial. Inspect `enumeray model get MODEL` for its schema, named examples,
-availability, execution location and scientific-data access disclosure.
-Initialize from one of its examples or your own inputs:
+The following commands use the scalar starter, published as `example`, and put
+the run in a new directory called `analysis`. Substitute your model's ID and
+its named example. If you sign in with a named profile, pass the same
+`--profile NAME` after `enumeray` for each command.
 
 ```sh
+enumeray model get example
 enumeray analysis init example --directory analysis --example starter-example
-# Alternative, for supplied model-specific JSON:
-enumeray analysis init example --directory supplied-analysis --inputs inputs.json
 ```
 
-Use the actual model ID and example name. Initialization saves the exact current publication and contract, the execution location/disclosure and private operation identities. It performs no uploads or model execution. The destination's parent must exist; an existing destination is refused.
+If you already have a model input file, initialize with `--inputs inputs.json`
+instead of `--example starter-example`. Choose a new directory inside an
+existing parent directory.
 
-Edit `analysis/inputs.json` to change scientific values before the first submission. Review the printed execution location, disclosure and local file bindings. The first `submit` validates and freezes the edited JSON before any remote mutation. A frozen operation cannot be edited into another execution. For the initialized scalar folder, explicitly submit after review, then observe and collect:
+Open `analysis/inputs.json`. Before submitting, check the values, units and any
+file bindings. Read the execution location and data-access disclosure that the
+CLI prints. The directory saves the selected model publication and its input
+contract. You can edit the JSON in the directory before the first submission.
+Initialization alone performs no uploads or execution.
+
+## Submit and resume
+
+Once you have reviewed the analysis, submit and check its progress.
 
 ```sh
 enumeray analysis submit analysis
 enumeray analysis status analysis
 enumeray analysis wait analysis --check-outcome
+```
+
+The first submit validates and freezes the inputs, uploads any bound files and
+saves the request and acceptance receipt. If the connection drops or the reply
+is lost, repeat `analysis submit analysis` with the same directory and original
+input files. The CLI recovers the same request. If the service already accepted
+it, the retry returns the original run. If a model publication changes before
+the first request is sent and submission stops, prepare a new directory and
+review the new inputs and disclosure. Once the request may have reached the
+service, resume the saved request.
+
+Read the state from `status` or `wait`. A run is `queued` or `running` while the
+service prepares, executes or delivers its work. Its final state is
+`succeeded`, `failed` or `cancelled`. A local wait deadline or Ctrl-C ends your
+observation while the run continues. If submit was interrupted before a receipt
+was saved, repeat submit first so the directory has a run to inspect.
+
+To read messages while the model runs, use
+`enumeray analysis logs analysis --follow`. To ask the service to stop the
+work, use `enumeray analysis cancel analysis`, then check status for
+confirmation. Repeat the same cancellation command if you lose its reply.
+[Read logs](https://doc.enumeray.com/users/logs-provenance/) ·
+[Cancel or retry](https://doc.enumeray.com/users/cancellation-retries/)
+
+## Collect verified evidence
+
+When the run reaches a final state, collect its results and record.
+
+```sh
 enumeray analysis collect analysis
 ```
 
-The scalar starter with input `{"value":2}` returns `{"doubled":4}` in `results/outputs.json`. Use the matching directory if you selected the supplied-input alternative. The file and collection examples below use separate explicitly named folders.
+| File or directory | What it contains |
+| --- | --- |
+| `analysis/bundle.json` | The output names and paths, file sizes and checksums, exact versions and any unavailable optional outputs. |
+| `analysis/results/outputs.json` | The model's JSON result. The scalar starter returns `{"doubled":4}` for input `{"value":2}`. |
+| `analysis/results/effective-inputs.json` | The input values and file references used by the run. |
+| `analysis/results/provenance.json` | The model publication, execution and available file evidence. |
+| `analysis/results/inspection.json` | The final state and result or failure. |
+| `analysis/results/files/` and `analysis/results/collections/` | Any downloaded output files, collection members and manifests. |
 
-## Trial an exact candidate
+Look for **Collection complete: yes** in human output or `complete: true`
+with `--json`. A failed or cancelled run can still have a complete bundle
+of the available evidence. Use the recorded run state to check the execution
+outcome, and the model's scientific guide to interpret the results. The CLI
+checks downloaded bytes and uses the recorded original file name when
+available. Use the paths in `bundle.json` to find the files.
 
-Authors and delegated reviewers can select a ready or published retained candidate directly, including before the model's first activation:
+If a download stops, repeat `analysis collect analysis`. The CLI verifies and
+reuses matching files and resumes partial downloads. It preserves conflicting
+files. If a file conflicts, inspect the paths it reports before moving anything
+aside. Keep the private directory for your research record. It holds local file checksums
+and references. Save any original input bytes you need separately.
+
+### Collect a collection in stages
+
+If you use the two-file example in [Bind local collections](#bind-local-collections),
+review its inputs and disclosure, then submit it and wait for a final state.
 
 ```sh
-cat > trial-inputs.json <<'JSON'
-{"value":2}
-JSON
-enumeray model release status release-r1
-enumeray analysis init example --candidate CANDIDATE_ID \
-  --inputs trial-inputs.json --directory trial-r1
-# Or use --example NAME from this candidate's scientific examples.
-# Review the exact installation, execution location and full disclosure.
-enumeray analysis submit trial-r1
-enumeray analysis wait trial-r1 --check-outcome
-enumeray analysis collect trial-r1
-enumeray model release status release-r1
-# Complete your scientific checks before saving the activation review.
-enumeray model release review release-r1
+enumeray analysis submit collection-analysis
+enumeray analysis wait collection-analysis --check-outcome
 ```
 
-Use the exact candidate ID from your release or the grant holder. Initialization reads that candidate rather than today's current publication and saves `candidate_trial` purpose, its captured grant and any named delegation. The ordinary file and collection bindings below use the candidate's declarations. Review the displayed identity before explicitly submitting; initialization never activates the candidate.
+You can save the manifests first, retrieve one file, or download every output.
 
-Scoped credentials need `me:read`, `models:read`, `models:manage` and `runs:create`, plus scopes for the uploads and run evidence you use. Delegated reviewers need no separate compute grant; the named handoff must remain active for the exact candidate. A revoked handoff cannot be replaced inside an existing trial directory. Revocation, readiness, maintenance and ordinary capacity rules still apply through launch. Repeat `analysis submit trial-r1` after uncertain acceptance to recover the original execution, including after activation, replacement or changed authority.
+```sh
+enumeray --json analysis collect collection-analysis --evidence-only > collection-evidence.json
+enumeray --json analysis collect collection-analysis \
+  --member snapshots=mesh/grid.bin > collection-partial.json
+enumeray --json analysis collect collection-analysis > collection-complete.json
+```
 
-Folder status, logs, cancellation and collection retain the trial identity. Collected provenance is in `trial-r1/results/provenance.json`. Release status/review shows trial evidence automatically without copying a receipt or run ID. If you have no local release operation, adopt the existing candidate with `model release init example --candidate CANDIDATE_ID --directory review-r1`; adoption creates this account's private review operation. A successful trial remains advisory execution evidence. Authors own scientific assertions and activation requires a separate explicit `model release activate` command. See the included [author workflow](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate).
+On a fresh collection, the first two commands report `complete: false` and
+leave `bundle.json` unpublished. The final command downloads the rest,
+reports `complete: true` and saves the bundle. All three commands use the same
+run. Repeat an interrupted step with the same folder. Repeating `--member
+SLOT=PATH` selects several members.
 
 ## Bind local files
 
-The file starter declares `dataset` as a `text/csv` slot. Run this example from a private working directory after `csv-example` has been installed, activated and made accessible:
+If a model needs a local file, name the declared input slot and point the CLI
+at the source file. For the file starter published as `csv-example`, the slot
+is `dataset` and accepts a CSV. From a private working directory, create the
+example file and initialize.
 
 ```sh
 umask 077
@@ -108,21 +138,33 @@ enumeray analysis init csv-example --directory csv-analysis \
   --example starter-example --file dataset=dataset.csv
 ```
 
-The CLI hashes the original file and records its absolute path and expected size/checksum. It uploads those bytes to storage during submission; the remote connector stages the verified artifact on the compute host. The local path is used by the CLI for uploading and retry checks. No extra local copy is made.
+Review `csv-analysis/inputs.json`, the binding and the execution location and
+data-access disclosure. Then follow the submit, wait and collect steps above
+using `csv-analysis`. The CLI records the source path, size and checksum
+during initialization, uploads the file during submission and supplies the
+model with a reference to the verified bytes. Keep the file unchanged and in
+place until upload finishes. If you need to submit changed file bytes, prepare
+a new directory.
 
-Repeat `--file SLOT=PATH` for more declared slots. A binding replaces that slot's JSON artifact reference when effective inputs are constructed. For slots allowing multiple media types, select one explicitly with `--media-type SLOT=TYPE`. Scientific upload metadata is optional: `--metadata SLOT=metadata.json` takes a JSON object and defaults to `{}`.
-
-Supplied JSON can also reference existing completed artifacts without a local file binding. The CLI checks those references before creating uploads. Keep original source files unchanged and available until their uploads complete; changed sources require a new directory. Input JSON values still have to satisfy the selected model's contract.
+Repeat `--file SLOT=PATH` for each file slot. Use `--media-type SLOT=TYPE` to
+choose among supported types and `--metadata SLOT=metadata.json` to attach
+optional JSON metadata. You can also put a completed artifact ID in the input
+JSON instead of binding a local file. [Use files in an analysis](https://doc.enumeray.com/users/files/)
 
 ## Bind local collections
 
-The collection-copy example declares input `dataset` and output `snapshots`. After publishing that model as `collection-example`, create two tiny inputs outside the analysis directory:
+Use a collection binding when the model expects a directory of related files.
+The collection-copy example uses `dataset` for the input and `snapshots` for
+the output. After the model is available to you as `collection-example`,
+create two small source files and initialize its analysis.
 
 ```sh
 umask 077
 mkdir -p collection-inputs/mesh collection-inputs/snapshots
-printf 'grid fixture\n' > collection-inputs/mesh/grid.bin
-printf 'snapshot fixture\n' > collection-inputs/snapshots/0001.bin
+printf 'grid fixture
+' > collection-inputs/mesh/grid.bin
+printf 'snapshot fixture
+' > collection-inputs/snapshots/0001.bin
 cat > collection-inputs.json <<'JSON'
 {}
 JSON
@@ -131,127 +173,116 @@ enumeray analysis init collection-example --directory collection-analysis \
   --media-type dataset=application/octet-stream
 ```
 
-The empty scientific JSON is complete for this declaration because the binding supplies its required `dataset` reference. Other models may require additional scientific values. Initialization freezes the two relative member paths, byte sizes and checksums without uploading. The uniform media type must be permitted by the slot. Keep the source tree unchanged until upload completes.
+The binding supplies the only required input, so `{}` is enough for this
+example. The CLI records both relative paths, sizes and checksums. Keep the
+source tree unchanged until submission has uploaded it. After reviewing the inputs, location and disclosure, follow the example through
+submission and collection. [Collect in stages](#collect-a-collection-in-stages)
 
-For an explicit member list and per-member media types, use `--collection-manifest dataset=MANIFEST.json` instead of `--collection`. The manifest's parent is the source root; list only intended files and keep the analysis outside that tree. Existing completed `{collection_id}` references can be supplied in input JSON without a local binding. See the [example walkthroughs](https://github.com/raysofspace/enumeray-cli/blob/main/crates/cli/examples/README.md) for the collection declaration and wrapper.
-
-## Submit and resume
-
-```sh
-enumeray analysis submit csv-analysis
-enumeray analysis status csv-analysis
-enumeray analysis wait csv-analysis --check-outcome
-```
-
-`submit` explicitly authorizes execution at the reviewed destination. It durably freezes inputs, resumes each upload, substitutes verified artifact references, saves a prepared request and retains the acceptance receipt. After interruption or a lost response, repeat the same command and directory. The upload and submission identities remain the same.
-
-For an ordinary current-publication analysis, a changed current publication before first submission requires a new directory and disclosure review. Candidate trials keep their explicitly selected publication. Once submission may have reached the API, recovery replays the exact saved request, allowing the original acceptance to be recovered even if the model has since changed. It never silently chooses the latest publication.
-
-An accepted analysis is observed by its saved run ID. Original source files are no longer needed for observation, acceptance reconciliation or collection. Renew credentials for the same account and resume the directory after authentication failure. Another account/API is rejected.
-
-Public run states are `queued`, `running`, `succeeded`, `failed` and `cancelled`. While running, status distinguishes preparation, backend waiting, execution, collection and uploading. Stale progress does not establish failure. `wait` uses the ordinary [run observer](https://doc.enumeray.com/users/runs/). Its default exits 0 for any terminal state. With `--check-outcome`, exits are success 0, failure 3, cancellation 4 and local deadline 5; terminal JSON remains on stdout. A deadline or Ctrl-C ends observation while execution continues. Use `--interval` and `--deadline` to adjust observation.
-
-Inspect logs or request cancellation with the same directory:
-
-```sh
-enumeray analysis logs csv-analysis --limit 50
-enumeray analysis logs csv-analysis --follow
-# In another terminal, if you intend to stop remote execution:
-enumeray analysis cancel csv-analysis
-enumeray analysis status csv-analysis
-```
-
-Status, waiting, log observation and cancellation can run concurrently, including while submission uploads or collection downloads are active. Submission and collection still have one writer per directory. A directory permits one live log follower; retained-page reads remain independent. Follow automatically resumes its private `state/logs.json` checkpoint; repeat the same folder command after interruption or credential renewal. See [log recovery](https://doc.enumeray.com/users/logs-provenance/) for gaps, stream output and observation exits.
-
-`cancel` saves local intent before contacting the service. A lost reply leaves the request uncertain; repeat `analysis cancel csv-analysis` to retry cancellation of the same accepted run. Local intent alone does not prove API acknowledgement or backend termination. Use `status` or `wait` to inspect authoritative cancellation and final run state. See [cancellation and retries](https://doc.enumeray.com/users/cancellation-retries/).
-
-Logs, waiting and cancellation require an accepted run identity from a saved receipt or attachment. If an imported or initialized operation has uncertain submission and no accepted identity, explicitly repeat `analysis submit csv-analysis` to reconcile the same operation first. Observation never submits work or sends cancellation. A deliberately new execution starts with `analysis init` into a new directory.
+To select members explicitly or assign different media types, put a manifest
+at the root of the source tree and initialize with
+`--collection-manifest dataset=MANIFEST.json`. Keep the analysis directory
+outside the source tree. If the collection is already uploaded, use its
+completed `collection_id` in the input JSON. [Collection declarations and examples](https://github.com/raysofspace/enumeray-cli/blob/main/crates/cli/examples/README.md)
 
 ## Recover an existing execution
 
-If the directory was lost, attach accepted work by its run ID or a saved receipt:
+If you lost the directory but know the service accepted the run, attach it to
+a new directory. Use one command with the original run ID or receipt.
 
 ```sh
 enumeray analysis attach RUN_UUID --directory recovered-analysis
-# Alternative, using the saved acceptance receipt:
-enumeray analysis attach --receipt run-receipt.json --directory receipt-analysis
-enumeray analysis status recovered-analysis
-enumeray analysis logs recovered-analysis
-enumeray analysis wait recovered-analysis --check-outcome
-enumeray analysis collect recovered-analysis
+# Or, if you have the acceptance receipt:
+enumeray analysis attach --receipt run-receipt.json --directory recovered-analysis
 ```
 
-Choose either a run ID or `--receipt`. A receipt file contains the receipt object itself, as saved in `state/receipt.json` or extracted from the `.receipt` field of `analysis submit --json` output. The full submit output is an analysis summary, not a receipt. Attachment authenticates against the selected API and saves the accepted inputs, exact publication/contract, purpose and available provenance in a new private directory. It uses accepted-run evidence even when today's current publication changed or is inaccessible. It does not submit work, upload inputs or need original source files. Repeat the same attach command and directory after interruption; unrelated existing destinations and conflicting evidence are preserved.
+The receipt is the object in `state/receipt.json` or the nested `receipt` from
+JSON submit output. Sign in to the service and account with permission to read
+the run. Attachment reads the accepted model publication and inputs even if
+the model has changed. It creates a folder for status, logs and collection.
+It does not submit a run or upload files. Only the original submitter with
+cancellation authority can cancel.
 
-An attached directory supports the usual status, logs, wait, cancellation and collection commands. `analysis submit` cannot turn it into another execution. Attachment grants no additional access: run inspection requires existing read authority, and only the original submitter with cancellation authority can cancel the run. Current model administration alone does not permit cancellation of another account's work. Original local paths, source checksums and upload checkpoints that are absent from retained records are reported as unavailable.
+Repeat an interrupted attach with the same ID or receipt and destination. The
+CLI preserves conflicting evidence and unrelated directories. If you have no
+receipt and do not know whether a run was accepted, search your authorized
+`enumeray run list` history. A missing entry leaves acceptance uncertain.
+Preserve the original request before deciding whether to submit another run.
 
-Import a legacy operation from the former `run prepare` command without contacting the API:
+### Recover a saved request file
+
+If you have a standalone prepared request file, import it into a private
+analysis directory.
 
 ```sh
 enumeray analysis import --prepared prepared-run.json --directory imported-analysis
-# Authenticate to the original API/account and review the retained request.
-enumeray analysis status imported-analysis
-# Explicitly authorize submission or reconciliation of that exact operation:
-enumeray analysis submit imported-analysis
 ```
 
-The former `run prepare` and `run submit` commands are removed and have no compatibility aliases. Import validates and preserves the original API/account, request, publication, purpose/delegation and idempotency key. It leaves the source file unchanged and does not need a configured profile or credentials. An operation without a saved receipt may already have been accepted; import keeps that uncertainty. Only explicit `analysis submit` sends the original request to reconcile or obtain acceptance. It never prepares against a newer publication or creates a replacement key. Completed artifact and collection references remain reusable without uploading their bytes again. A never-accepted operation remains subject to the API's current acceptance rules; a rejected original request does not authorize a replacement execution.
+The import is local and keeps the request's original service, account and
+retry key. Keep the source file. To submit or recover that exact request,
+sign in to the original service and account, review the imported request and
+explicitly run `enumeray analysis submit imported-analysis`. The service can
+return the original acceptance or evaluate a request that was never accepted.
+If it rejects the request, inspect the response before preparing another run.
 
 ## Copied-folder use
 
-Copy a complete accepted directory to another host, retain its private permissions and use the same API/account. A copied directory continues the same execution and retry identities; initialize a new directory for deliberately new work. Status, logs, wait, cancellation and collection do not need the old absolute source paths. Completed result files are rehashed and reused when they match pinned evidence. Preserve unfinished download checkpoints too; a partial byte prefix may need to download again when its absolute destination changes. For work whose uploads are unfinished, retain the original unchanged sources and transfer state before moving hosts; submission explains missing-source requirements. Importing a prepared run does not reconstruct earlier upload operations or missing source bytes.
+Copy the whole accepted analysis directory with private permissions and sign
+in to the same service and account on the other host. Status, logs, wait,
+cancellation and collection use the run recorded in the folder. Completed
+files are checked before reuse. Keep download checkpoints with the directory.
+If the absolute destination changes, a partial file may need to download
+again. For unfinished uploads, keep the source bytes and the saved transfer
+state. Copying the folder leaves the run identity the same.
 
-Keep the prepared operation until its outcome is known, and retain receipts or the accepted directory afterward. If both the uncertain operation's identity and its receipt are lost, search authorized `run list` history for accepted work and attach its run ID. History cannot prove that a lost request was never accepted. Do not silently submit a replacement. See [files, logs and recovery](https://doc.enumeray.com/troubleshooting/data-recovery/).
+## Trial an exact candidate
 
-## Collect verified evidence
-
-```sh
-enumeray analysis collect csv-analysis
-```
-
-Collection requires a terminal run. It saves:
-
-- `results/inspection.json`, the retained final inspection;
-- `results/effective-inputs.json` and `results/outputs.json`, scientific JSON values;
-- `results/provenance.json`, exact publication, execution and artifact evidence;
-- `results/files/<artifact-uuid>/<filename>`, downloaded file outputs;
-- `results/collections/<collection-uuid>/`, full collection manifests and verified selected output members;
-- `bundle.json`, the complete bundle inventory keyed by declared output name, including local paths, sizes, checksums, immutable versions and optional output failures.
-
-New collections use the wrapper's original basename when the connector recorded
-it. For older artifacts, the CLI uses a safe name and adds a known extension
-from the recorded media type when needed. An analysis already collected with an
-older CLI keeps its saved paths.
-
-Repeat `collect` after interruption. It retains operation progress, resumes verified partial downloads by byte range and checks existing files against pinned evidence before adopting them. Conflicting files are preserved; move them aside or restore the exact bytes before retrying. It never substitutes a different remote artifact version. Download checkpoints remain beside result files until explicitly removed.
-
-For the two-member collection example above, review the saved destination/disclosure, then submit explicitly and collect in stages:
+A model author or named reviewer can run a ready candidate before activation.
+Use the exact ID from release status or from the person who delegated the
+trial. For the scalar starter, prepare the trial.
 
 ```sh
-enumeray analysis submit collection-analysis
-enumeray analysis wait collection-analysis --check-outcome
-enumeray --json analysis collect collection-analysis --evidence-only > collection-evidence.json
-enumeray --json analysis collect collection-analysis \
-  --member snapshots=mesh/grid.bin > collection-partial.json
-enumeray --json analysis collect collection-analysis > collection-complete.json
+cat > trial-inputs.json <<'JSON'
+{"value":2}
+JSON
+enumeray model release status release-r1
+enumeray analysis init example --candidate CANDIDATE_ID \
+  --inputs trial-inputs.json --directory trial-r1
 ```
 
-The first collection saves provenance and full manifests without scientific payloads. The second downloads only `mesh/grid.bin` from the declared `snapshots` output. Both report `complete: false` for this fresh two-member example and leave `bundle.json` unpublished. The final command completes the remaining output and reports `complete: true`; `bundle.json` records both members through its collection manifest/root mapping. All three steps observe the same execution. Repeat an interrupted step with the same directory. Default collection downloads all output members; repeated `--member SLOT=PATH` selects members explicitly.
+Review the selected candidate, installation, inputs, execution location and
+disclosure. Then submit, wait and collect.
 
-A complete bundle records the scientific state independently. Failed or cancelled runs can have complete evidence bundles; `collect` exits 0 when the requested step succeeds, including partial or evidence-only collection. Check `complete: true` and `bundle.json` for verification of every output. Missing optional outputs remain visible as reported failures. Attached runs support the same partial and evidence-only collection. Original input bytes remain outside the bundle; retain those sources separately when needed. Protect the directory: it contains scientific inputs/results, available source evidence and private operation records.
+```sh
+enumeray analysis submit trial-r1
+enumeray analysis wait trial-r1 --check-outcome
+enumeray analysis collect trial-r1
+```
 
-Use analysis directories for execution submission and the normal local lifecycle, including scripts. The `run` commands retain authorized history and investigation by ID; independent `artifact` and `collection` utilities handle reusable data operations.
+The directory records the candidate, trial purpose and grant or named
+delegation. A delegated reviewer can use the named handoff without a separate
+compute grant. It must remain active for the candidate. A scoped token needs
+`me:read`, `models:read`, `models:manage` and `runs:create`, plus the scopes
+for the files and run evidence you use. The service checks authorization and
+readiness through launch. Repeat submit with the same directory to recover a
+lost acceptance reply. A new delegation requires a separate trial.
+
+Read `trial-r1/results/provenance.json` and check the scientific outputs.
+Release status and review show trial evidence automatically. If you need a
+review directory for an existing candidate, run
+`model release init example --candidate CANDIDATE_ID --directory review-r1`.
+Review the evidence before deciding whether to activate. Activation requires
+its own explicit command. [Author workflow](AUTHOR_GUIDE.md#save-a-release-resume-readiness-review-and-activate)
 
 ## Script with structured output
 
-The [CLI JSON contract](https://doc.enumeray.com/reference/cli-json/) supplies complete matching transcripts,
-schemas and the four-file review specimen for this recipe. Check `schema_version`
-and required decision fields before acting; an unsupported or incomplete response
-must stop an automation while preserving the current analysis directory.
+Use global `--json` for machine-readable output and check the exit status.
+The CLI writes runtime errors, progress and recovery hints to stderr. Argument
+errors use plain text and exit 2. Check the schema version and required fields
+before acting. Preserve the directory if the response lacks a required field
+or uses an unsupported version. [CLI JSON contract](https://doc.enumeray.com/reference/cli-json/)
 
-Use global `--json` for compact machine-readable responses. Runtime error objects, progress and recovery hints go to stderr. Argument parsing errors remain plain text on stderr with exit 2. `--timeout` bounds an individual HTTP operation; `analysis wait --deadline` bounds observation and does not limit scientific runtime. A native command's redirected human output is still human output unless `--json` is present.
-
-This complete scalar-starter recipe needs `jq`, an authenticated profile and access to the activated `example` model. Run initialization once in a private working directory:
+This recipe uses `jq`, an authenticated profile and access to the scalar
+starter published as `example`. Initialize once in a private working directory.
 
 ```sh
 set -eu
@@ -265,9 +296,13 @@ enumeray --json analysis init example --inputs inputs.json \
 enumeray --json analysis status scripted-analysis > reviewed-analysis.json
 ```
 
-Review `model.json`, `initialized.json`, `reviewed-analysis.json` and `scripted-analysis/inputs.json`: check the scientific values, exact publication, execution location and full disclosure. Edit scientific values in `inputs.json` inside the analysis directory only before the first submit. For an automation, approve the saved contract/disclosure and intended inputs before authorizing the submission stage. Initialization never authorizes execution.
+Review `model.json`, `initialized.json`, `reviewed-analysis.json` and
+`scripted-analysis/inputs.json`. Approve the intended inputs, exact publication,
+execution location and data-access disclosure before authorizing submission.
+Only the directory's input file remains editable before first submit.
 
-Run the following submission/observation stage after review. After interruption or an uncertain reply, run this same stage with the same directory; do not rerun initialization:
+Run this stage after review. After interruption, repeat this stage with the
+same directory.
 
 ```sh
 set -eu
@@ -294,26 +329,29 @@ esac
 exit "$outcome"
 ```
 
-Wait writes terminal JSON before exits 3/4. `--check-outcome` exits success 0, scientific failure 3, cancellation 4 or observation deadline 5; ordinary errors exit 1, invalid arguments 2 and interruption 130. Default wait exits 0 for every terminal outcome, with deadline exit 1. Deadline/Ctrl-C leave remote execution running. Collection can succeed for failed/cancelled runs and for partial/evidence-only requests; this script checks full completeness separately. A collection failure stops the script with its own nonzero status and is recoverable by repeating collection with the same directory.
+With `--check-outcome`, wait returns 0 for success, 3 for failure, 4 for
+cancellation or 5 for a local deadline. Exit 130 means interruption. It writes
+terminal JSON before exits 3 or 4. Without `--check-outcome`, wait returns 0
+for any final state and 1 for a deadline. The `--timeout` option limits an HTTP
+operation. The wait deadline limits local observation.
 
-Inspect `bundle.json` and `results/outputs.json` after complete collection. Keep `submission.json` as a summary; its nested `.receipt` and `state/receipt.json` contain the raw acceptance object. A replayed receipt's `queued` state describes original acceptance. Use status/wait for current progress. No UUID extraction is needed. Saved browser sessions renew automatically during active workflows. Authentication failures retain operation identity: follow the error guidance to use `auth refresh`, `auth login` or the automation's replacement scoped token for the same API/account, then resume the same stage. An unknown refresh-exchange outcome requires login; do not discard the analysis directory or reuse a potentially consumed token.
+Collection can succeed for failed or cancelled runs and for partial requests.
+The script checks completeness separately. If collection fails, repeat it with
+the same directory. If sign-in expires, renew the same service and account or
+replace the scoped token, then resume. Read the acceptance receipt in
+`state/receipt.json` or the nested `receipt` in `submission.json`. Check status
+or wait for progress after acceptance.
 
 ## Records to retain
 
-| Stage | Retain | Why |
-| --- | --- | --- |
-| Editable initialization or unfinished uploads | Entire private analysis directory and unchanged original file/collection sources | The directory pins publication/disclosure, local fingerprints and transfer identities; it does not copy source bytes |
-| Uncertain submission | Original directory or imported prepared operation and any acceptance receipt | Reconcile the exact saved request/key before deciding on another execution |
-| Accepted execution | Whole directory, including state files, checkpoints and stable lock files | Status, logs, cancellation, copied-folder use and collection retain the original execution |
-| Collected evidence | Directory, `bundle.json`, `results/` and original input bytes separately when needed | The bundle verifies outputs and retained provenance; original scientific input bytes remain external |
-| Author release | Private release operation and immutable installed files, runtime/dataset dependencies | Candidate/review evidence and accepted work remain tied to the exact installation |
+| Stage | Keep |
+| --- | --- |
+| Before uploads finish | The private directory and the original files at their saved paths. |
+| A submit reply is missing | The original directory, any prepared request and its receipt. |
+| The run is accepted | The whole directory, including private state files and checkpoints. |
+| Collection is complete | The directory, `bundle.json`, `results/` and any original input bytes you need to retain separately. |
 
-Do not edit frozen inputs, saved request keys or acceptance evidence to make a retry succeed. Protect scientific records and private state when copying or backing them up. Credentials and temporary storage capabilities are not retained in analysis state; renew access explicitly. If unfinished sources are unavailable, preserve the original operation and investigate its outcome before requesting new work.
-
-A copied or attached folder continues an existing execution. Deliberately new work uses `analysis init` and a new directory with a fresh review. Historical reruns against old contracts and parameter sweeps are outside the current release.
-
-After collection, use `bundle.json` to check completeness and locate outputs.
-Interpret them against the model's scientific guide and retain the directory
-with any original input files you need. Use run history by ID for authorized
-investigation. [Independent HTTP integrations](https://doc.enumeray.com/reference/http-integrations/)
-manage their own disclosure review, saved request identity and transfer recovery.
+Keep these files private and protect them when you copy or back them up. Resume
+the original directory for an interrupted run. To run the model again with
+another input or publication, initialize a new directory and review it before
+submitting. [Find a run by ID](https://doc.enumeray.com/users/runs/)

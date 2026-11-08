@@ -1,70 +1,71 @@
 # CLI JSON contracts
 
-Use `enumeray --json` for automation. Redirecting human output does not select
-JSON. Analysis initialization/submission/status, collection and saved-release
-summaries carry `schema_version: 1` and have public typed projections in
-`enumeray_contracts::automation`. Scientific inputs, schema definitions and
-results retain their model-defined JSON shapes. A model inspection is the
-underlying HTTP management projection, not an analysis summary.
+Use `enumeray --json` when a script needs to read a command's result. Set the
+flag explicitly even when redirecting output to a file. Check the exit code,
+then read the JSON fields that govern your next action. Use the
+[scripting recipe](ANALYSIS_GUIDE.md#script-with-structured-output) for a complete run.
 
-The downloadable [CLI output schemas](https://doc.enumeray.com/contracts/cli-output-v1.json)
-contain five independently usable JSON Schema documents, keyed
-`analysis-summary`, `analysis-collection-summary`, `release-summary`,
-`compatibility-receipt` and `runtime-error`. They are exported from the Rust types used by the CLI rather
-than separately maintained examples. The complete transcripts linked below are
-captured through actual CLI processes and disposable HTTP fixtures. Only local
-paths, API origins and generated release identities are normalized; tokens and
-temporary object-store capabilities are never included.
+The [CLI output schemas](https://doc.enumeray.com/contracts/cli-output-v1.json)
+come from the Rust types in `enumeray_contracts::automation`. The bundle
+contains five JSON Schema documents you can use independently.
+
+| Schema key | What it describes |
+| --- | --- |
+| `analysis-summary` | Initialization, submission and status for an analysis folder |
+| `analysis-collection-summary` | Partial and complete collection of results |
+| `release-summary` | Status and review for a saved model release |
+| `compatibility-receipt` | Comparison of selected installation identities |
+| `runtime-error` | Errors reported by user commands |
+
+These outputs carry `schema_version: 1`. Scientific inputs and results use
+the model's JSON schemas. Model inspection returns the HTTP management
+response. The transcripts below come from CLI processes running against
+disposable HTTP fixtures. They normalize local paths, API origins and generated
+release IDs, and omit tokens and temporary storage URLs.
 
 ## Compatibility and safe decisions
 
-The alpha uses a provisional compatibility baseline. Project-owned version-1
-formats evolve in place until a persistent baseline is deliberately activated. A matching `schema_version` alone does not establish compatibility
-between different candidate builds: select a verified service/public source pair
-and its matching schema/transcript set. Activation of a persistent baseline
-establishes the documented subsequent compatibility obligations.
+The compatibility baseline is provisional, so version-1 formats can differ
+between builds. Choose a verified service and public source pair and use the
+schemas and transcripts for that pair. Keep saved operation directories with
+their selected build when recovering work.
 
-Within an accepted compatible contract, additional object fields can be ignored.
-Required decision fields retain their types and meaning; unavailable nullable
-fields are emitted as `null`, arrays/maps as `[]`/`{}` when empty. The original
-acceptance receipt retains its historical optional-field representation. An
-unknown version or decision enum, a missing required field or a wrong field type
-must stop the automation and preserve the current directory. Do not turn a
-missing `complete`, `available`, `stage` or guard into a successful default.
-Unknown blockage/error codes require inspection rather than execution or retry
-with a replacement identity.
+With a compatible contract, scripts can ignore additional object fields. Read
+the required decision fields with their declared types. Nullable values use
+`null` when unavailable, and empty arrays and maps use `[]` and `{}`. The
+original acceptance receipt uses its own optional-field representation.
 
-This change introduces versioned CLI projections and normalizes partial/full
-collection to one shape. Scripts written against earlier unversioned candidate
-responses must select these schemas and check required fields. Stored analysis,
-release, upload and bundle formats remain version 1; this is not a supported
-cross-release upgrade or a reason to discard retained operation identity.
+Stop and keep the current directory if a version or decision value is unknown,
+a required field is missing, or a type is wrong. In particular, treat a missing
+`complete`, `available`, `stage` or guard as an error. Inspect unknown blocker
+and error codes before taking action. Partial and full collection use the same
+schema. Stored analysis, release, upload and bundle formats use version 1.
 
 ## Installation comparison receipts
 
-`enumeray compatibility inspect --json` reports the executing build's embedded
-identity and a separate observation of the executable file. It reads no login
-profile. `compatibility check --json` writes a new private receipt using the
-`compatibility-receipt` contract; see the [installation procedure](INSTALL.md#inspect-the-selected-installation)
-for release, unsigned development and authenticated offline transfer inputs.
+To identify your executable, run `enumeray compatibility inspect --json`.
+It reports the build's embedded identity and a separate check of the executable
+file without reading a login profile. `compatibility check --json` compares the
+selected inputs and writes a new private `compatibility-receipt`. Follow the
+[installation procedure](INSTALL.md#inspect-the-selected-installation) to
+choose signed release, unsigned development or authenticated transfer evidence.
 
-Check `schema_version`, `status` and `trust` before using the receipt. `status`
-is `match`, `mismatch` or `missing_evidence`. Only `match` exits 0; the latter two
-exit 1 with the receipt on stdout and in the requested new file. Invalid CLI
-arguments exit 2. Malformed input or an existing output path produces the normal
-runtime error without replacing retained evidence. `trust` is `signed_release`,
-`unsigned_development`, `authenticated_transfer` or `unverified`; identity
-agreement never upgrades unsigned or unavailable evidence into release trust.
+Check `schema_version`, `status` and `trust` before using the receipt.
+`match` exits 0. `mismatch` and `missing_evidence` exit 1 and still write the
+receipt to stdout and the requested new file. Invalid CLI arguments exit 2.
+Malformed input or an existing output path produces a runtime error and
+preserves the existing file. The `trust` field describes the evidence used as
+`signed_release`, `unsigned_development`, `authenticated_transfer` or
+`unverified`. Read it separately from the identity comparison result.
 
-Each check retains its component, field, expected/observed values and reason.
-`selected` retains the exact selected service/public identity and evidence
-hashes; `limits` describes unchecked scope. `--local-only` excludes live service
-and connector conclusions. Stale/unavailable required observations stop a live
-comparison. A connector heartbeat identifies the reported build, not journal
-ownership or an independent attestation of executable bytes. Documentation and
-example manifests identify selected sources; this command does not execute or
-verify every example file. Receipt success grants no execution authority,
-scientific approval, state migration or site qualification.
+Each check records the component, field, expected and observed values, and
+reason. Read `selected` for the exact service and public identities and evidence
+hashes. Read `limits` for the scope the comparison leaves unchecked.
+`--local-only` compares saved evidence. A live comparison stops if required
+observations are stale or unavailable. A heartbeat identifies the build the
+connector reports. Documentation and example manifests identify selected
+sources. Journal ownership, file verification, site qualification, scientific
+approval and execution authority each require their own evidence.
 
 ## Streams, errors and exits
 
@@ -78,23 +79,22 @@ scientific approval, state migration or site qualification.
 | `compatibility check` | Versioned identity comparison receipt | Match 0; mismatch or missing evidence 1; no repair or credential refresh |
 | `model release resume` with a known blocker | Versioned release summary | Exit 1; retain the directory and inspect its blockers |
 
-Default analysis wait exits 0 for every terminal scientific state; without
-`--check-outcome`, its deadline exits 1. A deadline or interruption does not
-cancel remote execution. Successful evidence collection can accompany failed or
-cancelled science. Follow mode is a separate newline-delimited event protocol;
-these ordinary-object schemas do not describe `run logs --follow` or
-`analysis logs --follow`.
+Without `--check-outcome`, `analysis wait` exits 0 for any terminal state and
+1 when the observation deadline expires. The remote run can continue after
+an observation deadline or interruption. A successful collection command can
+save evidence of a failed or cancelled run. Log follow mode writes
+newline-delimited events. See the [log command reference](https://doc.enumeray.com/reference/cli/analysis-logs/)
+for that format.
 
 The error projection applies to native user commands. Connector host commands
 and compute-runner use their separate credential domains and protocol outputs.
 
-Runtime errors contain required `schema_version`, nullable HTTP `status`,
-`error.code`, `error.message` and nullable `retry_after`. API errors preserve the
-request ID and structured details when available. `retry_after` is the original
-HTTP header string; it is not permission to repeat a scientific launch. Parse
-an error only after the process fails, and retain the exact operation before
-renewing credentials or reconciling an uncertain response. Error messages and
-human output are explanatory text; branch on documented codes and typed fields.
+After a command fails, check stderr for a runtime error. It contains
+`schema_version`, nullable HTTP `status`, `error.code`, `error.message` and
+nullable `retry_after`. API errors also preserve the request ID and structured
+details when available. `retry_after` copies the HTTP header. Use documented
+codes and typed fields to choose the next action. Keep the exact operation
+before renewing credentials or recovering from a lost reply.
 
 ## Analysis summaries and acceptance identity
 
@@ -110,13 +110,12 @@ Complete specimens:
   [failed](examples/automation/analysis-status-failed.json) observations.
 - [Runtime error](examples/automation/analysis-runtime-error.json).
 
-Each transcript separates command arguments, exit code, parsed stdout and exact
-stderr. The `contract` key selects the output schema; for `runtime-error`, parse
-the JSON stderr string. Fixtures use the scalar `model` / `release-one` and its
-own tiny input. Their names are illustrative service identities, not a public
-installed offering or replacements for the `example` model in the author guide.
+Each transcript lists the command arguments, exit code, parsed stdout and
+exact stderr. Use `contract` to choose a schema. For `runtime-error`, parse
+the JSON string in stderr. These fixtures use the sample model `model` and
+publication `release-one`. Use your own model and publication IDs for a live run.
 
-`stage` describes the local workflow: `editable`, `uploading`,
+`stage` describes the local workflow and can be `editable`, `uploading`,
 `submission_uncertain`, `accepted` or `attachment_incomplete`. Only `accepted`
 has a known `run_id`. `receipt` records the original acceptance and remains
 `queued` when the current `run` is already running or terminal. All three share
@@ -145,10 +144,10 @@ Review the corresponding paths and identities consistently in your own case.
 | `reviewed-analysis.json` | Same pinned identity and destination, no accepted `run_id`/`receipt`; inspect input-file/collection progress and the next action |
 | `analysis/inputs.json` | Scientific values in the private analysis directory, validated against the selected publication's input schema |
 
-Approve those exact scientific inputs and disclosure before the explicit submit
-stage. A later current-publication change does not replace the publication
-already pinned by the analysis. Missing review fields stop the script; they are
-not an invitation to initialize a replacement directory after uncertain submit.
+Approve the exact inputs, execution location and data access before submitting.
+The analysis keeps the publication it saved, even if a different one becomes
+current. Stop if review fields are missing. After a lost submission reply,
+recover from the same directory so you keep the original request identity.
 
 ## Collection completeness
 
@@ -158,7 +157,7 @@ Compare the complete specimens for [empty scalar output files](examples/automati
 [failed scientific outcome](examples/automation/analysis-collected-failed.json).
 `scientific_state` and collection `complete` are separate decisions. `bundle` is
 `null` until full output verification completes, then names the immutable bundle.
-`outputs` contains verified local file mappings; `collections` reports each
+`outputs` contains verified local file mappings. `collections` reports each
 collection's immutable digest, manifest, local root and completeness. Empty maps
 are valid for scalar work. A partial success is never a promise that all outputs
 exist. The complete bundle also retains any optional-output failures.

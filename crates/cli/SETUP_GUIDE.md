@@ -1,19 +1,21 @@
 # Guided connector setup
 
-Use `enumeray setup` to prepare a connector, save its configuration, check host
-readiness and trial a first model. Install the matching executable using the
-[installation guide](INSTALL.md). Package availability and qualification remain
-separate from source development; use the matching source build while a qualified
-package is unavailable.
+Use `enumeray setup` to connect a machine to Enumeray so it can run models.
+The wizard saves what you choose, shows what the host administrator needs to
+prepare and checks readiness after the connector starts. You can stop when
+the connector is ready or test it by running one model.
+
+Decide who will run the code. On a personal machine, development mode runs
+trusted code under your account. On shared or managed compute, keep the
+connector and model execution in separate accounts. Install the executable
+for your service and host before starting. [Installation guide](INSTALL.md)
 
 ## Choose a mode and save the journey
 
-Run setup as your regular OS user with an Enumeray account that can register a
-connector. A first-model trial also requires model author authority. The wizard
-uses your selected profile and offers browser login if needed. For the hosted
-service at `enumeray.com`, setup defaults to `https://api.enumeray.com` and login
-opens `auth.enumeray.com` without URL configuration. If you saved a profile for
-another deployment, use `--profile NAME` to select the intended profile.
+Run the wizard as your regular OS user. Sign in with an Enumeray account
+allowed to register a connector. The default service is `https://api.enumeray.com`.
+To use a saved profile, pass `--profile NAME`. If you plan to trial a model,
+you also need model author access.
 
 ```sh
 enumeray setup --directory enumeray-setup
@@ -29,12 +31,10 @@ You can select a mode in the wizard or pass `--mode development` or
 executable, execution location, data access disclosure, startup and first-model
 choices in the saved plan before approval.
 
-The private setup directory retains the original profile/API binding, operation
-identities, host plan and progress. User login credentials stay in the private
-profile store; connector credentials and journals have their own host paths.
-Restore setup backups at their original path; copied setup checkpoints are refused
-so one parent operation cannot fork fresh candidate/trial identities.
-Repeat the same directory after interruption:
+Keep the setup directory. It holds your selected account and API, the host
+plan and progress. Login credentials stay in your profile store. Connector
+credentials and the journal use separate host paths. Restore a backup to the
+original directory and use that path to continue after an interruption.
 
 ```sh
 enumeray setup --directory enumeray-setup
@@ -61,12 +61,13 @@ existing journals, credentials and release evidence.
 
 ## Managed setup with separate accounts
 
-Select a dedicated connector account. You can require an existing connector
-account or authorize the administrator to create it if absent. Same-host
-execution defaults to your current OS account. The wizard also accepts a
-different existing local account or an existing account on the SSH host.
-Use a reviewed [scripted host specification](#script-the-same-saved-workflow)
-if the administrator must create the execution account.
+Choose a dedicated connector account to hold credentials and a separate
+account to run models. The host administrator can create the connector
+account as part of the approved plan. For same-host execution the wizard
+defaults to your current OS account. It can also use another existing
+local account or an existing SSH account. If the administrator needs to
+create the execution account, use a reviewed
+[scripted host specification](#script-the-same-saved-workflow).
 
 Choose an execution driver and connection independently. These choices support
 four combinations across Linux and macOS hosts:
@@ -159,10 +160,12 @@ same journal. An interrupted manual-recovery session still requires external
 proof that its previous process stopped and an explicit
 `--confirm-prior-process-stopped`; stale contact is insufficient.
 
-Setup runs publication-independent prerequisites and displays **configured**,
-**connected** and **ready** separately, with corrections and responsible roles.
-A local host report cannot replace authenticated connector evidence, scientific
-validation or compute authorization.
+Read all three checks in setup. **Configured** means Enumeray has a context
+and enrollment. **Connected** means the connector has contacted the service
+with its current credential. **Ready** means the service also has the
+configuration acknowledgement and passing host checks it needs. If a check
+is blocked, setup shows the next action and who can take it. A first-model
+trial checks the actual installation and results separately.
 
 ## Trial a starter or existing project
 
@@ -190,17 +193,23 @@ Original projects and earlier installed releases are preserved. Automatic stagin
 is bounded and refuses symbolic links; use the existing site installation route
 for projects requiring special layout or provisioning.
 
-The wizard saves one candidate release and one analysis directory, waits for
-validation, and requests explicit trial submission after review of the saved
-inputs, execution destination and disclosure. Repeating setup reconciles the same
-candidate and trial, including uncertain submission replies. Collected evidence
-remains in `first-trial`; the release operation is `first-release` inside the setup
-directory. A successful trial does not activate a publication.
+The wizard saves the candidate in `first-release` and its run in `first-trial`
+inside the setup directory. After validation, review the inputs, execution
+location and who can access the data. Submit only when you are satisfied.
+Resume the same setup directory after an interruption or lost reply to
+continue that candidate and trial. Look in `first-trial` for the collected
+results.
 
-Review the retained evidence and perform activation separately when appropriate:
+If you want to make the candidate current, first check its scientific result
+and save the proposed release comparison.
 
 ```sh
 enumeray model release review /absolute/setup/first-release
+```
+
+Read the review before deciding to activate.
+
+```sh
 enumeray model release activate /absolute/setup/first-release
 ```
 

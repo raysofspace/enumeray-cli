@@ -1,33 +1,28 @@
 # Model author guide
 
-Use this complete guide to work from a local starter to a shared model. Define
-and test the science, agree on an installation with the connector owner, then
-save a release and trial its exact candidate. Review the trial before activating
-and sharing the publication. Use the [analysis guide](ANALYSIS_GUIDE.md) for
-execution, recovery and automation.
+Use this guide to take a model from a local test to a version other people can
+run. Your part is to describe the inputs and results, connect your calculation
+to the wrapper and check the science. The connector owner helps you arrange
+where the model will run and gives your account permission to publish there.
 
-The independently distributed `enumeray` CLI creates editable Python 3.9+ projects
-with one editable publication declaration without an API checkout or credentials.
-The [complete model examples download](https://doc.enumeray.com/reference/manifests/#run-the-model-examples-offline)
-also supplies ready-to-run projects: Python 3.9+ is sufficient for their local tests,
-before installing a CLI or obtaining publication access.
-Examples demonstrate contracts; replace their scientific calculation and assert
-results appropriate to your model before publishing.
+| I want to… | Start here |
+| --- | --- |
+| Try a local example | [Download the projects and run the tests](#run-the-downloaded-model-examples-offline). You need Python 3.9 or newer to run them. |
+| Adapt a model | [Generate a starter and map your inputs and outputs](#scaffold-and-map-your-science). You can test it before signing in. |
+| Publish a tested model | [Arrange installation](#install-an-immutable-release-and-select-compute), then [trial the candidate and activate it](#save-a-release-resume-readiness-review-and-activate). |
+| Give other people access | [Choose who can find and run the model](#choose-visibility-and-access-explicitly) or [give a named reviewer access to a candidate](#hand-a-candidate-to-another-administrator). |
+| Change the version users run | [Publish an update or restore a prior version](#updates-and-rollback). |
 
-For an optional trial as a model user, sign in with `enumeray auth login`
-and follow the [hosted HUXt and REBOUND trial](https://doc.enumeray.com/start/first-run/).
-The demo supplies its own installation and compute. Publishing your model starts
-with the local tests and needs an agreed model mapping and execution environment.
+The scalar starter turns `2` into `4`. When you replace its calculation, add
+tests with results you can verify for your model. If you are running a model
+that is already published, follow the [analysis guide](ANALYSIS_GUIDE.md).
 
-Commands run in a terminal, usually from the generated project. `example` is the
-scalar model ID; `csv-example` is a separate file model. Choose your own IDs before
-scaffolding and keep them consistent through installation and registration.
-Replace uppercase values such as `RUN_UUID`, `USER_UUID` and `TRANSFER_ID` with
-actual service response values. The CLI defaults to https://api.enumeray.com.
-Configure a separate profile for another service. Replace the example context IDs
-and release paths with values supplied by your site. New release/analysis operations
-need new directories, and independent upload/download operations need new
-destinations; retain the original directories and state for exact retries.
+Run the commands in a terminal. `example` is the scalar model ID and
+`csv-example` is a separate file model. Use your own model ID throughout each
+project. For network commands, select the CLI profile for your service and
+replace sample context IDs, paths and values like `RUN_UUID` with actual
+values. Use a new folder for each intended release or run. Keep the original
+folder when resuming the same operation.
 
 ## Run the downloaded model examples offline
 
@@ -94,13 +89,11 @@ inputs and outputs; contract fixtures are separate from those runnable offerings
 
 ## Responsibilities and execution choices
 
-The **model owner** owns scientific mapping, schemas, examples, wrappers, immutable
-installed releases, model administration and model access decisions. The
-**connector owner** enrolls and operates connectors, registers approved
-contexts and installation roots, configures execution identities/SSH credentials,
-and grants compute permission. Coordinate with that owner to obtain OS access or
-have the release installed. A compute grant neither creates an OS account nor
-installs software; installation access alone does not grant Enumeray compute use.
+Agree with the connector owner on a context, installation directory and
+execution account. The model owner supplies the wrapper, schemas, examples,
+software and any installed data. The connector owner sets up compute and
+issues the grant to publish there. Arrange separately who can copy the files
+to the host and verify the execution account can read them.
 
 Choose two independent dimensions:
 
@@ -233,7 +226,8 @@ Scientific identities are editable; operation and candidate IDs are generated
 when an explicit release is initialized. The wrapper reads model/scientific
 content from `publication.json` and accepts a valid publication ID in each
 request, allowing an unchanged installation to serve a new candidate or rollback.
-Keep the declaration with the installed wrapper; it is never rewritten by launch.
+Keep the declaration with the installed wrapper so it can read the model's
+contract when it starts.
 
 Edit `model.py` for Python calculations and `implementation.py` for mapping.
 Executable starters demonstrate a fixed argv native command using `demo_solver.py`.
@@ -443,11 +437,9 @@ Do not modify an installed release referenced by a publication or accepted work.
 New release directories and declared entrypoint/batch-file paths cannot occupy
 `work_root/UUID` or descendants of that reserved run directory for any registered
 execution context. Registration rejects this with
-`reserved_run_installation_path`; ordinary broad installation/work-root overlap
-is allowed, including a separate `work_root/releases/r1` release path. Historical
-publication retries preserve their original records, and connector cleanup
-permanently protects known legacy releases overlapping run data and canonical
-aliases observed during validation.
+`reserved_run_installation_path`. A separate `work_root/releases/r1` path can
+be allowed by the ordinary installation-root rules. The connector protects
+known releases and their observed aliases if they overlap retained run data.
 
 For example, on the execution host from the tested project, assuming the site's
 owner has prepared the parent and installation permissions:
@@ -501,9 +493,10 @@ and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate
 
-After local scientific tests and installation, create the model once and save a
-release. Use this directory to keep the candidate, readiness checks, trial evidence
-and activation review tied to the same publication.
+Once local tests pass and the files are installed, create the catalogue model
+and save a candidate. The `release-r1` folder keeps the candidate ID, readiness
+checks and activation review together. Run `model create` only for a model
+that does not already have a catalogue entry.
 
 ```sh
 enumeray model validate --file publication.json
@@ -541,7 +534,12 @@ needs no grant inventory; review/activation requires `models:manage` and availab
 server-reported release authority. Trial submission has its separate
 run/artifact scopes and explicit review.
 
-Registration resolves your active context grant and derives the installation key. Exact retries preserve that captured grant. Identical model/context/settings and scientific installation identities can reuse a retained installation; changed installation settings or identities obtain a new key. A permanently revoked installation cannot be reused, including after grant reissue. Removed author fields (`grant_id`, `provider_binding_id`, duplicate installation claims) remain rejected.
+Registration selects your active grant for the context and derives an
+installation key. Exact retries keep that grant. Matching settings and
+scientific identifiers can reuse a retained installation. Changed settings
+or identifiers get a new key. A revoked installation stays unavailable even
+if a grant is reissued. Keep `grant_id`, `provider_binding_id` and other
+derived installation claims out of the editable declaration.
 
 On readiness failure, inspect validation messages and coordinate context, grant, path and execution-account corrections with the connector owner. Changed immutable science or installation settings require a new operation. Local validation checks contracts and settings; API registration checks authority/context policy; connector readiness checks installed entrypoint/batch files and execution/backend access. Readiness does not attest scientific correctness or every runtime dependency.
 
@@ -556,7 +554,12 @@ cat > trial-inputs.json <<'JSON'
 JSON
 enumeray analysis init example --candidate "$PUBLICATION_ID" \
   --inputs trial-inputs.json --directory trial-r1
-# Review the exact installation, execution location and full disclosure.
+```
+
+Read the saved inputs, installation, location and data-access information.
+When you are ready to run that candidate, submit the trial folder.
+
+```sh
 enumeray analysis submit trial-r1
 enumeray analysis wait trial-r1 --check-outcome
 enumeray analysis status trial-r1
@@ -608,6 +611,12 @@ Validated, authorized retained publications can also be trialled after activatio
 
 ```sh
 enumeray model release review release-r1
+```
+
+Read the comparison, then activate the candidate when you are satisfied with
+the change.
+
+```sh
 enumeray model release activate release-r1
 enumeray model get example
 ```
@@ -760,18 +769,18 @@ outputs, including after a successful partial or evidence-only collection step.
 `analysis cancel file-analysis` requests cancellation; inspect confirmed status
 rather than inferring termination from a request or disconnected connector.
 
-Independent artifact/collection utilities remain available for reusable data;
-completed artifact references can be supplied in analysis input JSON as
+Use the artifact and collection commands for reusable data. Supply a completed
+artifact reference in analysis input JSON as
 `{ "artifact_id": "UUID" }`. File wrappers receive staged workspace paths in
 `input_files`, then report output paths and media types in `files`. Connectors
 publish those bytes as verified artifact references. Never fabricate public
-output artifact IDs inside the wrapper. Authorized `run list/get/events` and
-other evidence reads remain available by ID for investigation.
+output artifact IDs inside the wrapper. Use `run list`, `run get` and
+`run events` to investigate runs you have permission to read.
 
-For a legacy operation from the former `run prepare` command, preserve the file,
-run `analysis import --prepared run.json --directory imported-analysis`, then
-explicitly run `analysis submit imported-analysis` to reconcile its original
-request/key. The removed preparation/submission commands have no aliases.
+If you have a saved prepared request and need to find out whether it was
+accepted, keep the file and run
+`analysis import --prepared run.json --directory imported-analysis`. Then
+run `analysis submit imported-analysis` to reconcile the same request and key.
 For accepted work whose directory was lost, use `analysis attach RUN_UUID
 --directory recovered-analysis` or supply its raw acceptance receipt with
 `--receipt`. See the included [analysis recovery guide](ANALYSIS_GUIDE.md#recover-an-existing-execution)
@@ -878,10 +887,10 @@ sweep. Uncertain work and pending delivery keep their files and installation
 references. Archived evidence and launch replay guards remain on the connector
 and compute hosts; this cleanup does not change downloaded artifacts or run
 provenance.
-Deletion requires the service's run-directory reservation capability and a saved
-protected-release inventory. An older service, missing protection evidence or
-manual/older cache entries without known installation metadata block cleanup
-while scientific execution and delivery continue.
+Deletion requires run-directory reservations from the service, a saved
+protected-release inventory and known installation metadata. If any are
+missing, the connector retains the files while execution and delivery
+continue.
 
 ## Move to a replacement execution context
 
@@ -1011,13 +1020,28 @@ Give the reviewer the model and candidate publication IDs. In their own profile:
 ```bash
 enumeray model release init example --candidate CANDIDATE_ID --directory review-r1
 enumeray analysis init example --candidate CANDIDATE_ID --inputs inputs.json --directory review-trial-r1
-# Review the pinned installation, disclosure and named delegation.
+```
+
+Review the installation, data access and delegation shown for the trial.
+When ready, submit the trial and collect its result.
+
+```bash
 enumeray analysis submit review-trial-r1
 enumeray analysis wait review-trial-r1 --check-outcome
 enumeray analysis collect review-trial-r1
 enumeray model release status review-r1
-# Inspect review-trial-r1/results/ and complete your scientific checks.
+```
+
+Inspect `review-trial-r1/results/` and complete the scientific checks before
+saving the review.
+
+```bash
 enumeray model release review review-r1
+```
+
+Read the review, then activate explicitly.
+
+```bash
 enumeray model release activate review-r1
 ```
 
