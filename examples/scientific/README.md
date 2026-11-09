@@ -119,7 +119,8 @@ suited to that question.
 
 <a id="inspect-a-downloaded-run-bundle"></a>
 
-To see what `analysis collect` saves, read the [annotated HUXt result](https://doc.enumeray.com/start/first-run/#read-a-collected-huxt-result).
+The [HUXt tutorial](https://doc.enumeray.com/models/huxt/#read-a-collected-huxt-result)
+explains the files saved by `analysis collect`.
 
 ## Test the example code
 
