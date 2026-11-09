@@ -119,7 +119,7 @@ suited to that question.
 
 <a id="inspect-a-downloaded-run-bundle"></a>
 
-For the files saved by a hosted run, see the [annotated HUXt result](https://doc.enumeray.com/start/first-run/#read-a-collected-huxt-result).
+To see what `analysis collect` saves, read the [annotated HUXt result](https://doc.enumeray.com/start/first-run/#read-a-collected-huxt-result).
 
 ## Test the example code
 
@@ -133,5 +133,5 @@ python3 -B -m unittest discover -s . -p test_runtime.py
 
 [The qualification script](qualify.py) can also test every corner of each
 input range with `--extrema` and record elapsed time and peak memory. For a
-downloaded hosted analysis, [the collected-results checker](verify_collected.py)
+collected analysis, [the collected-results checker](verify_collected.py)
 checks file hashes and numerical outputs without contacting the service.

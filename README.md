@@ -5,10 +5,10 @@ and HTTP API. This repository owns the independent `enumeray` executable, typed
 HTTP client, outbound connector, compute runner and shared wire contracts.
 
 One executable supports model users, model authors and connector owners.
-It connects to the hosted API at https://api.enumeray.com by default. Sign in
+It connects to the Enumeray API at https://api.enumeray.com by default. Sign in
 with `enumeray auth login`.
-The hosted trial provides HUXt solar-wind and REBOUND orbital models on managed
-compute, so trying an analysis needs no connector of your own. Follow
+The HUXt solar-wind and REBOUND orbit demos run on compute provided by Enumeray,
+so you can try an analysis without setting up a connector. Follow
 [your first run](https://doc.enumeray.com/start/first-run/) after installing the CLI.
 For a scientific pilot, coordinate your model, compute and validation with its
 owners. Building and local tests require no service checkout, database credentials
@@ -17,7 +17,7 @@ or running API.
 | Your goal | Start here |
 | --- | --- |
 | Install and sign in | [Installation guide](crates/cli/INSTALL.md) |
-| Try the hosted scientific models | [First-run walkthrough](https://doc.enumeray.com/start/first-run/) |
+| Run a demo model | [First-run walkthrough](https://doc.enumeray.com/start/first-run/) |
 | Submit and collect a reviewed analysis | [Analysis guide](crates/cli/ANALYSIS_GUIDE.md) |
 | Integrate with structured CLI output | [CLI JSON contracts and transcripts](crates/cli/CLI_AUTOMATION.md) |
 | Prepare, test and publish a model | [Author guide](crates/cli/AUTHOR_GUIDE.md) and [examples](crates/cli/examples/README.md) |

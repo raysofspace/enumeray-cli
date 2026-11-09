@@ -12,7 +12,7 @@ and maintenance for installations that hold saved work.
 ## Before choosing a package
 
 Get a signed package from the [official release assets](https://github.com/raysofspace/enumeray-cli/releases).
-The [hosted trial status](https://doc.enumeray.com/start/hosted-release/) names
+The [demo status page](https://doc.enumeray.com/start/hosted-release/) names
 the recommended CLI version for the demo. If your lab provides the CLI on its
 computers, ask which release it supports.
 
@@ -130,9 +130,9 @@ checksum for your records.
 
 ### Compare the package with the service
 
-For a fresh hosted trial, verify the signed archive above, then
-[copy the executable](#copy-the-verified-executable). The hosted service and
-CLI may come from different source revisions.
+To run a demo model, verify the signed archive above, then
+[copy the executable](#copy-the-verified-executable). The service and CLI may
+come from different source revisions.
 
 To qualify an exact package and service selection, follow
 [the installation check](#inspect-the-selected-installation) with the extracted

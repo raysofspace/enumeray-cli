@@ -72,7 +72,7 @@ These checks apply to the isolated two-body problem. Predicting the position
 of the real Earth requires a model that includes other influences.
 
 The wrapper allows one thread, 60 seconds and 8 MiB of combined CSV and PNG
-output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
+output per run. If a run fails, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
 
 ### Optional reference files
 

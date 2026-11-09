@@ -71,7 +71,7 @@ idealized setup. Observational accuracy requires a separate comparison with
 measurements.
 
 The wrapper allows one thread, 180 seconds and 8 MiB of combined CSV and PNG
-output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
+output per run. If a run fails, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
 
 ### Optional reference files
 
