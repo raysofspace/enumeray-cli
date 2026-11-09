@@ -91,7 +91,9 @@ fn remaining(deadline: Instant) -> Result<Duration, Error> {
 }
 
 fn anonymous(api: &str, deadline: Instant) -> Result<EnumerayClient, Error> {
-    Ok(EnumerayClient::new(api, None, remaining(deadline)?)?.with_deadline(deadline))
+    Ok(EnumerayClient::new(api, None, remaining(deadline)?)?
+        .with_cli_version_observer(crate::cli_version::record)
+        .with_deadline(deadline))
 }
 
 fn identity(profile: &Profile, deadline: Instant) -> Result<Identity, Error> {
@@ -100,6 +102,7 @@ fn identity(profile: &Profile, deadline: Instant) -> Result<Identity, Error> {
         profile.access_token.clone(),
         remaining(deadline)?,
     )?
+    .with_cli_version_observer(crate::cli_version::record)
     .with_deadline(deadline)
     .me()
 }

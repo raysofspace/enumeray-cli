@@ -70,7 +70,8 @@ pub(crate) fn auth(args: &Args, command: &Auth, path: &Path) -> Result<Value, Er
         } => {
             let (profiles, binding) = session::login_snapshot(path, &args.profile)?;
             let api = config::api_origin(args, profiles.profiles.get(&args.profile));
-            let anonymous = EnumerayClient::new(api, None, Duration::from_secs(args.timeout))?;
+            let anonymous = EnumerayClient::new(api, None, Duration::from_secs(args.timeout))?
+                .with_cli_version_observer(crate::cli_version::record);
             let mut profile = config::Profile::new(anonymous.base_url().to_owned());
             if *token_stdin {
                 profile.access_token = Some(stdin_secret()?);
@@ -101,6 +102,7 @@ pub(crate) fn auth(args: &Args, command: &Auth, path: &Path) -> Result<Value, Er
                 profile.access_token.clone(),
                 Duration::from_secs(args.timeout),
             )?
+            .with_cli_version_observer(crate::cli_version::record)
             .me()?;
             if let Some(oauth) = &mut profile.oauth {
                 oauth.user_id = Some(identity.user_id);

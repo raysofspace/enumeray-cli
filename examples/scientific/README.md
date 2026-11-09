@@ -1,48 +1,9 @@
-# Run a simulation locally
+# Validate a scientific model integration
 
-Run a solar-wind or orbit simulation on your computer. You can start by looking
-at a checked result, then install the solvers and repeat the experiment. You
-can do both without an Enumeray account.
-
-## Inspect a sample result
-
-Download and unzip a result. Open the PNG first to see what the model calculated.
-
-| Example | What to look for | Download |
-| --- | --- | --- |
-| [HUXt solar wind](https://doc.enumeray.com/models/huxt/) | The fast stream reaches 1 AU. The speed there peaks near 802.16 km/s at 4.284 days. | [HUXt sample ZIP](huxt/sample-run.zip) |
-| [REBOUND orbit](https://doc.enumeray.com/models/rebound/) | An Earth-like orbit ranges from 0.9833 to 1.0167 AU from its star. | [REBOUND sample ZIP](rebound/sample-run.zip) |
-
-Each ZIP contains the plot, CSV data, `inputs.json` with the parameters,
-`outputs.json` with the numerical summary and `run-record.json` with the checks.
-If you already extracted the examples archive, use `huxt/sample-run.zip`
-or `rebound/sample-run.zip` under `examples/scientific`.
-
-## Inspect a downloaded run bundle
-
-Download the [example REBOUND run bundle](rebound/sample-run-bundle.zip), or
-use `rebound/sample-run-bundle.zip` from the extracted archive. Unzip it to
-get `rebound-run-bundle`. This teaching fixture uses data from the local
-orbit calculation. Its run and publication IDs, compute location and access
-disclosure are examples.
-
-1. Open `bundle.json` to check the run ID and find the verified plot and CSV.
-2. Open `results/inspection.json` to see the inputs, model publication,
-   execution location and who could access the data.
-3. Open `results/provenance.json` to see the recorded model and runtime
-   identities. Find a file under `output_artifacts` and compare its checksum
-   with the corresponding entry in the bundle.
-
-After [setting up the solvers](#set-up-the-solvers), run the checker from
-`examples/scientific`. Replace the example path with the extracted folder.
-
-```sh
-.venv/bin/python verify_collected.py --model rebound --analysis /path/to/rebound-run-bundle
-```
-
-Look for `"verified": true`. The checker reads local files and verifies the
-file checksums and the orbit calculation.
-[Read more about run records](https://doc.enumeray.com/users/logs-provenance/).
+Model authors can use the HUXt and REBOUND wrappers to practice validating an
+integration before publishing it. Run a known case with the pinned solver, then
+change an input to check that the wrapper passes the value through and produces
+the expected change in the result.
 
 ## Set up the solvers
 
@@ -92,10 +53,12 @@ uv pip install --python .venv/bin/python --require-hashes -r build-requirements.
 uv pip install --python .venv/bin/python --require-hashes --no-build-isolation -r requirements.lock
 ```
 
-Setup downloads packages. The simulation itself can run offline and uses one
-CPU thread. The HUXt package includes the ephemeris used by this example.
+Setup downloads packages. After setup, the wrapper checks can run offline and
+use one CPU thread. The HUXt package includes the ephemeris used by this example.
 
-## Run an example
+<a id="run-an-example"></a>
+
+## Exercise the example wrappers
 
 From `examples/scientific`, run HUXt with the default solar-wind parameters.
 
@@ -109,13 +72,35 @@ For the default orbit, run REBOUND from the same folder.
 .venv/bin/python run_example.py rebound --directory rebound-default
 ```
 
-The runner checks the installed versions and saves the same set of files as the
-sample ZIP in the directory you choose. Open the plot and `outputs.json` there.
-Use a new directory for each run so you can compare results side by side.
+The runner checks the installed versions and saves the plot, CSV data,
+numerical summary (`outputs.json`) and run record in the directory you choose.
+Open the plot and `outputs.json` there. Use a new directory for each run so you
+can compare results side by side.
 
-To try a change, follow the [HUXt speed comparison](https://doc.enumeray.com/models/huxt/#change-the-inputs)
-or [REBOUND eccentricity comparison](https://doc.enumeray.com/models/rebound/#change-the-inputs).
-Each changes one value and shows what to look for in the new output.
+### Check that the wrapper uses edited inputs
+
+From `examples/scientific`, copy `huxt/inputs.json` to `huxt-faster.json` and
+change only `fast_speed_kms` from `700` to `750`.
+
+```sh
+.venv/bin/python run_example.py huxt --inputs huxt-faster.json --directory huxt-faster
+```
+
+Compare `outputs.json` in `huxt-default` and `huxt-faster`. At 1 AU, the peak
+speed should rise from about 802.16 to 859.46 km/s and move from about 4.284 to
+4.123 days.
+
+For REBOUND, copy `rebound/inputs.json` to `rebound-eccentric.json` and change
+only `eccentricity` from `0.0167` to `0.1`.
+
+```sh
+.venv/bin/python run_example.py rebound --inputs rebound-eccentric.json --directory rebound-eccentric
+```
+
+Compare `outputs.json` in `rebound-default` and `rebound-eccentric`. The minimum
+and maximum orbital distances should move from 0.9833 and 1.0167 AU to 0.9 and
+1.1 AU. The period should stay the same because the semimajor axis and masses
+stay fixed.
 
 ## Understand the checks
 
@@ -132,8 +117,9 @@ checks establish agreement for the stated setups. Testing a prediction about
 the real solar wind or the real Earth would require observations and a model
 suited to that question.
 
-The record describes the local calculation. For the identity, receipts and
-provenance of a hosted run, see [Logs and provenance](https://doc.enumeray.com/users/logs-provenance/).
+<a id="inspect-a-downloaded-run-bundle"></a>
+
+To see what `analysis collect` saves, read the [annotated HUXt result](https://doc.enumeray.com/start/first-run/#read-a-collected-huxt-result).
 
 ## Test the example code
 
@@ -147,5 +133,5 @@ python3 -B -m unittest discover -s . -p test_runtime.py
 
 [The qualification script](qualify.py) can also test every corner of each
 input range with `--extrema` and record elapsed time and peak memory. For a
-downloaded hosted analysis, [the collected-results checker](verify_collected.py)
+collected analysis, [the collected-results checker](verify_collected.py)
 checks file hashes and numerical outputs without contacting the service.

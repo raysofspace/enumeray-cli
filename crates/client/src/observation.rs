@@ -1,6 +1,8 @@
 //! Cancellable read-only observation and bounded SSE decoding. No background producer.
 use crate::credentials::{Credentials, RequestBudget};
-use crate::{ApiFailure, CancellationToken, Error, Identity, api_url, resource_path};
+use crate::{
+    ApiFailure, CancellationToken, Error, Identity, api_url, observe_cli_version, resource_path,
+};
 use enumeray_contracts::logs::{LogGap, LogSource};
 use reqwest::{Response, redirect::Policy};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -125,6 +127,7 @@ pub struct ObservationClient {
     timeout: Duration,
     cancellation: CancellationToken,
     deadline: Option<Instant>,
+    cli_version_observer: Option<fn(&str)>,
 }
 
 impl ObservationClient {
@@ -134,6 +137,7 @@ impl ObservationClient {
         timeout: Duration,
         cancellation: CancellationToken,
         deadline: Option<Instant>,
+        cli_version_observer: Option<fn(&str)>,
     ) -> Result<Self, Error> {
         let http = reqwest::Client::builder()
             .connect_timeout(timeout.min(Duration::from_secs(15)))
@@ -148,6 +152,7 @@ impl ObservationClient {
             timeout,
             cancellation,
             deadline,
+            cli_version_observer,
         })
     }
 
@@ -170,6 +175,7 @@ impl ObservationClient {
             request = request.bearer_auth(token);
         }
         let response = request.timeout(budget.remaining()?).send().await?;
+        observe_cli_version(response.headers(), self.cli_version_observer);
         let response = checked_response(response).await?;
         let bytes = bounded_body(response).await?;
         serde_json::from_slice(&bytes).map_err(|error| Error::from(error).into())
@@ -230,6 +236,7 @@ impl ObservationClient {
             .map_err(|_| {
                 Error::Invalid("Log stream handshake reached the request deadline.".into())
             })??;
+        observe_cli_version(response.headers(), self.cli_version_observer);
         let response = checked_response(response).await?;
         if response
             .headers()

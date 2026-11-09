@@ -253,16 +253,17 @@ pub(crate) fn client(args: &Args, profiles: &Profiles) -> Result<EnumerayClient,
         .ok()
         .filter(|token| !token.is_empty())
         .or(profile_token);
-    if std::env::var("ENUMERAY_TOKEN").is_ok_and(|token| !token.is_empty()) {
-        return EnumerayClient::new(api, token, Duration::from_secs(args.timeout));
-    }
-    if let Some(profile) = profile.filter(|p| p.api_url == canonical.base_url())
+    let client = if std::env::var("ENUMERAY_TOKEN").is_ok_and(|token| !token.is_empty()) {
+        EnumerayClient::new(api, token, Duration::from_secs(args.timeout))?
+    } else if let Some(profile) = profile.filter(|p| p.api_url == canonical.base_url())
         && profile.refresh_token.is_some()
     {
         let path = args.config.clone().map(Ok).unwrap_or_else(default_path)?;
-        return crate::session::client(args, &path, profiles, profile);
-    }
-    EnumerayClient::new(api, token, Duration::from_secs(args.timeout))
+        crate::session::client(args, &path, profiles, profile)?
+    } else {
+        EnumerayClient::new(api, token, Duration::from_secs(args.timeout))?
+    };
+    Ok(client.with_cli_version_observer(crate::cli_version::record))
 }
 
 #[cfg(test)]

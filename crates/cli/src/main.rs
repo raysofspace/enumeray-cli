@@ -2,6 +2,7 @@ mod analysis;
 mod app;
 mod args;
 mod candidate;
+mod cli_version;
 mod collections;
 mod commands;
 mod compatibility;
@@ -82,6 +83,9 @@ fn main() -> std::process::ExitCode {
                     return std::process::ExitCode::FAILURE;
                 }
             }
+            if !args.json || completion.exit == 0 {
+                cli_version::write_notice();
+            }
             completion.exit.into()
         }
         Err(failure) => {
@@ -149,6 +153,7 @@ fn main() -> std::process::ExitCode {
                 if let Some(hint) = output::error_hint(&args, &error) {
                     eprintln!("{hint}");
                 }
+                cli_version::write_notice();
             }
             failure.exit.into()
         }

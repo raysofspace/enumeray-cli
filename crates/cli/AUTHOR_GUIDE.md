@@ -56,8 +56,8 @@ download the archive and its matching checksum again before continuing. The
 extracted root contains `examples-manifest.json`, which records the package
 version, exact public source revision and file hashes. The verifier checks those
 bytes and tests the wrappers, local runtime and HTTP digest examples. For
-HUXt and REBOUND solver runs, follow the
-[local simulation guide](https://doc.enumeray.com/models/local/).
+an example of validating a solver and wrapper together before publication, see
+[scientific integration validation](https://doc.enumeray.com/authors/scientific-validation/).
 
 After verification succeeds, run the scalar starter on the supplied input.
 Start from the download directory.
@@ -104,8 +104,8 @@ declaration; it is not the filename of the supplied Python wrapper. Start with a
 complete starter when you need a ready local project. The
 [file/download chooser](https://doc.enumeray.com/reference/manifests/#choose-the-file-for-your-command)
 distinguishes author declarations, scientific inputs, wrapper envelopes and
-collection manifests. The hosted scientific models have their own documented
-inputs and outputs; contract fixtures are separate from those runnable offerings.
+collection manifests. The HUXt and REBOUND demo models each have documented
+inputs and outputs.
 
 ## Responsibilities and execution choices
 
@@ -522,7 +522,7 @@ module and container setup. The runner supplies workspace `HOME` and
 
 The [complete process and Slurm examples](https://doc.enumeray.com/reference/manifests/)
 use the same author format for direct and SSH execution. For runnable scientific
-examples, follow the [hosted HUXt and REBOUND walkthrough](https://doc.enumeray.com/start/first-run/)
+examples, follow the [HUXt and REBOUND walkthrough](https://doc.enumeray.com/start/first-run/)
 and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate

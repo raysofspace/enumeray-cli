@@ -25,6 +25,7 @@ jsonschema = { version = "0.56.0", default-features = false, features = ["arbitr
 # Avoid the RustCrypto RSA dependency affected by RUSTSEC-2023-0071.
 percent-encoding = "2"
 reqwest = { version = "0.13.3", default-features = false }
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision", "raw_value"] }
 sha2 = "0.11"

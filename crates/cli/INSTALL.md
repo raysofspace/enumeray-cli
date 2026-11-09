@@ -11,15 +11,17 @@ and maintenance for installations that hold saved work.
 
 ## Before choosing a package
 
-For the demo, [check hosted trial availability](https://doc.enumeray.com/start/hosted-release/).
-Use the release approved by Enumeray. If your lab provides the CLI on its
-computers, ask which release it supports.
+For `api.enumeray.com`, find the recommended signed CLI package in the
+[short installation guide](https://doc.enumeray.com/start/install-cli/). Other
+versions are listed in the [official releases](https://github.com/raysofspace/enumeray-cli/releases).
+If you connect to another Enumeray service, ask its operator which CLI version
+it recommends.
 
 Choose the route for your computer and situation.
 
 | What you need | Where to start |
 | --- | --- |
-| Install an approved Homebrew formula | [Homebrew on macOS](#homebrew-on-macos) |
+| Install the Homebrew package for a selected release | [Homebrew on macOS](#homebrew-on-macos) |
 | Install a specific published binary | [Verify and install an archive](#verify-and-install-an-archive) |
 | Install on a machine without internet access | [Offline and SSH/HPC hosts](#offline-and-sshhpc-hosts) |
 | Compile an approved published release | [Build from a release source archive](#build-from-a-release-source-archive) |
@@ -39,7 +41,7 @@ if you also need to connect a computer that runs models.
 
 ## Homebrew on macOS
 
-Use Homebrew when the tap publishes the formula for the approved release.
+Use Homebrew when the tap publishes the formula for the selected release.
 The formula selects the archive for your Mac.
 
 ```sh
@@ -64,7 +66,7 @@ managed credentials and journals with the work they belong to.
 
 ### Download the selected archive
 
-Use the approved published version from the
+Get the selected published version from the
 [release assets](https://github.com/raysofspace/enumeray-cli/releases).
 Each binary archive contains the executable, license, compatibility information,
 guides and examples. Choose the target for the computer where it will run.
@@ -76,7 +78,7 @@ guides and examples. Choose the target for the computer where it will run.
 | ARM64 Linux with glibc | `aarch64-unknown-linux-gnu` |
 | Intel or AMD x86-64 Linux with glibc | `x86_64-unknown-linux-gnu` |
 
-Replace both placeholders below with the approved version without its leading
+Replace both placeholders below with the selected version without its leading
 `v` and the target from the table. Use a terminal with a POSIX shell, `curl`,
 `tar`, `install` and a SHA-256 tool (`shasum` on macOS or `sha256sum` on
 Linux). For the next step, install Cosign v3 from a trusted source separately
@@ -86,7 +88,7 @@ files together.
 ```sh
 mkdir -p "$HOME/enumeray-downloads"
 cd "$HOME/enumeray-downloads"
-VERSION=REPLACE_WITH_APPROVED_VERSION
+VERSION=REPLACE_WITH_SELECTED_VERSION
 TARGET=REPLACE_WITH_YOUR_TARGET
 REPOSITORY=raysofspace/enumeray-cli
 TAG="v$VERSION"
@@ -129,12 +131,17 @@ checksum for your records.
 
 ### Compare the package with the service
 
-Read the archive’s `compatibility.json` and run
-`"$EXTRACTED/enumeray" --json compatibility inspect`. Follow
-[the installation check](#inspect-the-selected-installation) with this
-extracted executable and the evidence for the approved release. Continue when
-the required checks report a match. If you’re replacing a working installation,
-[check the maintenance steps](#upgrade-deliberately) before you copy the file.
+For ordinary use, verify the signed archive above, then
+[copy the executable](#copy-the-verified-executable). The service can recommend
+the same CLI version across deployments. If the CLI reports a different
+recommended version, you can finish the current command and then install that
+version.
+
+To qualify an exact package and service selection, follow
+[the installation check](#inspect-the-selected-installation) with the extracted
+executable and release evidence. For an existing managed installation, follow
+[the maintenance steps](#upgrade-deliberately) and confirm the required identities
+before replacing the executable.
 
 ### Copy the verified executable
 
@@ -276,9 +283,9 @@ for any active work you still need to finish.
 
 ## Inspect the selected installation
 
-Use this check to confirm that the executable and service match the package
-or source pair selected for your installation. To see the executable’s
-version, target, source and supported protocols, run:
+Use this check to confirm the exact executable and service identities selected
+for release qualification or for your managed installation. To see the
+executable’s version, target, source and supported protocols, run:
 
 ```sh
 enumeray --json compatibility inspect
@@ -369,11 +376,11 @@ job or proves journal ownership. Obtain observations from the responsible host o
 identity cannot attest an author-declared runtime, dataset or institutional site.
 
 Read the receipt's selected inputs, expected/observed check values and limits.
-`match` means the supplied evidence agrees within those checks; `mismatch` means
-stop before reuse; `missing_evidence` means the installation is not fully
-established. An unreachable API, absent runner observation or stale heartbeat is
-not a successful whole-installation verdict. Preserve the receipt and evidence,
-resolve missing observations with the owner and repeat to a new receipt file.
+`match` means the supplied evidence agrees within those checks. `mismatch`
+identifies differences in the selected identities, and `missing_evidence`
+identifies gaps in the evidence. For release qualification or reuse of managed state,
+resolve the differences or missing observations with the owner. Preserve the
+receipt and evidence and repeat to a new receipt file.
 The check exits 0 only when required comparisons in its declared scope match,
 1 for mismatch, missing evidence or verification failure, and 2 for invalid
 command arguments. With `--local-only`, the receipt explicitly excludes live API

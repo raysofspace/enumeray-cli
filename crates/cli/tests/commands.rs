@@ -1,3 +1,4 @@
+use enumeray_contracts::compatibility::{CLI_VERSION, RECOMMENDED_CLI_VERSION_HEADER};
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
@@ -26,6 +27,14 @@ fn human_cli(config: &Path) -> Command {
 }
 
 fn server(body: Value) -> (String, thread::JoinHandle<String>) {
+    server_with_cli_version(200, body, None)
+}
+
+fn server_with_cli_version(
+    status: u16,
+    body: Value,
+    cli_version: Option<String>,
+) -> (String, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let worker = thread::spawn(move || {
@@ -52,10 +61,64 @@ fn server(body: Value) -> (String, thread::JoinHandle<String>) {
         stream.read_exact(&mut request_body).unwrap();
         bytes.extend(request_body);
         let body = body.to_string();
-        write!(stream,"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",body.len()).unwrap();
+        let recommendation = cli_version.map_or_else(String::new, |version| {
+            format!("{RECOMMENDED_CLI_VERSION_HEADER}: {version}\r\n")
+        });
+        write!(stream,"HTTP/1.1 {status} Test\r\nConnection: close\r\nContent-Type: application/json\r\n{recommendation}Content-Length: {}\r\n\r\n{body}",body.len()).unwrap();
         String::from_utf8(bytes).unwrap()
     });
     (url, worker)
+}
+
+#[test]
+fn cli_version_recommendation_is_a_nonblocking_stderr_notice() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join("profiles.json");
+    let installed = semver::Version::parse(CLI_VERSION).unwrap();
+    let newer = semver::Version::new(installed.major + 1, 0, 0).to_string();
+    let payload = json!({"items": []});
+    for (version, warning, upgrade) in [
+        (Some(newer.clone()), true, true),
+        (Some(CLI_VERSION.into()), false, false),
+        (Some("0.0.0".into()), true, false),
+        (Some("latest".into()), false, false),
+        (None, false, false),
+    ] {
+        let (url, worker) = server_with_cli_version(200, payload.clone(), version.clone());
+        let output = cli(&config)
+            .args(["--api", &url, "api", "GET", "/api/v1/models"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            payload
+        );
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        if warning {
+            assert!(diagnostic.contains(&format!("recommends CLI {}.", version.unwrap())));
+            assert_eq!(diagnostic.contains("Upgrade at https://"), upgrade);
+            assert_eq!(diagnostic.lines().count(), 1);
+        } else {
+            assert!(diagnostic.is_empty(), "{diagnostic}");
+        }
+        assert!(worker.join().unwrap().starts_with("GET /api/v1/models "));
+    }
+
+    let (url, worker) = server_with_cli_version(
+        403,
+        json!({"code":"forbidden","message":"Access is required.","request_id":"test"}),
+        Some(newer),
+    );
+    let output = cli(&config)
+        .args(["--api", &url, "api", "GET", "/api/v1/models"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(error["error"]["code"], "forbidden");
+    worker.join().unwrap();
 }
 
 struct PolicyServer {
