@@ -12,9 +12,7 @@ relative to the star in the plane of the orbit.
 ## Run the Earth-like orbit example
 
 The default case follows two orbits with a semimajor axis of 1 AU and an
-eccentricity of 0.0167. [Download the sample result](sample-run.zip) to see
-its data, plot and checks before installing anything. The extracted
-examples archive includes `rebound/sample-run.zip` under `examples/scientific`.
+eccentricity of 0.0167.
 
 To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
 and run this command from `examples/scientific`.
@@ -28,7 +26,7 @@ you can also run [`demo-rebound` with `earth-like-orbit`](https://doc.enumeray.c
 
 ## Read the trajectory and check the orbit
 
-Open these files in the sample ZIP or in `rebound-default` after a local run.
+Open these files in `rebound-default` after a local run.
 
 | File | What to look for |
 | --- | --- |
@@ -97,6 +95,13 @@ of the real Earth requires a model that includes other influences.
 
 The wrapper allows one thread, 60 seconds and 8 MiB of combined CSV and PNG
 output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
+
+### Optional reference files
+
+To compare your local default run with a checked result, use the
+[REBOUND reference files (ZIP)](sample-run.zip). They include the plot, CSV,
+inputs, numerical summary and run record. The examples archive already
+includes them in `examples/scientific/rebound/sample-run.zip`.
 
 ## Cite and distribute the example
 

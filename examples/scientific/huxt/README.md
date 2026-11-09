@@ -11,9 +11,7 @@ the model responds to that starting profile. It models wind speed alone.
 ## Run the fast-stream example
 
 The default case sets the slow wind to 350 km/s, the fast stream to 700 km/s
-and the sector width to 30°. [Download the sample result](sample-run.zip) to see
-its data, plot and checks before installing anything. The extracted
-examples archive includes `huxt/sample-run.zip` under `examples/scientific`.
+and the sector width to 30°.
 
 To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
 and run this command from `examples/scientific`.
@@ -27,7 +25,7 @@ you can also run [`demo-huxt` with `fast-stream`](https://doc.enumeray.com/start
 
 ## Read the speed field and the 1 AU summary
 
-Open these files in the sample ZIP or in `huxt-default` after a local run.
+Open these files in `huxt-default` after a local run.
 
 | File | What to look for |
 | --- | --- |
@@ -97,6 +95,13 @@ measurements.
 
 The wrapper allows one thread, 180 seconds and 8 MiB of combined CSV and PNG
 output per run. For a hosted failure, [read the run logs](https://doc.enumeray.com/troubleshooting/execution/).
+
+### Optional reference files
+
+To compare your local default run with a checked result, use the
+[HUXt reference files (ZIP)](sample-run.zip). They include the plot, CSV,
+inputs, numerical summary and run record. The examples archive already
+includes them in `examples/scientific/huxt/sample-run.zip`.
 
 ## Cite and distribute the example
 

@@ -1,48 +1,8 @@
 # Run a simulation locally
 
-Run a solar-wind or orbit simulation on your computer. You can start by looking
-at a checked result, then install the solvers and repeat the experiment. You
-can do both without an Enumeray account.
-
-## Inspect a sample result
-
-Download and unzip a result. Open the PNG first to see what the model calculated.
-
-| Example | What to look for | Download |
-| --- | --- | --- |
-| [HUXt solar wind](https://doc.enumeray.com/models/huxt/) | The fast stream reaches 1 AU. The speed there peaks near 802.16 km/s at 4.284 days. | [HUXt sample ZIP](huxt/sample-run.zip) |
-| [REBOUND orbit](https://doc.enumeray.com/models/rebound/) | An Earth-like orbit ranges from 0.9833 to 1.0167 AU from its star. | [REBOUND sample ZIP](rebound/sample-run.zip) |
-
-Each ZIP contains the plot, CSV data, `inputs.json` with the parameters,
-`outputs.json` with the numerical summary and `run-record.json` with the checks.
-If you already extracted the examples archive, use `huxt/sample-run.zip`
-or `rebound/sample-run.zip` under `examples/scientific`.
-
-## Inspect a downloaded run bundle
-
-Download the [example REBOUND run bundle](rebound/sample-run-bundle.zip), or
-use `rebound/sample-run-bundle.zip` from the extracted archive. Unzip it to
-get `rebound-run-bundle`. This teaching fixture uses data from the local
-orbit calculation. Its run and publication IDs, compute location and access
-disclosure are examples.
-
-1. Open `bundle.json` to check the run ID and find the verified plot and CSV.
-2. Open `results/inspection.json` to see the inputs, model publication,
-   execution location and who could access the data.
-3. Open `results/provenance.json` to see the recorded model and runtime
-   identities. Find a file under `output_artifacts` and compare its checksum
-   with the corresponding entry in the bundle.
-
-After [setting up the solvers](#set-up-the-solvers), run the checker from
-`examples/scientific`. Replace the example path with the extracted folder.
-
-```sh
-.venv/bin/python verify_collected.py --model rebound --analysis /path/to/rebound-run-bundle
-```
-
-Look for `"verified": true`. The checker reads local files and verifies the
-file checksums and the orbit calculation.
-[Read more about run records](https://doc.enumeray.com/users/logs-provenance/).
+Run a solar-wind or orbit simulation on your computer without an Enumeray
+account. Start with the default inputs, then change one value and compare
+the results.
 
 ## Set up the solvers
 
@@ -109,9 +69,10 @@ For the default orbit, run REBOUND from the same folder.
 .venv/bin/python run_example.py rebound --directory rebound-default
 ```
 
-The runner checks the installed versions and saves the same set of files as the
-sample ZIP in the directory you choose. Open the plot and `outputs.json` there.
-Use a new directory for each run so you can compare results side by side.
+The runner checks the installed versions and saves the plot, CSV data,
+numerical summary (`outputs.json`) and run record in the directory you choose.
+Open the plot and `outputs.json` there. Use a new directory for each run so you
+can compare results side by side.
 
 To try a change, follow the [HUXt speed comparison](https://doc.enumeray.com/models/huxt/#change-the-inputs)
 or [REBOUND eccentricity comparison](https://doc.enumeray.com/models/rebound/#change-the-inputs).
@@ -132,8 +93,9 @@ checks establish agreement for the stated setups. Testing a prediction about
 the real solar wind or the real Earth would require observations and a model
 suited to that question.
 
-The record describes the local calculation. For the identity, receipts and
-provenance of a hosted run, see [Logs and provenance](https://doc.enumeray.com/users/logs-provenance/).
+<a id="inspect-a-downloaded-run-bundle"></a>
+
+For the files saved by a hosted run, see the [annotated HUXt result](https://doc.enumeray.com/start/first-run/#read-a-collected-huxt-result).
 
 ## Test the example code
 
