@@ -9,10 +9,12 @@ pub mod types;
 
 pub use credentials::{CancellationToken, CredentialLease, CredentialSource};
 use credentials::{Credentials, RequestBudget};
+use enumeray_contracts::compatibility::RECOMMENDED_CLI_VERSION_HEADER;
 pub use enumeray_contracts::runs::RunPurpose;
 use reqwest::{
     Method,
     blocking::{Client, Response},
+    header::HeaderMap,
     redirect::Policy,
 };
 use serde::{Serialize, de::DeserializeOwned};
@@ -181,6 +183,7 @@ pub struct EnumerayClient {
     timeout: Duration,
     cancellation: CancellationToken,
     deadline: Option<Instant>,
+    cli_version_observer: Option<fn(&str)>,
 }
 
 impl EnumerayClient {
@@ -206,6 +209,7 @@ impl EnumerayClient {
             timeout,
             cancellation: CancellationToken::new(),
             deadline: None,
+            cli_version_observer: None,
         })
     }
     pub fn with_credentials(
@@ -222,6 +226,13 @@ impl EnumerayClient {
         let mut client = self.clone();
         client.cancellation = cancellation;
         client
+    }
+
+    /// Observe CLI recommendations in responses from the selected API origin.
+    /// The observer only receives headers from API requests.
+    pub fn with_cli_version_observer(mut self, observe: fn(&str)) -> Self {
+        self.cli_version_observer = Some(observe);
+        self
     }
 
     /// Bound all subsequent acquisition and request work by one workflow deadline.
@@ -254,6 +265,7 @@ impl EnumerayClient {
             self.timeout,
             self.cancellation.clone(),
             self.deadline,
+            self.cli_version_observer,
         )
     }
 
@@ -548,6 +560,7 @@ impl EnumerayClient {
         }
         request = request.timeout(budget.remaining()?);
         let response = request.send()?;
+        observe_cli_version(response.headers(), self.cli_version_observer);
         if response.status().is_success() {
             return Ok(response);
         }
@@ -567,6 +580,7 @@ impl EnumerayClient {
             request = request.bearer_auth(token);
         }
         let mut response = request.timeout(budget.remaining()?).send()?;
+        observe_cli_version(response.headers(), self.cli_version_observer);
         // Provenance exports are generated directly by the API; artifact bytes
         // are delivered through the separate short-lived capability below.
         if response.status() == reqwest::StatusCode::OK {
@@ -599,6 +613,7 @@ impl EnumerayClient {
             request = request.bearer_auth(token);
         }
         let response = request.timeout(budget.remaining()?).send()?;
+        observe_cli_version(response.headers(), self.cli_version_observer);
         if response.status() != reqwest::StatusCode::SEE_OTHER {
             return Err(api_error(response));
         }
@@ -721,6 +736,16 @@ fn api_error(response: Response) -> Error {
         status,
         failure: Box::new(failure),
         retry_after,
+    }
+}
+
+fn observe_cli_version(headers: &HeaderMap, observe: Option<fn(&str)>) {
+    if let Some(observe) = observe
+        && let Some(version) = headers
+            .get(RECOMMENDED_CLI_VERSION_HEADER)
+            .and_then(|header| header.to_str().ok())
+    {
+        observe(version);
     }
 }
 

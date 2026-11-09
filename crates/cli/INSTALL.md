@@ -11,10 +11,11 @@ and maintenance for installations that hold saved work.
 
 ## Before choosing a package
 
-Get a signed package from the [official release assets](https://github.com/raysofspace/enumeray-cli/releases).
-The [demo status page](https://doc.enumeray.com/start/hosted-release/) names
-the recommended CLI version for the demo. If your lab provides the CLI on its
-computers, ask which release it supports.
+For `api.enumeray.com`, find the recommended signed CLI package in the
+[short installation guide](https://doc.enumeray.com/start/install-cli/). Other
+versions are listed in the [official releases](https://github.com/raysofspace/enumeray-cli/releases).
+If you connect to another Enumeray service, ask its operator which CLI version
+it recommends.
 
 Choose the route for your computer and situation.
 
@@ -130,9 +131,11 @@ checksum for your records.
 
 ### Compare the package with the service
 
-To run a demo model, verify the signed archive above, then
-[copy the executable](#copy-the-verified-executable). The service and CLI may
-come from different source revisions.
+For ordinary use, verify the signed archive above, then
+[copy the executable](#copy-the-verified-executable). The service can recommend
+the same CLI version across deployments. If the CLI reports a different
+recommended version, you can finish the current command and then install that
+version.
 
 To qualify an exact package and service selection, follow
 [the installation check](#inspect-the-selected-installation) with the extracted
@@ -375,8 +378,7 @@ identity cannot attest an author-declared runtime, dataset or institutional site
 Read the receipt's selected inputs, expected/observed check values and limits.
 `match` means the supplied evidence agrees within those checks. `mismatch`
 identifies differences in the selected identities, and `missing_evidence`
-identifies gaps in the evidence. A supported trial CLI can still work across
-different source revisions. For release qualification or reuse of managed state,
+identifies gaps in the evidence. For release qualification or reuse of managed state,
 resolve the differences or missing observations with the owner. Preserve the
 receipt and evidence and repeat to a new receipt file.
 The check exits 0 only when required comparisons in its declared scope match,

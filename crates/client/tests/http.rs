@@ -1,6 +1,7 @@
 use enumeray_client::{
     EnumerayClient, Error, PreparedRun, RunSubmission, resource_path, validate_url,
 };
+use enumeray_contracts::compatibility::RECOMMENDED_CLI_VERSION_HEADER;
 use serde_json::{Value, json};
 use std::{
     io::{Read, Write},
@@ -346,14 +347,22 @@ fn structured_errors_preserve_status_request_id_and_retry_hint() {
 
 #[test]
 fn content_redirect_never_forwards_api_credentials() {
-    let (storage, storage_worker) = serve(vec![response("200 OK", "", "content")]);
+    static RECOMMENDATION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let (storage, storage_worker) = serve(vec![response(
+        "200 OK",
+        &format!("{RECOMMENDED_CLI_VERSION_HEADER}: 0.1.0-alpha.5\r\n"),
+        "content",
+    )]);
     let (origin, api_worker) = serve(vec![response(
         "303 See Other",
-        &format!("Location: {storage}object?secret=capability\r\n"),
+        &format!(
+            "Location: {storage}object?secret=capability\r\n{RECOMMENDED_CLI_VERSION_HEADER}: 0.1.0-alpha.4\r\n"
+        ),
         "",
     )]);
-    let client =
-        EnumerayClient::new(&origin, Some("api-secret".into()), Duration::from_secs(5)).unwrap();
+    let client = EnumerayClient::new(&origin, Some("api-secret".into()), Duration::from_secs(5))
+        .unwrap()
+        .with_cli_version_observer(|version| RECOMMENDATION.set(version.into()).unwrap());
     let mut output = Vec::new();
     assert_eq!(
         client
@@ -362,6 +371,10 @@ fn content_redirect_never_forwards_api_credentials() {
         7
     );
     assert_eq!(&output, b"content");
+    assert_eq!(
+        RECOMMENDATION.get().map(String::as_str),
+        Some("0.1.0-alpha.4")
+    );
     assert!(api_worker.join().unwrap()[0].contains("authorization: Bearer api-secret"));
     assert!(
         !storage_worker.join().unwrap()[0]

@@ -7,7 +7,7 @@ same directory to resume an interrupted run.
 Before starting, install the CLI and [sign in to Enumeray](https://doc.enumeray.com/start/login/).
 You need a model ID and permission to run it.
 [Find a model and get access](https://doc.enumeray.com/users/discovery-access/)
-or [check demo availability](https://doc.enumeray.com/start/hosted-release/).
+or [run an example](https://doc.enumeray.com/start/first-run/).
 
 ## Initialize and review
 

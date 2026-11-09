@@ -6,6 +6,10 @@ pub const API: &str = "v1";
 pub const CONNECTOR_PROTOCOL: u32 = 1;
 pub const RUNNER_PROTOCOL: u32 = 1;
 pub const WRAPPER_PROTOCOLS: &[u32] = &[1];
+/// The version of the public CLI workspace, independent of a service build.
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Optional API response header naming the CLI release recommended by the service.
+pub const RECOMMENDED_CLI_VERSION_HEADER: &str = "x-enumeray-recommended-cli-version";
 
 /// Exact build inputs; dirty builds retain an immutable content fingerprint.
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -81,7 +85,7 @@ pub fn build_identity() -> BuildIdentity {
     BuildIdentity {
         schema_version: 1,
         package: "enumeray-cli".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
+        version: CLI_VERSION.into(),
         target: env!("ENUMERAY_BUILD_TARGET").into(),
         source: serde_json::from_str(include_str!(concat!(
             env!("OUT_DIR"),
