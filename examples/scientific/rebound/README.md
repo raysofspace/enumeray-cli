@@ -1,32 +1,24 @@
 # REBOUND: an isolated Sun–planet orbit
 
-How does a more elongated orbit change a planet's distance from its star?
-This REBOUND 5.2.2 example follows an Earth-mass planet around a
-one-solar-mass star. The planet starts at periapse, its closest point to the
-star.
+<a id="run-the-earth-like-orbit-example"></a>
 
-Use it to explore orbits shaped by the gravity of two bodies. The model
-assumes an isolated Newtonian system. It reports positions and velocities
-relative to the star in the plane of the orbit.
+Follow the [REBOUND first-run walkthrough](https://doc.enumeray.com/start/first-run/#rebound-orbit)
+to submit `demo-rebound` with `earth-like-orbit` through Enumeray and collect
+the orbit plot and trajectory CSV.
 
-## Run the Earth-like orbit example
+REBOUND 5.2.2 follows an Earth-mass planet around a one-solar-mass star. The
+planet starts at periapse, its closest point to the star. The model assumes
+an isolated Newtonian system and reports positions and velocities relative to
+the star in the plane of the orbit.
 
 The default case follows two orbits with a semimajor axis of 1 AU and an
 eccentricity of 0.0167.
 
-To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
-and run this command from `examples/scientific`.
-
-```sh
-.venv/bin/python run_example.py rebound --directory rebound-default
-```
-
-If you have access to the [hosted trial](https://doc.enumeray.com/start/hosted-release/),
-you can also run [`demo-rebound` with `earth-like-orbit`](https://doc.enumeray.com/start/first-run/#rebound-orbit).
-
 ## Read the trajectory and check the orbit
 
-Open these files in `rebound-default` after a local run.
+After collection, open `first-run/bundle.json` to find the plot and CSV paths.
+The summary is in `first-run/results/outputs.json`. Save
+`first-run/results/provenance.json` with the files you need.
 
 | File | What to look for |
 | --- | --- |
@@ -41,34 +33,20 @@ in the CSV depend on the sampled times. For example, a quarter-orbit run
 ends before the planet reaches apoapse.
 
 The energy and angular momentum errors in `outputs.json` measure drift
-across the solver's samples. `run-record.json` recomputes those errors from
-the rounded CSV, so the last digits can differ. Both checks allow drift of
-at most `1e-9` for this example.
+across the solver's samples. Both checks allow drift of at most `1e-9` for this
+example.
 
 The samples are evenly spaced in time. In a more elongated orbit, the planet
 moves faster near periapse, so its sampled positions are farther apart there.
 
-For a hosted run, `first-run/bundle.json` lists the local paths to the plot
-and data. The summary is in `first-run/results/outputs.json`. Save
-`first-run/results/provenance.json` with the files you need.
+<a id="change-the-inputs"></a>
 
-## Change the inputs
+## Model inputs
 
-From `examples/scientific` in the extracted archive, open `rebound/inputs.json`.
-Save a copy as `rebound-eccentric.json` beside `run_example.py`. Change only
-`eccentricity` from `0.0167` to `0.1`, then run the comparison.
+To try different parameters through Enumeray, edit a copy of the
+[example inputs](inputs.json) and [start a new analysis with those inputs](https://doc.enumeray.com/users/analyses/).
 
-```sh
-.venv/bin/python run_example.py rebound --inputs rebound-eccentric.json --directory rebound-eccentric
-```
-
-Compare `outputs.json` in the two directories. The closest distance decreases
-from **0.9833 AU** to **0.9 AU** and the farthest distance increases from
-**1.0167 AU** to **1.1 AU**. The period stays the same because the semimajor
-axis and masses stay fixed. To use the edited file with a hosted model,
-[start a new analysis](https://doc.enumeray.com/users/analyses/) with `--inputs rebound-eccentric.json`.
-
-Keep all three fields and use finite JSON numbers in these ranges.
+All three fields take finite JSON numbers.
 
 | Field | Meaning | Allowed range | Default |
 | --- | --- | --- | --- |
@@ -98,10 +76,9 @@ output per run. For a hosted failure, [read the run logs](https://doc.enumeray.c
 
 ### Optional reference files
 
-To compare your local default run with a checked result, use the
-[REBOUND reference files (ZIP)](sample-run.zip). They include the plot, CSV,
-inputs, numerical summary and run record. The examples archive already
-includes them in `examples/scientific/rebound/sample-run.zip`.
+The [REBOUND reference files (ZIP)](sample-run.zip) contain a checked result
+for the default inputs. Use the plot, CSV, numerical summary and run record to
+compare against a collected result.
 
 ## Cite and distribute the example
 

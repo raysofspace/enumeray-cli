@@ -1,31 +1,22 @@
 # HUXt: a synthetic rotating fast stream
 
-How does a faster stream of solar wind change the speed measured at Earth's
-distance from the Sun? This HUXt 5.0.3 example models outward flow between 30
-and 240 solar radii along one meridian. You can change the speed of either wind
-or the width of the fast sector.
+<a id="run-the-fast-stream-example"></a>
 
-The model starts from an idealized wind speed profile. Use it to explore how
-the model responds to that starting profile. It models wind speed alone.
+Follow the [HUXt first-run walkthrough](https://doc.enumeray.com/start/first-run/#huxt-solar-wind)
+to submit `demo-huxt` with `fast-stream` through Enumeray and collect the speed
+plot and CSV.
 
-## Run the fast-stream example
+HUXt 5.0.3 models solar-wind speed between 30 and 240 solar radii along one
+meridian. The example starts from an idealized wind speed profile.
 
 The default case sets the slow wind to 350 km/s, the fast stream to 700 km/s
 and the sector width to 30°.
 
-To run the calculation yourself, [set up the solvers](https://doc.enumeray.com/models/local/#set-up-the-solvers)
-and run this command from `examples/scientific`.
-
-```sh
-.venv/bin/python run_example.py huxt --directory huxt-default
-```
-
-If you have access to the [hosted trial](https://doc.enumeray.com/start/hosted-release/),
-you can also run [`demo-huxt` with `fast-stream`](https://doc.enumeray.com/start/first-run/#huxt-solar-wind).
-
 ## Read the speed field and the 1 AU summary
 
-Open these files in `huxt-default` after a local run.
+After collection, open `first-run/bundle.json` to find the plot and CSV paths.
+The summary is in `first-run/results/outputs.json`. Save
+`first-run/results/provenance.json` with the files you need.
 
 | File | What to look for |
 | --- | --- |
@@ -41,27 +32,13 @@ The model estimates speed at 1 AU by interpolating between neighboring radial
 cells. It reports the first saved time whose speed is within `1e-9` relative
 of the maximum.
 
-For a hosted run, `first-run/bundle.json` lists the local paths to the plot
-and data. The summary is in `first-run/results/outputs.json`. Save
-`first-run/results/provenance.json` with the files you need.
+<a id="change-the-inputs"></a>
 
-## Change the inputs
+## Model inputs
 
-From `examples/scientific` in the extracted archive, open `huxt/inputs.json`.
-Save a copy as `huxt-faster.json` beside `run_example.py`. Change only
-`fast_speed_kms` from `700` to `750`, then run the comparison.
-
-```sh
-.venv/bin/python run_example.py huxt --inputs huxt-faster.json --directory huxt-faster
-```
-
-Compare `outputs.json` in the two directories. The higher starting speed raises
-the peak at 1 AU from about **802.16 km/s** to **859.46 km/s** and moves it from
-about **4.284 days** to **4.123 days**. Open both plots to see the change in the
-speed over time. To use the edited file with a hosted model,
-[start a new analysis](https://doc.enumeray.com/users/analyses/) with `--inputs huxt-faster.json`.
-
-Keep all three fields and use finite JSON numbers in these ranges.
+To try different parameters through Enumeray, edit a copy of the
+[example inputs](inputs.json) and [start a new analysis with those inputs](https://doc.enumeray.com/users/analyses/).
+All three fields take finite JSON numbers.
 
 | Field | Meaning | Allowed range | Default |
 | --- | --- | --- | --- |
@@ -98,10 +75,9 @@ output per run. For a hosted failure, [read the run logs](https://doc.enumeray.c
 
 ### Optional reference files
 
-To compare your local default run with a checked result, use the
-[HUXt reference files (ZIP)](sample-run.zip). They include the plot, CSV,
-inputs, numerical summary and run record. The examples archive already
-includes them in `examples/scientific/huxt/sample-run.zip`.
+The [HUXt reference files (ZIP)](sample-run.zip) contain a checked result for
+the default inputs. Use the plot, CSV, numerical summary and run record to
+compare against a collected result.
 
 ## Cite and distribute the example
 

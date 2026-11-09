@@ -1,8 +1,9 @@
-# Run a simulation locally
+# Validate a scientific model integration
 
-Run a solar-wind or orbit simulation on your computer without an Enumeray
-account. Start with the default inputs, then change one value and compare
-the results.
+Model authors can use the HUXt and REBOUND wrappers to practice validating an
+integration before publishing it. Run a known case with the pinned solver, then
+change an input to check that the wrapper passes the value through and produces
+the expected change in the result.
 
 ## Set up the solvers
 
@@ -52,10 +53,12 @@ uv pip install --python .venv/bin/python --require-hashes -r build-requirements.
 uv pip install --python .venv/bin/python --require-hashes --no-build-isolation -r requirements.lock
 ```
 
-Setup downloads packages. The simulation itself can run offline and uses one
-CPU thread. The HUXt package includes the ephemeris used by this example.
+Setup downloads packages. After setup, the wrapper checks can run offline and
+use one CPU thread. The HUXt package includes the ephemeris used by this example.
 
-## Run an example
+<a id="run-an-example"></a>
+
+## Exercise the example wrappers
 
 From `examples/scientific`, run HUXt with the default solar-wind parameters.
 
@@ -74,9 +77,30 @@ numerical summary (`outputs.json`) and run record in the directory you choose.
 Open the plot and `outputs.json` there. Use a new directory for each run so you
 can compare results side by side.
 
-To try a change, follow the [HUXt speed comparison](https://doc.enumeray.com/models/huxt/#change-the-inputs)
-or [REBOUND eccentricity comparison](https://doc.enumeray.com/models/rebound/#change-the-inputs).
-Each changes one value and shows what to look for in the new output.
+### Check that the wrapper uses edited inputs
+
+From `examples/scientific`, copy `huxt/inputs.json` to `huxt-faster.json` and
+change only `fast_speed_kms` from `700` to `750`.
+
+```sh
+.venv/bin/python run_example.py huxt --inputs huxt-faster.json --directory huxt-faster
+```
+
+Compare `outputs.json` in `huxt-default` and `huxt-faster`. At 1 AU, the peak
+speed should rise from about 802.16 to 859.46 km/s and move from about 4.284 to
+4.123 days.
+
+For REBOUND, copy `rebound/inputs.json` to `rebound-eccentric.json` and change
+only `eccentricity` from `0.0167` to `0.1`.
+
+```sh
+.venv/bin/python run_example.py rebound --inputs rebound-eccentric.json --directory rebound-eccentric
+```
+
+Compare `outputs.json` in `rebound-default` and `rebound-eccentric`. The minimum
+and maximum orbital distances should move from 0.9833 and 1.0167 AU to 0.9 and
+1.1 AU. The period should stay the same because the semimajor axis and masses
+stay fixed.
 
 ## Understand the checks
 

@@ -56,8 +56,8 @@ download the archive and its matching checksum again before continuing. The
 extracted root contains `examples-manifest.json`, which records the package
 version, exact public source revision and file hashes. The verifier checks those
 bytes and tests the wrappers, local runtime and HTTP digest examples. For
-HUXt and REBOUND solver runs, follow the
-[local simulation guide](https://doc.enumeray.com/models/local/).
+an example of validating a solver and wrapper together before publication, see
+[scientific integration validation](https://doc.enumeray.com/authors/scientific-validation/).
 
 After verification succeeds, run the scalar starter on the supplied input.
 Start from the download directory.
