@@ -1,0 +1,108 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "demo-lammps",
+    "name": "LAMMPS liquid self-diffusion",
+    "description": "Compare self-diffusion in a Lennard-Jones liquid at two temperatures using independent molecular dynamics trajectories."
+  },
+  "identities": {
+    "model": "lammps@22Jul2025-update4:liquid-diffusion:1",
+    "wrapper": "enumeray-scientific-demo-wrapper@1",
+    "runtime": "enumeray-demo:python3.12.16:locked-v3"
+  },
+  "execution": {
+    "context_id": "local-process",
+    "release_path": "/opt/enumeray/models/scientific/r1",
+    "entrypoint": [
+      "wrapper.py",
+      "execute",
+      "--model",
+      "lammps"
+    ],
+    "environment": {}
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["temperature_reduced"],
+    "properties": {
+      "temperature_reduced": {
+        "type": "number",
+        "minimum": 1.1,
+        "maximum": 1.6,
+        "description": "Equilibration temperature in Lennard-Jones reduced units. The baseline temperature is fixed at 1.0."
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "baseline_diffusion_reduced",
+      "diffusion_reduced",
+      "baseline_diffusion_std_reduced",
+      "diffusion_std_reduced",
+      "max_energy_drift_per_particle_reduced",
+      "msd_csv",
+      "diffusion_plot_png"
+    ],
+    "properties": {
+      "baseline_diffusion_reduced": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "Mean of three fitted self-diffusion coefficients at the baseline temperature, in reduced units."
+      },
+      "diffusion_reduced": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "Mean of three fitted self-diffusion coefficients at the chosen temperature, in reduced units."
+      },
+      "baseline_diffusion_std_reduced": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Sample standard deviation of the baseline coefficients, in reduced units."
+      },
+      "diffusion_std_reduced": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Sample standard deviation of the coefficients at the chosen temperature, in reduced units."
+      },
+      "max_energy_drift_per_particle_reduced": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 0.005,
+        "description": "Largest absolute deviation of sampled energy per particle from its value at the start of production across the six runs, in reduced units."
+      },
+      "msd_csv": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "Time, mean-squared displacement and total energy per particle for all six replicas, in reduced units.",
+        "x-enumeray-file": {
+          "media_types": ["text/csv"],
+          "max_bytes": 8388608
+        }
+      },
+      "diffusion_plot_png": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "Mean displacement squared over time at both temperatures, with replica spread and the fitting window.",
+        "x-enumeray-file": {
+          "media_types": ["image/png"],
+          "max_bytes": 8388608
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "liquid-diffusion",
+      "inputs": {"temperature_reduced": 1.2}
+    }
+  ]
+}

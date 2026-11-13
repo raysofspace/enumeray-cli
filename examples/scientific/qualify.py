@@ -12,7 +12,7 @@ import tempfile
 import time
 
 from runtime import FILES, PARAMETERS, run_model, worker_environment
-from verify_collected import verify_science
+from verify_collected import load_model, verify_science
 
 ROOT = Path(__file__).resolve().parent
 
@@ -54,6 +54,14 @@ def environment_receipt(models=tuple(FILES)):
         if catchment_sha256 != manifest["swmm_catchment_sha256"]:
             raise ValueError("Bundled SWMM catchment and rainfall differ from runtime manifest")
         receipt.update(swmm_engine_version=engine_version, swmm_catchment_sha256=catchment_sha256)
+    if "lammps" in models:
+        lammps = load_model("lammps")
+        deck_sha256 = hashlib.sha256(lammps.DECK.read_bytes()).hexdigest()
+        if deck_sha256 != manifest["lammps_deck_sha256"]:
+            raise ValueError("Bundled LAMMPS liquid input differs from runtime manifest")
+        if lammps.ENGINE != manifest["lammps_engine_version"]:
+            raise ValueError("LAMMPS engine version differs from runtime manifest")
+        receipt.update(lammps_engine_version=lammps.ENGINE, lammps_deck_sha256=deck_sha256)
     return receipt
 
 
@@ -94,6 +102,8 @@ def qualify(models=tuple(FILES), extrema=False):
         cases = [("example", defaults)]
         if model == "swmm":
             cases.append(("more-paved", {"paved_percent": 60}))
+        if model == "lammps":
+            cases.append(("warmer-liquid", {"temperature_reduced": 1.5}))
         if extrema:
             keys = list(PARAMETERS[model])
             cases += [("boundary-" + str(index), dict(zip(keys, values))) for index, values in

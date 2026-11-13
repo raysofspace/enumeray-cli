@@ -1,0 +1,31 @@
+# Reduced Lennard-Jones liquid in a fixed periodic box.
+units lj
+atom_style atomic
+boundary p p p
+lattice fcc 0.8
+region box block 0 6 0 6 0 6
+create_box 1 box
+create_atoms 1 box
+mass 1 1.0
+pair_style lj/cut 2.5
+pair_coeff 1 1 1.0 1.0
+pair_modify shift yes
+neighbor 0.3 bin
+neigh_modify every 1 delay 0 check yes
+timestep 0.003
+velocity all create ${temperature} ${seed} mom yes dist gaussian loop all
+thermo 4000
+fix equilibrate all nvt temp ${temperature} ${temperature} 0.3
+run 4000
+unfix equilibrate
+
+reset_timestep 0
+fix integrate all nve
+compute displacement all msd com yes
+compute potential all pe
+compute kinetic all ke
+compute kinetic_temperature all temp
+variable energy equal (c_potential+c_kinetic)/atoms
+fix sampled all ave/time 50 1 50 c_displacement[4] v_energy c_kinetic_temperature file samples.txt format " %.16g"
+thermo_style custom step temp v_energy c_displacement[4]
+run 12000

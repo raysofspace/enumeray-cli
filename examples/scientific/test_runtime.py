@@ -21,6 +21,7 @@ from runtime import ExecutionFailure, FILES, PARAMETERS, run_model, supervise, v
 ROOT = Path(__file__).resolve().parent
 ORIGINAL_SOLVERS = {"huxt": "5.0.3", "rebound": "5.2.2"}
 ORIGINAL_REQUIREMENTS_SHA256 = "3800e6df453d20171a031be4f65726c2bd773b696a23023f139ae0943ad9edb8"
+SWMM_REQUIREMENTS_SHA256 = "93e063b3b63f2ae72079084f254fa962c31352266a14b80db5f7a1ba050614cc"
 
 
 def request(model="huxt"):
@@ -83,8 +84,13 @@ class RuntimeTests(unittest.TestCase):
                 if model in ORIGINAL_SOLVERS:
                     # The original sample archives retain their actual runtime receipts.
                     expected_runtime.update(solvers=ORIGINAL_SOLVERS, requirements_sha256=ORIGINAL_REQUIREMENTS_SHA256)
-                else:
+                elif model == "swmm":
                     for key in ("swmm_engine_version", "swmm_catchment_sha256"):
+                        expected_runtime[key] = manifest[key]
+                    expected_runtime.update(solvers={**ORIGINAL_SOLVERS, "swmm-toolkit": "0.17.0"},
+                                            requirements_sha256=SWMM_REQUIREMENTS_SHA256)
+                elif model == "lammps":
+                    for key in ("lammps_engine_version", "lammps_deck_sha256"):
                         expected_runtime[key] = manifest[key]
                 self.assertEqual(record["runtime"], expected_runtime)
                 self.assertEqual(record["files"].keys(), expected)
@@ -184,6 +190,33 @@ class RuntimeTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=5)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("bundled offline inputs only", result.stderr)
+
+    def test_lammps_worker_cancellation_reaps_native_child(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            engine = work / "lmp"
+            engine.write_text('#!/bin/sh\nprintf "%s\\n" "$$" > starting\n'
+                              'mv starting pid\nexec sleep 30\n')
+            engine.chmod(0o755)
+            worker_code = ("import os,sys;from pathlib import Path;from verify_collected import load_model;"
+                           "work=Path(sys.argv[1]);"
+                           "load_model('lammps').run_engine(work/'lmp',os.environ,work,1.2,513841)")
+            with subprocess.Popen([sys.executable, "-B", "-c", worker_code, directory], cwd=ROOT,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as worker:
+                try:
+                    pid_file = work / "pid"
+                    deadline = time.monotonic() + 5
+                    while not pid_file.exists() and worker.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(pid_file.exists())
+                    child = int(pid_file.read_text())
+                    worker.terminate()
+                    self.assertNotEqual(worker.wait(timeout=5), 0)
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(child, 0)
+                finally:
+                    if worker.poll() is None:
+                        worker.kill()
 
     def test_combined_outputs_are_bounded_even_when_each_file_fits(self):
         with tempfile.TemporaryDirectory() as directory:

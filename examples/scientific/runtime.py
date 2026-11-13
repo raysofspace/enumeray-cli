@@ -12,20 +12,23 @@ import time
 ROOT = Path(__file__).resolve().parent
 MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
-LIMITS = {"huxt": 180, "rebound": 60, "swmm": 60}
+LIMITS = {"huxt": 180, "rebound": 60, "swmm": 60, "lammps": 120}
 PARAMETERS = {
     "huxt": {"slow_speed_kms": (250, 450), "fast_speed_kms": (500, 900),
              "stream_width_deg": (10, 45)},
     "rebound": {"semimajor_axis_au": (0.1, 5), "eccentricity": (0, 0.8),
                 "orbits": (0.25, 10)},
     "swmm": {"paved_percent": (0, 100)},
+    "lammps": {"temperature_reduced": (1.1, 1.6)},
 }
 FILES = {"huxt": {"wind_field_csv": ("wind-field.csv", "text/csv"),
                   "wind_plot_png": ("wind.png", "image/png")},
          "rebound": {"trajectory_csv": ("trajectory.csv", "text/csv"),
                      "orbit_plot_png": ("orbit.png", "image/png")},
          "swmm": {"runoff_csv": ("runoff.csv", "text/csv"),
-                  "runoff_plot_png": ("runoff.png", "image/png")}}
+                  "runoff_plot_png": ("runoff.png", "image/png")},
+         "lammps": {"msd_csv": ("msd.csv", "text/csv"),
+                    "diffusion_plot_png": ("diffusion.png", "image/png")}}
 
 
 class ExecutionFailure(Exception):

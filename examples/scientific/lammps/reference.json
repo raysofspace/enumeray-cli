@@ -1,0 +1,14 @@
+{
+  "baseline_diffusion_reduced": 0.06329835777143412,
+  "absolute_tolerance_reduced": 0.025,
+  "cases": [
+    {
+      "inputs": {"temperature_reduced": 1.2},
+      "diffusion_reduced": 0.08305852725287634
+    },
+    {
+      "inputs": {"temperature_reduced": 1.5},
+      "diffusion_reduced": 0.10111279273352879
+    }
+  ]
+}
