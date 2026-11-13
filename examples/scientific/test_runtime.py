@@ -19,6 +19,8 @@ import qualify
 from runtime import ExecutionFailure, FILES, PARAMETERS, run_model, supervise, validate_inputs, worker_environment
 
 ROOT = Path(__file__).resolve().parent
+ORIGINAL_SOLVERS = {"huxt": "5.0.3", "rebound": "5.2.2"}
+ORIGINAL_REQUIREMENTS_SHA256 = "3800e6df453d20171a031be4f65726c2bd773b696a23023f139ae0943ad9edb8"
 
 
 def request(model="huxt"):
@@ -75,7 +77,16 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(record["kind"], "local-scientific-example")
                 self.assertEqual(record["model"], model)
                 self.assertEqual(record["model_sha256"], hashlib.sha256((ROOT / model / "model.py").read_bytes()).hexdigest())
-                self.assertEqual(record["runtime"], {key: manifest[key] for key in record["runtime"]})
+                expected_runtime = {key: manifest[key] for key in (
+                    "python", "solvers", "huxt_numba_jit_enabled", "requirements_sha256",
+                    "build_requirements_sha256", "huxt_ephemeris_sha256")}
+                if model in ORIGINAL_SOLVERS:
+                    # The original sample archives retain their actual runtime receipts.
+                    expected_runtime.update(solvers=ORIGINAL_SOLVERS, requirements_sha256=ORIGINAL_REQUIREMENTS_SHA256)
+                else:
+                    for key in ("swmm_engine_version", "swmm_catchment_sha256"):
+                        expected_runtime[key] = manifest[key]
+                self.assertEqual(record["runtime"], expected_runtime)
                 self.assertEqual(record["files"].keys(), expected)
                 for name, identity in record["files"].items():
                     data = archive.read(prefix + name)
@@ -126,21 +137,30 @@ class RuntimeTests(unittest.TestCase):
 
     def test_timeout_reaps_the_original_scientific_child(self):
         with tempfile.TemporaryDirectory() as directory:
-            pid_file = Path(directory) / "pid"
-            command = [sys.executable, "-c", "import os,time;open('pid','w').write(str(os.getpid()));time.sleep(30)"]
-            with self.assertRaisesRegex(ExecutionFailure, "runtime_timeout"):
+            children = []
+            start = subprocess.Popen
+
+            def record_child(*args, **kwargs):
+                child = start(*args, **kwargs)
+                children.append(child)
+                return child
+
+            command = [sys.executable, "-c", "import time; time.sleep(30)"]
+            with mock.patch("runtime.subprocess.Popen", side_effect=record_child), \
+                    self.assertRaisesRegex(ExecutionFailure, "runtime_timeout"):
                 supervise(command, cwd=directory, env=dict(os.environ), timeout=0.2)
-            pid = int(pid_file.read_text())
+            self.assertEqual(len(children), 1)
             with self.assertRaises(ProcessLookupError):
-                os.kill(pid, 0)
+                os.kill(children[0].pid, 0)
 
     def test_cancellation_terminates_and_reaps_child(self):
         with tempfile.TemporaryDirectory() as directory:
             pid_file = Path(directory) / "pid"
-            code = ("import sys;sys.path.insert(0,sys.argv[1]);from runtime import supervise,ExecutionFailure;"
-                    "supervise([sys.executable,'-c',\"import os,time;open('pid','w').write(str(os.getpid()));time.sleep(30)\"],"
-                    "cwd=sys.argv[2],env={},timeout=30)")
-            parent = subprocess.Popen([sys.executable, "-c", code, str(ROOT), directory],
+            child_code = ("import os,time; from pathlib import Path; "
+                          "Path('starting').write_text(str(os.getpid())); os.replace('starting', 'pid'); time.sleep(30)")
+            code = ("import sys;sys.path.insert(0,sys.argv[1]);from runtime import supervise;"
+                    "supervise([sys.executable,'-c',sys.argv[3]],cwd=sys.argv[2],env={},timeout=30)")
+            parent = subprocess.Popen([sys.executable, "-c", code, str(ROOT), directory, child_code],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 deadline = time.monotonic() + 5
@@ -179,17 +199,19 @@ class RuntimeTests(unittest.TestCase):
                     run_model("huxt", request()["inputs"], root)
 
     def test_invalid_inputs_publish_failure_without_starting_a_solver(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "request.json"
-            body = request()
-            body["inputs"]["fast_speed_kms"] = 1000000
-            source.write_text(json.dumps(body))
-            target = Path(directory) / "result.json"
-            result = subprocess.run([sys.executable, str(ROOT / "wrapper.py"), "execute", "--model", "huxt",
-                                     "--request", str(source), "--result", str(target)], capture_output=True, timeout=5)
-            self.assertEqual(result.returncode, 1)
-            self.assertEqual(json.loads(target.read_text())["failure"]["code"], "invalid_inputs")
-            self.assertFalse((Path(directory) / ".scientific").exists())
+        for model in PARAMETERS:
+            with self.subTest(model=model), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "request.json"
+                body = request(model)
+                key, (_, maximum) = next(iter(PARAMETERS[model].items()))
+                body["inputs"][key] = maximum + 1
+                source.write_text(json.dumps(body))
+                target = Path(directory) / "result.json"
+                result = subprocess.run([sys.executable, str(ROOT / "wrapper.py"), "execute", "--model", model,
+                                         "--request", str(source), "--result", str(target)], capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(json.loads(target.read_text())["failure"]["code"], "invalid_inputs")
+                self.assertFalse((Path(directory) / ".scientific").exists())
 
     def test_existing_outputs_and_malformed_envelopes_preserve_evidence(self):
         for bad in ("existing", "identity", "input-files"):

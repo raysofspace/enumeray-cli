@@ -1,17 +1,17 @@
 # Validate a scientific model integration
 
-Model authors can use the HUXt and REBOUND wrappers to practice validating an
-integration before publishing it. Run a known case with the pinned solver, then
-change an input to check that the wrapper passes the value through and produces
-the expected change in the result.
+Model authors can use the HUXt, REBOUND and SWMM wrappers to practice validating
+an integration before publishing it. Run a known case with the pinned solver,
+then change an input to check that the wrapper passes the value through and
+produces the expected change in the result.
 
 ## Set up the solvers
 
 You need Python 3.9 or newer to extract the archive and
 [uv](https://docs.astral.sh/uv/getting-started/installation/) to install the
 pinned Python and solver packages. Allow a few gigabytes for the environment
-and download cache. These steps were checked on macOS ARM64. Enumeray also
-uses the locked solver packages on Linux.
+and download cache. Use Linux for local SWMM solver runs. HUXt and REBOUND
+can also run locally on macOS ARM64.
 
 Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
 and [its checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
@@ -72,6 +72,12 @@ For the default orbit, run REBOUND from the same folder.
 .venv/bin/python run_example.py rebound --directory rebound-default
 ```
 
+On Linux, run SWMM for the default 25% paved catchment from the same folder.
+
+```sh
+.venv/bin/python run_example.py swmm --directory swmm-default
+```
+
 The runner checks the installed versions and saves the plot, CSV data,
 numerical summary (`outputs.json`) and run record in the directory you choose.
 Open the plot and `outputs.json` there. Use a new directory for each run so you
@@ -102,6 +108,17 @@ and maximum orbital distances should move from 0.9833 and 1.0167 AU to 0.9 and
 1.1 AU. The period should stay the same because the semimajor axis and masses
 stay fixed.
 
+For SWMM, copy `swmm/inputs.json` to `swmm-more-paved.json` and change only
+`paved_percent` from `25` to `60`.
+
+```sh
+.venv/bin/python run_example.py swmm --inputs swmm-more-paved.json --directory swmm-more-paved
+```
+
+Compare `outputs.json` in `swmm-default` and `swmm-more-paved`. The peak flow
+should rise from about 39.50 to 57.76 L/s and total runoff volume from about
+102.61 to 171.62 m³. The storm depth stays at 25 mm.
+
 ## Understand the checks
 
 `run-record.json` records the Python and solver versions, dependency lock
@@ -109,26 +126,31 @@ hashes and SHA-256 hashes of the result files. Those hashes let you check that
 the files still have the bytes recorded for that run. The numerical checks
 answer a different question. HUXt's default speed series is compared with its
 saved reference. REBOUND's trajectory is compared with a solution of Kepler's
-equation and checked for conservation of energy and angular momentum.
+equation and checked for conservation of energy and angular momentum. SWMM's
+runoff is compared with saved references and checked for water balance.
 
 Plots can vary with fonts and plotting libraries. Use the CSV data and the
 numerical checks to compare calculations. These are simplified models, so the
-checks establish agreement for the stated setups. Testing a prediction about
-the real solar wind or the real Earth would require observations and a model
-suited to that question.
+checks establish agreement for the stated setups. Testing a prediction against
+the real system would require observations and a model suited to that question.
 
 <a id="inspect-a-downloaded-run-bundle"></a>
 
-The [HUXt tutorial](https://doc.enumeray.com/models/huxt/#read-a-collected-huxt-result)
+The [SWMM tutorial](https://doc.enumeray.com/models/swmm/#read-a-collected-swmm-result)
 explains the files saved by `analysis collect`.
 
 ## Test the example code
 
 For work on the example implementation, run the protocol and supervisor tests
-with system Python. The solver tests use the locked environment.
+with system Python.
 
 ```sh
 python3 -B -m unittest discover -s . -p test_runtime.py
+```
+
+Run the full solver suite on Linux in the locked environment.
+
+```sh
 .venv/bin/python -B -m unittest discover -s . -p test_models.py
 ```
 

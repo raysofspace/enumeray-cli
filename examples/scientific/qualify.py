@@ -17,7 +17,7 @@ from verify_collected import verify_science
 ROOT = Path(__file__).resolve().parent
 
 
-def environment_receipt():
+def environment_receipt(models=tuple(FILES)):
     manifest = json.loads((ROOT / "runtime-manifest.json").read_text())
     if sys.version_info[:3] != (3, 12, 16):
         raise ValueError("Qualification requires the declared Python3.12.16 runtime")
@@ -39,11 +39,22 @@ def environment_receipt():
     ephemeris = Path(huxt.__file__).parent / "data/ephemeris/ephemeris.hdf5"
     if hashlib.sha256(ephemeris.read_bytes()).hexdigest() != manifest["huxt_ephemeris_sha256"]:
         raise ValueError("Bundled HUXt ephemeris differs from runtime manifest")
-    return {"python": "3.12.16", "solvers": manifest["solvers"],
-            "huxt_numba_jit_enabled": manifest["huxt_numba_jit_enabled"],
-            "requirements_sha256": manifest["requirements_sha256"],
-            "build_requirements_sha256": manifest["build_requirements_sha256"],
-            "huxt_ephemeris_sha256": manifest["huxt_ephemeris_sha256"]}
+    receipt = {"python": "3.12.16", "solvers": manifest["solvers"],
+               "huxt_numba_jit_enabled": manifest["huxt_numba_jit_enabled"],
+               "requirements_sha256": manifest["requirements_sha256"],
+               "build_requirements_sha256": manifest["build_requirements_sha256"],
+               "huxt_ephemeris_sha256": manifest["huxt_ephemeris_sha256"]}
+    if "swmm" in models:
+        from swmm.toolkit import solver
+        engine_version = solver.swmm_version_info()
+        if engine_version != manifest["swmm_engine_version"]:
+            raise ValueError("SWMM engine version differs from runtime manifest")
+        catchment = ROOT / "swmm" / "catchment.inp"
+        catchment_sha256 = hashlib.sha256(catchment.read_bytes()).hexdigest()
+        if catchment_sha256 != manifest["swmm_catchment_sha256"]:
+            raise ValueError("Bundled SWMM catchment and rainfall differ from runtime manifest")
+        receipt.update(swmm_engine_version=engine_version, swmm_catchment_sha256=catchment_sha256)
+    return receipt
 
 
 def uniform_wind_check():
@@ -75,12 +86,14 @@ def _uniform_wind_check():
     return error
 
 
-def qualify(models=("huxt", "rebound"), extrema=False):
-    environment = environment_receipt()
+def qualify(models=tuple(FILES), extrema=False):
+    environment = environment_receipt(models)
     checks = []
     for model in models:
         defaults = json.loads((ROOT / model / "inputs.json").read_text())
         cases = [("example", defaults)]
+        if model == "swmm":
+            cases.append(("more-paved", {"paved_percent": 60}))
         if extrema:
             keys = list(PARAMETERS[model])
             cases += [("boundary-" + str(index), dict(zip(keys, values))) for index, values in
@@ -108,10 +121,10 @@ def qualify(models=("huxt", "rebound"), extrema=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", choices=("huxt", "rebound", "all"), default="all")
+    parser.add_argument("--model", choices=(*FILES, "all"), default="all")
     parser.add_argument("--extrema", action="store_true")
     args = parser.parse_args()
-    models = ("huxt", "rebound") if args.model == "all" else (args.model,)
+    models = tuple(FILES) if args.model == "all" else (args.model,)
     print(json.dumps(qualify(models, args.extrema), indent=2, sort_keys=True))
 
 

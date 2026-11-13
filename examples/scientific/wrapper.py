@@ -1,12 +1,12 @@
 #!/opt/enumeray/scientific/bin/python
-"""Protocol-1 entrypoint for the reviewed, bounded HUXt and REBOUND cases."""
+"""Protocol-1 entrypoint for the reviewed, bounded scientific cases."""
 import argparse
 from pathlib import Path
 import sys
 
 from protocol import (BoundaryError, IDENTITIES, ModelError, claim_workspace, exact_json,
                       preflight_result, publish, read_json, read_request, validate_storage)
-from runtime import ExecutionFailure, run_model
+from runtime import ExecutionFailure, FILES, run_model
 
 ROOT = Path(__file__).resolve().parent
 
@@ -15,7 +15,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     execute = commands.add_parser("execute")
-    execute.add_argument("--model", choices=("huxt", "rebound"), required=True)
+    execute.add_argument("--model", choices=FILES, required=True)
     execute.add_argument("--request", required=True)
     execute.add_argument("--result", required=True)
     args = parser.parse_args(argv)
@@ -25,7 +25,8 @@ def main(argv=None):
         if request["input_files"]:
             raise BoundaryError("This demonstration accepts bounded JSON inputs only.")
         destination = preflight_result(args.result)
-        reserved = {"wind-field.csv", "wind.png", "trajectory.csv", "orbit.png", ".model-workspace"}
+        reserved = {name for artifacts in FILES.values() for name, _ in artifacts.values()}
+        reserved.add(".model-workspace")
         if destination.name in reserved or (destination.parent / ".scientific").exists():
             raise BoundaryError("Preserve previous scientific evidence.")
         if any((destination.parent / name).exists() or (destination.parent / name).is_symlink()

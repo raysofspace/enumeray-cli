@@ -8,11 +8,13 @@ import json
 import math
 from pathlib import Path
 
+from runtime import FILES, MAX_FILE_BYTES, MAX_OUTPUT_BYTES, validate_inputs
+
 ROOT = Path(__file__).resolve().parent
 
 
-def load_model(model):
-    spec = importlib.util.spec_from_file_location("checked_model", ROOT / model / "model.py")
+def load_model(model, source="model.py"):
+    spec = importlib.util.spec_from_file_location("checked_model", ROOT / model / source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -20,10 +22,10 @@ def load_model(model):
 
 def verify_science(model, inputs, outputs, files):
     import numpy as np
-    from runtime import validate_inputs
     values = validate_inputs(model, inputs)
-    png_slot, csv_slot = (("wind_plot_png", "wind_field_csv") if model == "huxt" else
-                          ("orbit_plot_png", "trajectory_csv"))
+    slots_by_media_type = {media_type: slot for slot, (_, media_type) in FILES[model].items()}
+    png_slot = slots_by_media_type["image/png"]
+    csv_slot = slots_by_media_type["text/csv"]
     if Path(files[png_slot]).read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("Invalid scientific plot")
     from PIL import Image
@@ -37,6 +39,8 @@ def verify_science(model, inputs, outputs, files):
         rows = np.array([[float(value) for value in row] for row in reader])
     if not np.all(np.isfinite(rows)):
         raise ValueError("Nonfinite scientific CSV")
+    if model == "swmm":
+        return load_model(model, "verify.py").verify(values, outputs, header, rows)
     if model == "rebound":
         module = load_model(model)
         if header != ["time_years", "x_au", "y_au", "vx_au_per_year", "vy_au_per_year"] or rows.shape != (361, 5):
@@ -96,7 +100,6 @@ def verify_collected(model, analysis):
         raise ValueError("Scientific collection is incomplete")
     inputs = json.loads((analysis / "results/effective-inputs.json").read_text())
     outputs = json.loads((analysis / "results/outputs.json").read_text())
-    from runtime import FILES, MAX_FILE_BYTES, MAX_OUTPUT_BYTES
     files = {}
     total_bytes = 0
     for slot in FILES[model]:
@@ -119,7 +122,7 @@ def verify_collected(model, analysis):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", required=True, choices=("huxt", "rebound"))
+    parser.add_argument("--model", required=True, choices=FILES)
     parser.add_argument("--analysis", required=True)
     args = parser.parse_args()
     print(json.dumps(verify_collected(args.model, args.analysis), sort_keys=True))

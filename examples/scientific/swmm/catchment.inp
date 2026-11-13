@@ -1,0 +1,109 @@
+[TITLE]
+Runoff from a synthetic one-hectare catchment
+
+[OPTIONS]
+FLOW_UNITS          LPS
+INFILTRATION        HORTON
+FLOW_ROUTING        STEADY
+START_DATE          01/01/2000
+START_TIME          00:00:00
+REPORT_START_DATE   01/01/2000
+REPORT_START_TIME   00:00:00
+END_DATE            01/01/2000
+END_TIME            06:00:00
+REPORT_STEP         00:01:00
+WET_STEP            00:00:10
+DRY_STEP            00:01:00
+ROUTING_STEP        00:00:10
+THREADS             1
+
+[RAINGAGES]
+;;Name Format    Interval SCF Source
+Gage   INTENSITY 00:01    1.0 TIMESERIES Storm
+
+[SUBCATCHMENTS]
+;;Name  RainGage Outlet Area  %Imperv         Width %Slope CurbLen
+Site    Gage     Drain  1.0   {paved_percent}  100   1.0    0
+
+[SUBAREAS]
+;;Name N-Imperv N-Perv S-Imperv S-Perv PctZero RouteTo
+Site   0.013    0.15   1.0      3.0    0       OUTLET
+
+[INFILTRATION]
+;;Name MaxRate MinRate Decay DryTime MaxInfil
+Site   30      5       4     7       0
+
+[OUTFALLS]
+;;Name Elevation Type Gated
+Drain  0         FREE NO
+
+[TIMESERIES]
+;; Rainfall intensity in mm/h. A rain record lasts for one gage interval.
+;; The 60 positive records below give 25 mm between minute 15 and minute 75.
+Storm 00:00 0
+Storm 00:15 25
+Storm 00:16 25
+Storm 00:17 25
+Storm 00:18 25
+Storm 00:19 25
+Storm 00:20 25
+Storm 00:21 25
+Storm 00:22 25
+Storm 00:23 25
+Storm 00:24 25
+Storm 00:25 25
+Storm 00:26 25
+Storm 00:27 25
+Storm 00:28 25
+Storm 00:29 25
+Storm 00:30 25
+Storm 00:31 25
+Storm 00:32 25
+Storm 00:33 25
+Storm 00:34 25
+Storm 00:35 25
+Storm 00:36 25
+Storm 00:37 25
+Storm 00:38 25
+Storm 00:39 25
+Storm 00:40 25
+Storm 00:41 25
+Storm 00:42 25
+Storm 00:43 25
+Storm 00:44 25
+Storm 00:45 25
+Storm 00:46 25
+Storm 00:47 25
+Storm 00:48 25
+Storm 00:49 25
+Storm 00:50 25
+Storm 00:51 25
+Storm 00:52 25
+Storm 00:53 25
+Storm 00:54 25
+Storm 00:55 25
+Storm 00:56 25
+Storm 00:57 25
+Storm 00:58 25
+Storm 00:59 25
+Storm 01:00 25
+Storm 01:01 25
+Storm 01:02 25
+Storm 01:03 25
+Storm 01:04 25
+Storm 01:05 25
+Storm 01:06 25
+Storm 01:07 25
+Storm 01:08 25
+Storm 01:09 25
+Storm 01:10 25
+Storm 01:11 25
+Storm 01:12 25
+Storm 01:13 25
+Storm 01:14 25
+Storm 01:15 0
+
+[REPORT]
+SUBCATCHMENTS ALL
+NODES NONE
+LINKS NONE
