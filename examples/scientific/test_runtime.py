@@ -137,21 +137,30 @@ class RuntimeTests(unittest.TestCase):
 
     def test_timeout_reaps_the_original_scientific_child(self):
         with tempfile.TemporaryDirectory() as directory:
-            pid_file = Path(directory) / "pid"
-            command = [sys.executable, "-c", "import os,time;open('pid','w').write(str(os.getpid()));time.sleep(30)"]
-            with self.assertRaisesRegex(ExecutionFailure, "runtime_timeout"):
+            children = []
+            start = subprocess.Popen
+
+            def record_child(*args, **kwargs):
+                child = start(*args, **kwargs)
+                children.append(child)
+                return child
+
+            command = [sys.executable, "-c", "import time; time.sleep(30)"]
+            with mock.patch("runtime.subprocess.Popen", side_effect=record_child), \
+                    self.assertRaisesRegex(ExecutionFailure, "runtime_timeout"):
                 supervise(command, cwd=directory, env=dict(os.environ), timeout=0.2)
-            pid = int(pid_file.read_text())
+            self.assertEqual(len(children), 1)
             with self.assertRaises(ProcessLookupError):
-                os.kill(pid, 0)
+                os.kill(children[0].pid, 0)
 
     def test_cancellation_terminates_and_reaps_child(self):
         with tempfile.TemporaryDirectory() as directory:
             pid_file = Path(directory) / "pid"
-            code = ("import sys;sys.path.insert(0,sys.argv[1]);from runtime import supervise,ExecutionFailure;"
-                    "supervise([sys.executable,'-c',\"import os,time;open('pid','w').write(str(os.getpid()));time.sleep(30)\"],"
-                    "cwd=sys.argv[2],env={},timeout=30)")
-            parent = subprocess.Popen([sys.executable, "-c", code, str(ROOT), directory],
+            child_code = ("import os,time; from pathlib import Path; "
+                          "Path('starting').write_text(str(os.getpid())); os.replace('starting', 'pid'); time.sleep(30)")
+            code = ("import sys;sys.path.insert(0,sys.argv[1]);from runtime import supervise;"
+                    "supervise([sys.executable,'-c',sys.argv[3]],cwd=sys.argv[2],env={},timeout=30)")
+            parent = subprocess.Popen([sys.executable, "-c", code, str(ROOT), directory, child_code],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 deadline = time.monotonic() + 5
