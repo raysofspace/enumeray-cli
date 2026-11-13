@@ -104,8 +104,8 @@ declaration; it is not the filename of the supplied Python wrapper. Start with a
 complete starter when you need a ready local project. The
 [file/download chooser](https://doc.enumeray.com/reference/manifests/#choose-the-file-for-your-command)
 distinguishes author declarations, scientific inputs, wrapper envelopes and
-collection manifests. The HUXt and REBOUND demo models each have documented
-inputs and outputs.
+collection manifests. The HUXt, REBOUND and SWMM demo models each have
+documented inputs and outputs.
 
 ## Responsibilities and execution choices
 
@@ -522,7 +522,7 @@ module and container setup. The runner supplies workspace `HOME` and
 
 The [complete process and Slurm examples](https://doc.enumeray.com/reference/manifests/)
 use the same author format for direct and SSH execution. For runnable scientific
-examples, follow the [HUXt and REBOUND walkthrough](https://doc.enumeray.com/start/first-run/)
+examples, [choose a demo tutorial](https://doc.enumeray.com/start/first-run/)
 and inspect the models' contracts before preparing your own publication.
 
 ## Save a release, resume readiness, review, and activate

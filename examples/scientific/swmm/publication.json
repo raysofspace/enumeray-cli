@@ -1,0 +1,121 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "demo-swmm",
+    "name": "EPA SWMM urban stormwater runoff",
+    "description": "A fixed synthetic rainstorm over one urban catchment with an editable paved fraction."
+  },
+  "identities": {
+    "model": "swmm@5.2.4:urban-catchment:1",
+    "wrapper": "enumeray-scientific-demo-wrapper@1",
+    "runtime": "enumeray-demo:python3.12.16:locked-v2",
+    "datasets": ["enumeray:synthetic-rainstorm:1"]
+  },
+  "execution": {
+    "context_id": "local-process",
+    "release_path": "/opt/enumeray/models/scientific/r1",
+    "entrypoint": [
+      "wrapper.py",
+      "execute",
+      "--model",
+      "swmm"
+    ],
+    "environment": {}
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["paved_percent"],
+    "properties": {
+      "paved_percent": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Impervious share of the synthetic catchment (% of area)."
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "peak_runoff_lps",
+      "peak_time_minutes",
+      "runoff_volume_m3",
+      "rainfall_depth_mm",
+      "infiltration_volume_m3",
+      "final_surface_storage_m3",
+      "runoff_balance_error_percent",
+      "runoff_csv",
+      "runoff_plot_png"
+    ],
+    "properties": {
+      "peak_runoff_lps": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Largest sampled catchment runoff rate (L/s)."
+      },
+      "peak_time_minutes": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Elapsed time of the first sample at peak runoff (min)."
+      },
+      "runoff_volume_m3": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Runoff volume integrated from the sampled hydrograph (m³)."
+      },
+      "rainfall_depth_mm": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Total depth of the bundled synthetic rainfall (mm)."
+      },
+      "infiltration_volume_m3": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Cumulative infiltration into the pervious surface from SWMM's runoff balance (m³)."
+      },
+      "final_surface_storage_m3": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Water still stored on the catchment surface at the end of the simulation (m³)."
+      },
+      "runoff_balance_error_percent": {
+        "type": "number",
+        "minimum": -0.1,
+        "maximum": 0.1,
+        "description": "Signed difference between rainfall and the sum of sampled runoff, infiltration and final surface storage (% of rainfall)."
+      },
+      "runoff_csv": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "Elapsed time, rainfall intensity and runoff rate at one-minute intervals.",
+        "x-enumeray-file": {
+          "media_types": ["text/csv"],
+          "max_bytes": 8388608
+        }
+      },
+      "runoff_plot_png": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "Rainfall intensity and runoff rate plotted over time.",
+        "x-enumeray-file": {
+          "media_types": ["image/png"],
+          "max_bytes": 8388608
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "synthetic-rainstorm",
+      "inputs": {"paved_percent": 25}
+    }
+  ]
+}

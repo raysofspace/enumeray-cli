@@ -24,7 +24,7 @@ def write_json(path, data):
 
 def run_example(model, directory, inputs_file=None):
     inputs = validate_inputs(model, read_json(inputs_file or ROOT / model / "inputs.json"))
-    runtime = environment_receipt()
+    runtime = environment_receipt((model,))
     try:
         directory.mkdir(mode=0o700)
     except FileExistsError:

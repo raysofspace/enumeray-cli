@@ -3,19 +3,24 @@
   "python": "3.12.16",
   "solvers": {
     "huxt": "5.0.3",
-    "rebound": "5.2.2"
+    "rebound": "5.2.2",
+    "swmm-toolkit": "0.17.0"
   },
-  "requirements_sha256": "3800e6df453d20171a031be4f65726c2bd773b696a23023f139ae0943ad9edb8",
+  "requirements_sha256": "93e063b3b63f2ae72079084f254fa962c31352266a14b80db5f7a1ba050614cc",
   "huxt_ephemeris_sha256": "82d604c31c9ea86e663e46c75d6e076e5a43862a0bca53f43dfb344c45fab87f",
+  "swmm_engine_version": "5.2.4",
+  "swmm_catchment_sha256": "3a555293a34a9751b2450b6b94033597589d9b10efe79d4393945100a7ed08ac",
   "upstream_commits": {
     "huxt": "4d5b60bedb4b30ad140a8ea4972c4f5396c687ff",
-    "rebound": "c34134716cd484ed9cdb9f7d54ef8d859bdf547d"
+    "rebound": "c34134716cd484ed9cdb9f7d54ef8d859bdf547d",
+    "swmm-toolkit": "57a1faa00086285ad041eeb15af3f14f68e4c375"
   },
   "network": "none required; solver worker rejects socket connections",
   "max_file_bytes": 8388608,
   "wall_timeout_seconds": {
     "huxt": 180,
-    "rebound": 60
+    "rebound": 60,
+    "swmm": 60
   },
   "threads": 1,
   "huxt_numba_jit_enabled": false,

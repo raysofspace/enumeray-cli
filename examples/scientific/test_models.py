@@ -9,20 +9,22 @@ import unittest
 from qualify import environment_receipt, uniform_wind_check
 from run_example import run_example
 from runtime import FILES, run_model
-from verify_collected import load_model, verify_collected
+from verify_collected import load_model, verify_collected, verify_science
 
 ROOT = Path(__file__).resolve().parent
 
 
 class ScientificModelTests(unittest.TestCase):
     def test_locked_runtime_and_bundled_dataset(self):
-        self.assertEqual(environment_receipt()["solvers"], {"huxt": "5.0.3", "rebound": "5.2.2"})
+        receipt = environment_receipt()
+        self.assertEqual(receipt["solvers"], {"huxt": "5.0.3", "rebound": "5.2.2", "swmm-toolkit": "0.17.0"})
+        self.assertEqual(receipt["swmm_engine_version"], "5.2.4")
 
     def test_uniform_huxt_matches_analytic_acceleration(self):
         self.assertLessEqual(uniform_wind_check(), 1e-3)
 
-    def test_both_example_runs_publish_verified_csv_png_and_numerical_summaries(self):
-        for model in ("huxt", "rebound"):
+    def test_all_example_runs_publish_verified_csv_png_and_numerical_summaries(self):
+        for model in FILES:
             with self.subTest(model=model), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary) / "results"
                 values = json.loads((ROOT / model / "inputs.json").read_text())
@@ -53,6 +55,27 @@ class ScientificModelTests(unittest.TestCase):
             self.assertLessEqual(np.max(np.linalg.norm(rows[:, 1:3] - expected, axis=1)) /
                                  values["semimajor_axis_au"], 1e-8)
             self.assertTrue(all(error <= 1e-9 for error in module.diagnostics(rows, mu)))
+
+    def test_swmm_more_paved_area_increases_peak_and_volume(self):
+        runs = {}
+        for paved_percent in (25, 60):
+            with self.subTest(paved_percent=paved_percent), tempfile.TemporaryDirectory() as temporary:
+                work = Path(temporary)
+                inputs = {"paved_percent": paved_percent}
+                outputs, files = run_model("swmm", inputs, work)
+                paths = {slot: work / file["path"] for slot, file in files.items()}
+                checks = verify_science("swmm", inputs, outputs, paths)
+                self.assertTrue(checks["reference_checked"])
+                tampered = {**outputs, "peak_runoff_lps": outputs["peak_runoff_lps"] * 2}
+                with self.assertRaisesRegex(ValueError, "Runoff summary disagrees"):
+                    verify_science("swmm", inputs, tampered, paths)
+                tampered = {**outputs, "infiltration_volume_m3": outputs["infiltration_volume_m3"] + 1}
+                with self.assertRaisesRegex(ValueError, "(?i)balance"):
+                    verify_science("swmm", inputs, tampered, paths)
+                runs[paved_percent] = outputs
+        self.assertEqual(runs[25]["rainfall_depth_mm"], runs[60]["rainfall_depth_mm"])
+        for name in ("peak_runoff_lps", "runoff_volume_m3"):
+            self.assertLess(runs[25][name], runs[60][name])
 
     def test_collected_artifacts_and_numerical_changes_are_checked(self):
         model = "rebound"

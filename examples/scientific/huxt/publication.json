@@ -8,7 +8,7 @@
   "identities": {
     "model": "huxt@5.0.3:ambient-fast-stream:1",
     "wrapper": "enumeray-scientific-demo-wrapper@2",
-    "runtime": "enumeray-demo:python3.12.16:locked-v1"
+    "runtime": "enumeray-demo:python3.12.16:locked-v2"
   },
   "execution": {
     "context_id": "local-process",

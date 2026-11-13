@@ -9,6 +9,8 @@ import signal
 import socket
 import sys
 
+from runtime import FILES
+
 
 def isolate(parent):
     if sys.platform.startswith("linux"):
@@ -31,7 +33,7 @@ def isolate(parent):
 
 def main():
     model, inputs, output, workspace, parent = sys.argv[1:]
-    if model not in ("huxt", "rebound"):
+    if model not in FILES:
         return 2
     isolate(int(parent))
     root = Path(__file__).resolve().parent
