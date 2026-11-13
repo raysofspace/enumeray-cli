@@ -30,7 +30,7 @@
       },
       "grid_cells_per_period": {
         "type": "integer",
-        "enum": [26, 30],
+        "enum": [16, 20],
         "description": "Finite-difference grid cells per lattice period."
       }
     }
@@ -85,11 +85,11 @@
   "examples": [
     {
       "name": "cavity-transmission",
-      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 26}
+      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 16}
     },
     {
       "name": "finer-grid",
-      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 30}
+      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 20}
     }
   ]
 }

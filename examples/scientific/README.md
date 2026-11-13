@@ -156,7 +156,7 @@ For Meep, copy `meep/inputs.json` to `meep-wider.json` and change only
 .venv/bin/python run_example.py meep --inputs meep-wider.json --directory meep-wider
 ```
 
-The peak wavelength should move from about 4.263 to 4.525 lattice periods.
+The peak wavelength should move from about 4.266 to 4.525 lattice periods.
 
 ## Understand the checks
 

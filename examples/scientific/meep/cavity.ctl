@@ -1,7 +1,7 @@
 ;; Normalized transmission of a two-dimensional dielectric waveguide.
 ;; Geometry follows the Meep waveguide-cavity tutorial and Fan et al. (1995).
 (define-param spacing 1.4)
-(define-param grid 26)
+(define-param grid 16)
 (define-param reference? false)
 
 (set! resolution grid)
@@ -26,7 +26,7 @@
     (component Ey) (center -5.5 0) (size 0 1.2))))
 (define transmission-flux
   (add-flux 0.235 0.08 401 (make flux-region (center 5.5 0) (size 0 2.4))))
-(define decayed (stop-when-fields-decayed 50 Ey (vector3 5.5 0) 0.001))
+(define decayed (stop-when-fields-decayed 50 Ey (vector3 5.5 0) 0.003))
 (if reference?
     (run-sources+ decayed)
     (run-sources+ decayed (at-beginning output-epsilon) (at-time 200 output-hfield-z)))

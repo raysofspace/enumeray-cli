@@ -21,7 +21,7 @@ enumeray model get demo-meep &&
 ```
 
 Open `meep-run/inputs.json`. The example places the centers of the two
-innermost holes 1.4 lattice periods apart and uses 26 grid cells per period.
+innermost holes 1.4 lattice periods apart and uses 16 grid cells per period.
 Check the model, publication, execution location and disclosure before
 sending the inputs.
 
@@ -61,15 +61,15 @@ Compare the plot with this example for the same inputs.
 
 <figure class="docs-result-plot">
 
-![The transmission spectrum has a narrow peak near 4.26 lattice periods. The field snapshot shows the waveguide and its six holes.](https://doc.enumeray.com/examples/meep-transmission.png)
+![The transmission spectrum has a narrow peak near 4.27 lattice periods. The field snapshot shows the waveguide and its six holes.](https://doc.enumeray.com/examples/meep-transmission.png)
 
 <figcaption>The upper panel marks the largest sampled transmission inside the resonance search band. The lower panel shows the out-of-plane magnetic field at one instant, with the dielectric boundaries outlined.</figcaption>
 </figure>
 
 The holes form two partial mirrors with a gap between them. Light close to
 the cavity resonance passes through the structure. In the sample, the peak
-is at **4.2626 lattice periods**, with a sampled transmitted fraction of
-**0.7999**. The field snapshot shows where the field remains after the pulse
+is at **4.2662 lattice periods**, with a sampled transmitted fraction of
+**0.7342**. The field snapshot shows where the field remains after the pulse
 has passed through the guide.
 
 | File | What to look for |
@@ -111,14 +111,14 @@ then [submit and collect](#2-submit-and-collect-the-run) using `meep-wider`
 in place of `meep-run`.
 
 Compare `peak_wavelength_over_a` in both result summaries. Widening the cavity
-moves the sample peak from about **4.263** to **4.525** lattice periods.
+moves the sample peak from about **4.266** to **4.525** lattice periods.
 
 ### Check the grid resolution
 
 Prepare an analysis with `--example finer-grid` and use a fresh directory.
 This example keeps the 1.4-period spacing and increases the resolution to
-30 cells per period. The reference wavelength at that resolution is about
-4.259 periods. Set the spacing to `1.5` in another fresh analysis with the
+20 cells per period. The reference wavelength at that resolution is about
+4.266 periods. Set the spacing to `1.5` in another fresh analysis with the
 same finer-grid example to compare the shift at both resolutions.
 
 <a id="change-the-inputs"></a>
@@ -131,7 +131,7 @@ Start with the [example inputs](inputs.json) or
 | Field | Meaning | Allowed values | Named example value |
 | --- | --- | --- | --- |
 | `cavity_spacing_periods` | Center-to-center distance between the innermost holes, divided by the lattice period. | 1.3–1.5 | 1.4 |
-| `grid_cells_per_period` | Number of finite-difference grid cells in one lattice period. | 26 or 30 | 26 |
+| `grid_cells_per_period` | Number of finite-difference grid cells in one lattice period. | 16 or 20 | 16 |
 
 ## Numerical setup and checks
 
@@ -141,7 +141,8 @@ relative permittivity 13, where `a` is the lattice period. Each side of the
 cavity has three air holes of radius `0.36 a`. The source, flux monitor and
 absorbing layers stay fixed. The wrapper runs the straight guide and the
 cavity at the same grid resolution, then divides the cavity flux by the
-straight-guide flux at each frequency.
+straight-guide flux at each frequency. After the source stops, the runs
+wait for the monitored field intensity to decay below 0.3% of its maximum.
 
 The spectrum covers 0.195–0.275 in units of `c/a` with spacing 0.0002, where
 `c` is the speed of light in vacuum. The reported peak is the first sample
