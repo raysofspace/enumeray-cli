@@ -1,0 +1,95 @@
+{
+  "publication_version": 1,
+  "model": {
+    "id": "demo-meep",
+    "name": "Meep photonic-crystal filter",
+    "description": "Change the spacing of two holes in a dielectric waveguide and measure the wavelength transmitted by the cavity."
+  },
+  "identities": {
+    "model": "meep@1.25.0:cavity-transmission:1",
+    "wrapper": "enumeray-scientific-demo-wrapper@1",
+    "runtime": "enumeray-demo:python3.12.16:locked-v3:meep1.25.0-deb2"
+  },
+  "execution": {
+    "context_id": "local-process",
+    "release_path": "/opt/enumeray/models/scientific/r1",
+    "entrypoint": ["wrapper.py", "execute", "--model", "meep"],
+    "environment": {}
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["cavity_spacing_periods", "grid_cells_per_period"],
+    "properties": {
+      "cavity_spacing_periods": {
+        "type": "number",
+        "minimum": 1.3,
+        "maximum": 1.5,
+        "description": "Center-to-center distance between the two innermost holes, in lattice periods."
+      },
+      "grid_cells_per_period": {
+        "type": "integer",
+        "enum": [16, 24],
+        "description": "Finite-difference grid cells per lattice period."
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "peak_frequency_c_over_a",
+      "peak_wavelength_over_a",
+      "peak_transmission",
+      "spectrum_csv",
+      "transmission_plot_png"
+    ],
+    "properties": {
+      "peak_frequency_c_over_a": {
+        "type": "number",
+        "minimum": 0.21,
+        "maximum": 0.27,
+        "description": "Frequency of the maximum sampled transmission within the resonance search band, in units of c/a."
+      },
+      "peak_wavelength_over_a": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": "Wavelength of the sampled peak, divided by the lattice period a."
+      },
+      "peak_transmission": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1.02,
+        "description": "Sampled transmitted fraction at the peak, with a 2% numerical passivity tolerance."
+      },
+      "spectrum_csv": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "401 samples of frequency, wavelength, reference flux, cavity flux and normalized transmission.",
+        "x-enumeray-file": {"media_types": ["text/csv"], "max_bytes": 8388608}
+      },
+      "transmission_plot_png": {
+        "type": "object",
+        "properties": {"artifact_id": {"type": "string"}},
+        "required": ["artifact_id"],
+        "additionalProperties": false,
+        "description": "Normalized transmission spectrum with the sampled peak and a transient magnetic field snapshot.",
+        "x-enumeray-file": {"media_types": ["image/png"], "max_bytes": 8388608}
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "cavity-transmission",
+      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 16}
+    },
+    {
+      "name": "finer-grid",
+      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 24}
+    }
+  ]
+}

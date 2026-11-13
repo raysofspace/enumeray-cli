@@ -92,6 +92,9 @@ class RuntimeTests(unittest.TestCase):
                 elif model == "lammps":
                     for key in ("lammps_engine_version", "lammps_deck_sha256"):
                         expected_runtime[key] = manifest[key]
+                elif model == "meep":
+                    for key in ("meep_engine_version", "meep_control_sha256"):
+                        expected_runtime[key] = manifest[key]
                 self.assertEqual(record["runtime"], expected_runtime)
                 self.assertEqual(record["files"].keys(), expected)
                 for name, identity in record["files"].items():
@@ -108,6 +111,14 @@ class RuntimeTests(unittest.TestCase):
                         validate_inputs(model, {**defaults, key: bad})
             with self.assertRaises(ExecutionFailure):
                 validate_inputs(model, {**defaults, "command": "anything"})
+
+    def test_meep_accepts_only_the_reviewed_grid_resolutions(self):
+        for grid in (16, 24):
+            inputs = {**request("meep")["inputs"], "grid_cells_per_period": grid}
+            self.assertEqual(validate_inputs("meep", inputs), inputs)
+        for grid in (16.5, 17, 20, 23):
+            with self.subTest(grid=grid), self.assertRaises(ExecutionFailure):
+                validate_inputs("meep", {**request("meep")["inputs"], "grid_cells_per_period": grid})
 
     def test_worker_environment_confines_writes_and_drops_credentials(self):
         with tempfile.TemporaryDirectory() as directory:

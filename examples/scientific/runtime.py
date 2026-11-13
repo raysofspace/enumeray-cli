@@ -12,7 +12,7 @@ import time
 ROOT = Path(__file__).resolve().parent
 MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
-LIMITS = {"huxt": 180, "rebound": 60, "swmm": 60, "lammps": 120}
+LIMITS = {"huxt": 180, "rebound": 60, "swmm": 60, "lammps": 120, "meep": 120}
 PARAMETERS = {
     "huxt": {"slow_speed_kms": (250, 450), "fast_speed_kms": (500, 900),
              "stream_width_deg": (10, 45)},
@@ -20,6 +20,7 @@ PARAMETERS = {
                 "orbits": (0.25, 10)},
     "swmm": {"paved_percent": (0, 100)},
     "lammps": {"temperature_reduced": (1.1, 1.6)},
+    "meep": {"cavity_spacing_periods": (1.3, 1.5), "grid_cells_per_period": (16, 24)},
 }
 FILES = {"huxt": {"wind_field_csv": ("wind-field.csv", "text/csv"),
                   "wind_plot_png": ("wind.png", "image/png")},
@@ -28,7 +29,9 @@ FILES = {"huxt": {"wind_field_csv": ("wind-field.csv", "text/csv"),
          "swmm": {"runoff_csv": ("runoff.csv", "text/csv"),
                   "runoff_plot_png": ("runoff.png", "image/png")},
          "lammps": {"msd_csv": ("msd.csv", "text/csv"),
-                    "diffusion_plot_png": ("diffusion.png", "image/png")}}
+                    "diffusion_plot_png": ("diffusion.png", "image/png")},
+         "meep": {"spectrum_csv": ("spectrum.csv", "text/csv"),
+                  "transmission_plot_png": ("transmission.png", "image/png")}}
 
 
 class ExecutionFailure(Exception):
@@ -47,6 +50,8 @@ def validate_inputs(model, inputs):
         if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
             raise ExecutionFailure("invalid_inputs")
         if not math.isfinite(value) or not low <= value <= high:
+            raise ExecutionFailure("invalid_inputs")
+        if name == "grid_cells_per_period" and value not in (low, high):
             raise ExecutionFailure("invalid_inputs")
         values[name] = float(value)
     return values

@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.4,
+        "grid_cells_per_period": 16
+      },
+      "peak_frequency_c_over_a": 0.23439999999999997,
+      "peak_wavelength_over_a": 4.266211604095564,
+      "peak_transmission": 0.7341775835916065
+    },
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.5,
+        "grid_cells_per_period": 16
+      },
+      "peak_frequency_c_over_a": 0.22099999999999997,
+      "peak_wavelength_over_a": 4.524886877828055,
+      "peak_transmission": 0.7315246577765596
+    },
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.4,
+        "grid_cells_per_period": 24
+      },
+      "peak_frequency_c_over_a": 0.23479999999999998,
+      "peak_wavelength_over_a": 4.258943781942079,
+      "peak_transmission": 0.7459537036228538
+    },
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.5,
+        "grid_cells_per_period": 24
+      },
+      "peak_frequency_c_over_a": 0.22119999999999998,
+      "peak_wavelength_over_a": 4.520795660036167,
+      "peak_transmission": 0.7654061120366621
+    }
+  ]
+}

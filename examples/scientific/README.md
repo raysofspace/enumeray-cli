@@ -1,17 +1,17 @@
 # Validate a scientific model integration
 
-Model authors can use the HUXt, REBOUND, SWMM and LAMMPS wrappers to practice validating
-an integration before publishing it. Run a known case with the pinned solver,
-then change an input to check that the wrapper passes the value through and
-produces the expected change in the result.
+Model authors can use the HUXt, REBOUND, SWMM, LAMMPS and Meep wrappers to
+practice validating an integration before publishing it. Run a known case
+with the pinned solver, then change an input to check that the wrapper passes
+the value through and produces the expected change in the result.
 
 ## Set up the solvers
 
 You need Python 3.9 or newer to extract the archive and
 [uv](https://docs.astral.sh/uv/getting-started/installation/) to install the
 pinned Python and solver packages. Allow a few gigabytes for the environment
-and download cache. Use Linux for local SWMM and LAMMPS solver runs. HUXt and
-REBOUND can also run locally on macOS ARM64.
+and download cache. Use Linux for local SWMM and LAMMPS solver runs and
+Debian Bookworm for Meep. HUXt and REBOUND also run locally on macOS ARM64.
 
 Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
 and [its checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
@@ -53,6 +53,13 @@ uv pip install --python .venv/bin/python --require-hashes -r build-requirements.
 uv pip install --python .venv/bin/python --require-hashes --no-build-isolation -r requirements.lock
 ```
 
+For local Meep solver runs on Debian Bookworm, install the serial executable.
+
+```sh
+sudo apt-get update
+sudo apt-get install --no-install-recommends meep=1.25.0-2 libmeep30=1.25.0-2
+```
+
 Setup downloads packages. After setup, the wrapper checks can run offline and
 use one CPU thread. The HUXt package includes the ephemeris used by this example.
 
@@ -83,6 +90,12 @@ diffusion at the fixed reference temperature.
 
 ```sh
 .venv/bin/python run_example.py lammps --directory lammps-default
+```
+
+On Debian Bookworm, run Meep to find the transmission peak of the cavity.
+
+```sh
+.venv/bin/python run_example.py meep --directory meep-default
 ```
 
 The runner checks the installed versions and saves the plot, CSV data,
@@ -136,6 +149,15 @@ For LAMMPS, copy `lammps/inputs.json` to `lammps-warmer.json` and change only
 Compare the displacement plots and the fitted diffusion coefficients in both
 runs. The fixed reference temperature stays at `1.0`.
 
+For Meep, copy `meep/inputs.json` to `meep-wider.json` and change only
+`cavity_spacing_periods` from `1.4` to `1.5`.
+
+```sh
+.venv/bin/python run_example.py meep --inputs meep-wider.json --directory meep-wider
+```
+
+The peak wavelength should move from about 4.266 to 4.525 lattice periods.
+
 ## Understand the checks
 
 `run-record.json` records the Python and solver versions, dependency lock
@@ -146,7 +168,8 @@ saved reference. REBOUND's trajectory is compared with a solution of Kepler's
 equation and checked for conservation of energy and angular momentum. SWMM's
 runoff is compared with saved references and checked for water balance.
 The LAMMPS checker fits the diffusion coefficients again from the saved
-displacements and checks the production energy drift.
+displacements and checks the production energy drift. The Meep checker
+recalculates the transmission peak and compares it with saved references.
 
 Plots can vary with fonts and plotting libraries. Use the CSV data and the
 numerical checks to compare calculations. These are simplified models, so the
