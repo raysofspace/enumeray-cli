@@ -22,6 +22,7 @@ class ScientificModelTests(unittest.TestCase):
                                               "rebound": "5.2.2", "swmm-toolkit": "0.17.0"})
         self.assertEqual(receipt["swmm_engine_version"], "5.2.4")
         self.assertEqual(receipt["lammps_engine_version"], "22 Jul 2025 - Update 4")
+        self.assertEqual(receipt["meep_engine_version"], "1.25.0")
 
     def test_uniform_huxt_matches_analytic_acceleration(self):
         self.assertLessEqual(uniform_wind_check(), 1e-3)
@@ -104,6 +105,27 @@ class ScientificModelTests(unittest.TestCase):
             csv.write_text("\n".join(rows) + "\n")
             with self.assertRaisesRegex(ValueError, "excessive energy drift"):
                 verify_science(model, inputs, outputs, paths)
+
+    def test_meep_spectrum_summary_and_reference(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            with ZipFile(ROOT / "meep" / "sample-run.zip") as sample:
+                for name in ("inputs.json", "outputs.json", "spectrum.csv", "transmission.png"):
+                    (work / name).write_bytes(sample.read(f"meep-sample/{name}"))
+            inputs = json.loads((work / "inputs.json").read_text())
+            outputs = json.loads((work / "outputs.json").read_text())
+            paths = {slot: work / name for slot, (name, _) in FILES["meep"].items()}
+            self.assertTrue(verify_science("meep", inputs, outputs, paths)["reference_checked"])
+            changed = {**outputs, "peak_wavelength_over_a": outputs["peak_wavelength_over_a"] + 0.01}
+            with self.assertRaisesRegex(ValueError, "Meep summary disagrees"):
+                verify_science("meep", inputs, changed, paths)
+            rows = paths["spectrum_csv"].read_text().splitlines()
+            first = rows[1].split(",")
+            first[-1] = "0.123"
+            rows[1] = ",".join(first)
+            paths["spectrum_csv"].write_text("\n".join(rows) + "\n")
+            with self.assertRaisesRegex(ValueError, "Invalid Meep wavelength, flux or transmission"):
+                verify_science("meep", inputs, outputs, paths)
 
     def test_collected_artifacts_and_numerical_changes_are_checked(self):
         model = "rebound"

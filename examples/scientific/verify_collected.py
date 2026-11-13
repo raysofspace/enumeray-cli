@@ -39,7 +39,7 @@ def verify_science(model, inputs, outputs, files):
         rows = np.array([[float(value) for value in row] for row in reader])
     if not np.all(np.isfinite(rows)):
         raise ValueError("Nonfinite scientific CSV")
-    if model in ("swmm", "lammps"):
+    if model in ("swmm", "lammps", "meep"):
         return load_model(model, "verify.py").verify(values, outputs, header, rows)
     if model == "rebound":
         module = load_model(model)

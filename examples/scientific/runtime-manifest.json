@@ -25,11 +25,14 @@
     "huxt": 180,
     "lammps": 120,
     "rebound": 60,
-    "swmm": 60
+    "swmm": 60,
+    "meep": 120
   },
   "threads": 1,
   "huxt_numba_jit_enabled": false,
   "qualification_peak_rss_bytes": 1073741824,
   "build_requirements_sha256": "317fc22d1ad19a30aa4b73f94898c155e28c8f035821b71389a924bb40064f6c",
-  "max_output_bytes_per_run": 8388608
+  "max_output_bytes_per_run": 8388608,
+  "meep_engine_version": "1.25.0",
+  "meep_control_sha256": "564a965d042b6fbec00cb8d40920ad2033ea2d530a3c8e511627e5ada8853fb0"
 }

@@ -45,8 +45,8 @@ def main():
     from protocol import publish
     publish(output, (json.dumps(values, allow_nan=False) + "\n").encode())
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if model == "lammps":
-        # The serial LAMMPS executable runs while the Python worker is resident.
+    if model in ("lammps", "meep"):
+        # Count native solver memory while the Python worker is resident.
         peak += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     metrics = {"peak_rss_bytes": int(peak if sys.platform == "darwin" else peak * 1024),
                "offline": True}

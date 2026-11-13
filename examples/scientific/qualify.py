@@ -62,6 +62,13 @@ def environment_receipt(models=tuple(FILES)):
         if lammps.ENGINE != manifest["lammps_engine_version"]:
             raise ValueError("LAMMPS engine version differs from runtime manifest")
         receipt.update(lammps_engine_version=lammps.ENGINE, lammps_deck_sha256=deck_sha256)
+    if "meep" in models:
+        meep = load_model("meep")
+        engine_version = meep.engine_version()
+        control_sha256 = hashlib.sha256(meep.CONTROL.read_bytes()).hexdigest()
+        if engine_version != manifest["meep_engine_version"] or control_sha256 != manifest["meep_control_sha256"]:
+            raise ValueError("Meep engine or cavity control differs from runtime manifest")
+        receipt.update(meep_engine_version=engine_version, meep_control_sha256=control_sha256)
     return receipt
 
 
@@ -104,6 +111,9 @@ def qualify(models=tuple(FILES), extrema=False):
             cases.append(("more-paved", {"paved_percent": 60}))
         if model == "lammps":
             cases.append(("warmer-liquid", {"temperature_reduced": 1.5}))
+        if model == "meep":
+            cases.extend((("wider-cavity", {**defaults, "cavity_spacing_periods": 1.5}),
+                          ("finer-grid", {**defaults, "grid_cells_per_period": 30})))
         if extrema:
             keys = list(PARAMETERS[model])
             cases += [("boundary-" + str(index), dict(zip(keys, values))) for index, values in

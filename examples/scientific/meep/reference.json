@@ -1,0 +1,31 @@
+{
+  "cases": [
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.4,
+        "grid_cells_per_period": 26
+      },
+      "peak_frequency_c_over_a": 0.23459999999999998,
+      "peak_wavelength_over_a": 4.262574595055414,
+      "peak_transmission": 0.7998561627580235
+    },
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.5,
+        "grid_cells_per_period": 26
+      },
+      "peak_frequency_c_over_a": 0.22099999999999997,
+      "peak_wavelength_over_a": 4.524886877828055,
+      "peak_transmission": 0.8529553409045294
+    },
+    {
+      "inputs": {
+        "cavity_spacing_periods": 1.4,
+        "grid_cells_per_period": 30
+      },
+      "peak_frequency_c_over_a": 0.23479999999999998,
+      "peak_wavelength_over_a": 4.258943781942079,
+      "peak_transmission": 0.8164518186386086
+    }
+  ]
+}
