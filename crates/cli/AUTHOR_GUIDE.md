@@ -104,7 +104,7 @@ declaration; it is not the filename of the supplied Python wrapper. Start with a
 complete starter when you need a ready local project. The
 [file/download chooser](https://doc.enumeray.com/reference/manifests/#choose-the-file-for-your-command)
 distinguishes author declarations, scientific inputs, wrapper envelopes and
-collection manifests. The HUXt, REBOUND and SWMM demo models each have
+collection manifests. The HUXt, REBOUND, SWMM and LAMMPS demo models each have
 documented inputs and outputs.
 
 ## Responsibilities and execution choices

@@ -1,6 +1,6 @@
 # Validate a scientific model integration
 
-Model authors can use the HUXt, REBOUND and SWMM wrappers to practice validating
+Model authors can use the HUXt, REBOUND, SWMM and LAMMPS wrappers to practice validating
 an integration before publishing it. Run a known case with the pinned solver,
 then change an input to check that the wrapper passes the value through and
 produces the expected change in the result.
@@ -10,8 +10,8 @@ produces the expected change in the result.
 You need Python 3.9 or newer to extract the archive and
 [uv](https://docs.astral.sh/uv/getting-started/installation/) to install the
 pinned Python and solver packages. Allow a few gigabytes for the environment
-and download cache. Use Linux for local SWMM solver runs. HUXt and REBOUND
-can also run locally on macOS ARM64.
+and download cache. Use Linux for local SWMM and LAMMPS solver runs. HUXt and
+REBOUND can also run locally on macOS ARM64.
 
 Download the [model examples archive](https://doc.enumeray.com/examples/model-examples.tar.gz)
 and [its checksum](https://doc.enumeray.com/examples/model-examples.tar.gz.sha256)
@@ -78,6 +78,13 @@ On Linux, run SWMM for the default 25% paved catchment from the same folder.
 .venv/bin/python run_example.py swmm --directory swmm-default
 ```
 
+On Linux, run LAMMPS to compare diffusion at the example temperature with
+diffusion at the fixed reference temperature.
+
+```sh
+.venv/bin/python run_example.py lammps --directory lammps-default
+```
+
 The runner checks the installed versions and saves the plot, CSV data,
 numerical summary (`outputs.json`) and run record in the directory you choose.
 Open the plot and `outputs.json` there. Use a new directory for each run so you
@@ -119,6 +126,16 @@ Compare `outputs.json` in `swmm-default` and `swmm-more-paved`. The peak flow
 should rise from about 39.50 to 57.76 L/s and total runoff volume from about
 102.61 to 171.62 m³. The storm depth stays at 25 mm.
 
+For LAMMPS, copy `lammps/inputs.json` to `lammps-warmer.json` and change only
+`temperature_reduced` from `1.2` to `1.5`.
+
+```sh
+.venv/bin/python run_example.py lammps --inputs lammps-warmer.json --directory lammps-warmer
+```
+
+Compare the displacement plots and the fitted diffusion coefficients in both
+runs. The fixed reference temperature stays at `1.0`.
+
 ## Understand the checks
 
 `run-record.json` records the Python and solver versions, dependency lock
@@ -128,6 +145,8 @@ answer a different question. HUXt's default speed series is compared with its
 saved reference. REBOUND's trajectory is compared with a solution of Kepler's
 equation and checked for conservation of energy and angular momentum. SWMM's
 runoff is compared with saved references and checked for water balance.
+The LAMMPS checker fits the diffusion coefficients again from the saved
+displacements and checks the production energy drift.
 
 Plots can vary with fonts and plotting libraries. Use the CSV data and the
 numerical checks to compare calculations. These are simplified models, so the

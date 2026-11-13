@@ -5,6 +5,7 @@ import base64
 from pathlib import Path
 import tempfile
 import unittest
+from zipfile import ZipFile
 
 from qualify import environment_receipt, uniform_wind_check
 from run_example import run_example
@@ -17,8 +18,10 @@ ROOT = Path(__file__).resolve().parent
 class ScientificModelTests(unittest.TestCase):
     def test_locked_runtime_and_bundled_dataset(self):
         receipt = environment_receipt()
-        self.assertEqual(receipt["solvers"], {"huxt": "5.0.3", "rebound": "5.2.2", "swmm-toolkit": "0.17.0"})
+        self.assertEqual(receipt["solvers"], {"huxt": "5.0.3", "lammps": "2025.7.22.4.0",
+                                              "rebound": "5.2.2", "swmm-toolkit": "0.17.0"})
         self.assertEqual(receipt["swmm_engine_version"], "5.2.4")
+        self.assertEqual(receipt["lammps_engine_version"], "22 Jul 2025 - Update 4")
 
     def test_uniform_huxt_matches_analytic_acceleration(self):
         self.assertLessEqual(uniform_wind_check(), 1e-3)
@@ -76,6 +79,31 @@ class ScientificModelTests(unittest.TestCase):
         self.assertEqual(runs[25]["rainfall_depth_mm"], runs[60]["rainfall_depth_mm"])
         for name in ("peak_runoff_lps", "runoff_volume_m3"):
             self.assertLess(runs[25][name], runs[60][name])
+
+    def test_lammps_independently_checks_fit_and_energy_drift(self):
+        model = "lammps"
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            with ZipFile(ROOT / model / "sample-run.zip") as sample:
+                for name in ("inputs.json", "outputs.json", "msd.csv", "diffusion.png"):
+                    (work / name).write_bytes(sample.read(f"lammps-sample/{name}"))
+            inputs = json.loads((work / "inputs.json").read_text())
+            outputs = json.loads((work / "outputs.json").read_text())
+            paths = {slot: work / name for slot, (name, _) in FILES[model].items()}
+            checks = verify_science(model, inputs, outputs, paths)
+            self.assertTrue(checks["reference_checked"])
+            self.assertGreater(outputs["diffusion_reduced"], outputs["baseline_diffusion_reduced"])
+            changed = {**outputs, "diffusion_reduced": outputs["diffusion_reduced"] + 0.01}
+            with self.assertRaisesRegex(ValueError, "summary disagrees"):
+                verify_science(model, inputs, changed, paths)
+            csv = paths["msd_csv"]
+            rows = csv.read_text().splitlines()
+            last = rows[-1].split(",")
+            last[-1] = str(float(last[-1]) + 0.1)
+            rows[-1] = ",".join(last)
+            csv.write_text("\n".join(rows) + "\n")
+            with self.assertRaisesRegex(ValueError, "excessive energy drift"):
+                verify_science(model, inputs, outputs, paths)
 
     def test_collected_artifacts_and_numerical_changes_are_checked(self):
         model = "rebound"

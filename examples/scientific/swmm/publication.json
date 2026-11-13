@@ -8,7 +8,7 @@
   "identities": {
     "model": "swmm@5.2.4:urban-catchment:1",
     "wrapper": "enumeray-scientific-demo-wrapper@1",
-    "runtime": "enumeray-demo:python3.12.16:locked-v2",
+    "runtime": "enumeray-demo:python3.12.16:locked-v3",
     "datasets": ["enumeray:synthetic-rainstorm:1"]
   },
   "execution": {

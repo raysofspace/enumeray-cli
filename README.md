@@ -7,8 +7,9 @@ HTTP client, outbound connector, compute runner and shared wire contracts.
 One executable supports model users, model authors and connector owners.
 It connects to the Enumeray API at https://api.enumeray.com by default. Sign in
 with `enumeray auth login`.
-The HUXt solar-wind, REBOUND orbit and SWMM stormwater demos run on compute
-provided by Enumeray, so you can try an analysis without setting up a connector.
+The HUXt solar-wind, REBOUND orbit, SWMM stormwater and LAMMPS liquid-diffusion
+demos run on compute provided by Enumeray, so you can try an analysis without
+setting up a connector.
 Follow [your first run](https://doc.enumeray.com/start/first-run/) after installing the CLI.
 For a scientific pilot, coordinate your model, compute and validation with its
 owners. Building and local tests require no service checkout, database credentials
