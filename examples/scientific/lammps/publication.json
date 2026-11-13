@@ -91,7 +91,7 @@
         "properties": {"artifact_id": {"type": "string"}},
         "required": ["artifact_id"],
         "additionalProperties": false,
-        "description": "Mean displacement squared over time at both temperatures, with replica spread and the fitting window.",
+        "description": "Mean squared displacement over time at both temperatures, with replica spread and the fitting window.",
         "x-enumeray-file": {
           "media_types": ["image/png"],
           "max_bytes": 8388608

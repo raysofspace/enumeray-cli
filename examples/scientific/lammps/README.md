@@ -73,9 +73,9 @@ diffusion coefficient is one sixth of the slope fitted to mean squared
 displacement over time. The summary reports the mean and standard deviation
 of the three replica estimates at each temperature.
 
-The sample estimates a diffusion coefficient of **0.0633** at the baseline
-temperature and **0.0831** at 1.2, in reduced units. The corresponding sample
-standard deviations are 0.0037 and 0.0081. In `results/outputs.json`, compare
+The sample estimates a diffusion coefficient of **0.0596** at the baseline
+temperature and **0.0869** at 1.2, in reduced units. The corresponding sample
+standard deviations are 0.0034 and 0.0018. In `results/outputs.json`, compare
 `baseline_diffusion_reduced` with `diffusion_reduced`.
 
 | File | What to look for |
@@ -119,7 +119,8 @@ in place of `lammps-run`.
 Compare the displacement curves and `results/outputs.json` in the two
 folders. A steeper slope over the fitted interval corresponds to faster
 diffusion. In the same reference environment, raising the temperature from
-1.2 to 1.5 increased the mean diffusion coefficient from 0.0831 to 0.1011.
+1.2 to 1.5 increased the mean diffusion estimate from 0.0869 to 0.0977.
+The warmer run had a sample standard deviation of 0.0179.
 
 <a id="change-the-inputs"></a>
 
@@ -135,7 +136,7 @@ and [run with your own inputs](https://doc.enumeray.com/users/run-model/).
 ## Numerical setup and checks
 
 The wrapper uses LAMMPS 22 Jul 2025 Update 4. The [solver input](liquid.in)
-sets up 864 atoms in a three-dimensional periodic box at a reduced number
+sets up 256 atoms in a three-dimensional periodic box at a reduced number
 density of 0.8. The pair potential is cut off at 2.5 times its length scale
 and shifted so the potential is zero at that distance.
 
@@ -158,8 +159,10 @@ Reduced temperature is the ratio of thermal energy to the Lennard-Jones
 energy scale. Mean squared displacement is in units of the length scale
 squared. The time unit is set by the same length and energy scales and the
 particle mass. The diffusion unit is the length scale squared divided by the
-time unit. To interpret the result for a specific material, choose material
-parameters and validate the model against measurements for that material.
+time unit. The estimates apply to the fixed periodic box used here because
+[box size can affect the measured coefficient](https://doi.org/10.1021/jp0477147).
+To interpret the result for a specific material, choose material parameters
+and validate the model against measurements for that material.
 
 ### Repeat the scientific checks
 

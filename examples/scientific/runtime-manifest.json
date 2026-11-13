@@ -12,7 +12,7 @@
   "swmm_engine_version": "5.2.4",
   "swmm_catchment_sha256": "3a555293a34a9751b2450b6b94033597589d9b10efe79d4393945100a7ed08ac",
   "lammps_engine_version": "22 Jul 2025 - Update 4",
-  "lammps_deck_sha256": "c2d1b15da82d3c301d3e1ee458006348322a02752368592bc3cc1ea40094385d",
+  "lammps_deck_sha256": "20fcb6331d07869437c57c9a71557e21c8a10dcd1ee3b2ea6c2dfbf00ff04ce9",
   "upstream_commits": {
     "huxt": "4d5b60bedb4b30ad140a8ea4972c4f5396c687ff",
     "lammps": "611ca3b7f8525ba802373b04f9e3d632d515f7e3",
