@@ -142,10 +142,15 @@ explains the files saved by `analysis collect`.
 ## Test the example code
 
 For work on the example implementation, run the protocol and supervisor tests
-with system Python. The solver tests use the locked environment.
+with system Python.
 
 ```sh
 python3 -B -m unittest discover -s . -p test_runtime.py
+```
+
+Run the full solver suite on Linux in the locked environment.
+
+```sh
 .venv/bin/python -B -m unittest discover -s . -p test_models.py
 ```
 
