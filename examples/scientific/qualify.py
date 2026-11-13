@@ -113,7 +113,7 @@ def qualify(models=tuple(FILES), extrema=False):
             cases.append(("warmer-liquid", {"temperature_reduced": 1.5}))
         if model == "meep":
             cases.extend((("wider-cavity", {**defaults, "cavity_spacing_periods": 1.5}),
-                          ("finer-grid", {**defaults, "grid_cells_per_period": 20})))
+                          ("finer-grid", {**defaults, "grid_cells_per_period": 24})))
         if extrema:
             keys = list(PARAMETERS[model])
             cases += [("boundary-" + str(index), dict(zip(keys, values))) for index, values in

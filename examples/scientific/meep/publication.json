@@ -30,7 +30,7 @@
       },
       "grid_cells_per_period": {
         "type": "integer",
-        "enum": [16, 20],
+        "enum": [16, 24],
         "description": "Finite-difference grid cells per lattice period."
       }
     }
@@ -89,7 +89,7 @@
     },
     {
       "name": "finer-grid",
-      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 20}
+      "inputs": {"cavity_spacing_periods": 1.4, "grid_cells_per_period": 24}
     }
   ]
 }

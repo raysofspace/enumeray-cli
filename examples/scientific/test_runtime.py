@@ -113,10 +113,10 @@ class RuntimeTests(unittest.TestCase):
                 validate_inputs(model, {**defaults, "command": "anything"})
 
     def test_meep_accepts_only_the_reviewed_grid_resolutions(self):
-        for grid in (16, 20):
+        for grid in (16, 24):
             inputs = {**request("meep")["inputs"], "grid_cells_per_period": grid}
             self.assertEqual(validate_inputs("meep", inputs), inputs)
-        for grid in (16.5, 17, 18, 19):
+        for grid in (16.5, 17, 20, 23):
             with self.subTest(grid=grid), self.assertRaises(ExecutionFailure):
                 validate_inputs("meep", {**request("meep")["inputs"], "grid_cells_per_period": grid})
 

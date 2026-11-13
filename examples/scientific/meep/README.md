@@ -117,9 +117,13 @@ moves the sample peak from about **4.266** to **4.525** lattice periods.
 
 Prepare an analysis with `--example finer-grid` and use a fresh directory.
 This example keeps the 1.4-period spacing and increases the resolution to
-20 cells per period. The reference wavelength at that resolution is about
-4.266 periods. Set the spacing to `1.5` in another fresh analysis with the
-same finer-grid example to compare the shift at both resolutions.
+24 cells per period. The reference wavelength at that resolution is about
+4.259 periods. Set the spacing to `1.5` in another fresh analysis with the
+same finer-grid example to compare the shift at both resolutions. In an
+offline check at 40 cells per period, the peak shifted by 0.262 periods.
+The 16- and 24-cell grids gave shifts of 0.259 and 0.262 periods on the
+same sampled frequency grid. Compare the shift before interpreting the
+height of the peak.
 
 <a id="change-the-inputs"></a>
 
@@ -131,7 +135,7 @@ Start with the [example inputs](inputs.json) or
 | Field | Meaning | Allowed values | Named example value |
 | --- | --- | --- | --- |
 | `cavity_spacing_periods` | Center-to-center distance between the innermost holes, divided by the lattice period. | 1.3–1.5 | 1.4 |
-| `grid_cells_per_period` | Number of finite-difference grid cells in one lattice period. | 16 or 20 | 16 |
+| `grid_cells_per_period` | Number of finite-difference grid cells in one lattice period. | 16 or 24 | 16 |
 
 ## Numerical setup and checks
 

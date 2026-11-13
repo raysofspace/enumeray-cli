@@ -20,7 +20,7 @@ PARAMETERS = {
                 "orbits": (0.25, 10)},
     "swmm": {"paved_percent": (0, 100)},
     "lammps": {"temperature_reduced": (1.1, 1.6)},
-    "meep": {"cavity_spacing_periods": (1.3, 1.5), "grid_cells_per_period": (16, 20)},
+    "meep": {"cavity_spacing_periods": (1.3, 1.5), "grid_cells_per_period": (16, 24)},
 }
 FILES = {"huxt": {"wind_field_csv": ("wind-field.csv", "text/csv"),
                   "wind_plot_png": ("wind.png", "image/png")},
