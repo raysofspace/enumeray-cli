@@ -16,6 +16,7 @@ use enumeray_contracts::{
         PublicationActivationReceipt, PublicationCreate, PublicationDetail,
         PublicationRegistration,
     },
+    models::parse_publication,
     numeric::equivalent,
 };
 use serde_json::{Value, json};
@@ -51,6 +52,7 @@ pub(crate) fn execute(
             file.as_deref(),
             rollback_from.as_deref(),
             candidate.as_deref(),
+            None,
         )
         .map(|mut value| {
             next_invocation(args, &mut value);
@@ -105,23 +107,8 @@ pub(crate) fn execute(
     match command {
         Command::Status { .. } => complete(args, &directory, &release, &progress, &snapshot, 0),
         Command::Review { .. } => {
-            if progress.registered_identity.is_none() {
-                return Err(invalid(
-                    "Resume the saved registration before reviewing this release.",
-                )
-                .into());
-            }
-            require_ready(&release, &snapshot)?;
-            if progress.observed_current
-                || snapshot
-                    .publication
-                    .as_ref()
-                    .is_some_and(|v| v["status"] == "published")
-            {
-                return Err(invalid("This candidate has already been activated; inspect status. Rollback requires a fresh candidate.").into());
-            }
             // Only this explicit command may refresh a saved guard after a conflict.
-            progress.review = Some(review(&snapshot));
+            progress.review = Some(review_candidate(&release, &progress, &snapshot)?);
             directory.write("state.json", &progress, true)?;
             complete(args, &directory, &release, &progress, &snapshot, 0)
         }
@@ -132,6 +119,92 @@ pub(crate) fn execute(
     }
 }
 
+pub(crate) fn wizard_init(
+    args: &Args,
+    client: &EnumerayClient,
+    path: &Path,
+    model: &str,
+    source: &Value,
+) -> Result<Value, Failure> {
+    let mut value = init(client, model, path, None, None, None, Some(source))?;
+    next_invocation(args, &mut value);
+    Ok(value)
+}
+
+pub(crate) fn wizard_status(
+    args: &Args,
+    client: &EnumerayClient,
+    path: &Path,
+    model: &str,
+    source: &Value,
+) -> Result<Value, Failure> {
+    let directory = Directory::inspect(path)?;
+    let (release, mut progress, snapshot) = wizard_snapshot(client, &directory, model, source)?;
+    // Validate the remote identity without retaining observations on disk.
+    observe_identity(&release, &mut progress, &snapshot)?;
+    wizard_summary(args, &directory, &release, &progress, &snapshot)
+}
+
+pub(crate) fn wizard_review(
+    args: &Args,
+    client: &EnumerayClient,
+    path: &Path,
+    model: &str,
+    source: &Value,
+    approved: &Value,
+) -> Result<Value, Failure> {
+    let directory = Directory::open(path)?;
+    let (release, mut progress, snapshot) = wizard_snapshot(client, &directory, model, source)?;
+    observe_identity(&release, &mut progress, &snapshot)?;
+    let latest = review_candidate(&release, &progress, &snapshot)?;
+    if latest != serde_json::from_value::<Review>(approved.clone())? {
+        return Err(invalid(
+            "Current publication or candidate authority changed after your preview. Inspect the comparison and confirm it again.",
+        )
+        .into());
+    }
+    progress.review = Some(latest);
+    directory.write("state.json", &progress, true)?;
+    wizard_summary(args, &directory, &release, &progress, &snapshot)
+}
+
+fn wizard_snapshot(
+    client: &EnumerayClient,
+    directory: &Directory,
+    model: &str,
+    source: &Value,
+) -> Result<(Release, Progress, Snapshot), Failure> {
+    let (release, progress) = directory.load(client)?;
+    if release.model_id != model
+        || release.source["kind"] != "publication"
+        || !equivalent(&release.source["publication"], source)
+    {
+        return Err(invalid(
+            "The saved candidate belongs to a different model or declaration. Preserve this directory and start a new setup for the revised declaration.",
+        )
+        .into());
+    }
+    require_account(&release, client.me()?.user_id)?;
+    let snapshot = inspect(client, &release)?;
+    Ok((release, progress, snapshot))
+}
+
+fn wizard_summary(
+    args: &Args,
+    directory: &Directory,
+    release: &Release,
+    progress: &Progress,
+    snapshot: &Snapshot,
+) -> Result<Value, Failure> {
+    let mut value = summary(directory, release, progress, snapshot)?;
+    next_invocation(args, &mut value);
+    if matches!(value["stage"].as_str(), Some("ready" | "reviewed")) {
+        value["review_snapshot"] =
+            serde_json::to_value(review_candidate(release, progress, snapshot)?)?;
+    }
+    Ok(value)
+}
+
 fn init(
     client: &EnumerayClient,
     model: &str,
@@ -139,6 +212,7 @@ fn init(
     file: Option<&Path>,
     rollback: Option<&str>,
     adopted: Option<&str>,
+    approved_source: Option<&Value>,
 ) -> Result<Value, Error> {
     if std::fs::symlink_metadata(path).is_ok() {
         return Err(invalid(
@@ -176,8 +250,15 @@ fn init(
             candidate,
             json!({"kind":"adopted","publication":publication}),
         )
-    } else if let Some(file) = file {
-        let (source, parsed) = publication_source(file)?;
+    } else if file.is_some() || approved_source.is_some() {
+        let (source, parsed) = match approved_source {
+            Some(source) => {
+                let parsed = parse_publication(&serde_json::to_vec(source)?)
+                    .map_err(|error| invalid(error.to_string()))?;
+                (source.clone(), parsed)
+            }
+            None => publication_source(file.expect("file or approved source"))?,
+        };
         if parsed.model.id != model {
             return Err(invalid(
                 "Publication source model ID differs from the selected release model.",
@@ -428,6 +509,15 @@ fn retain_identity(
     progress: &mut Progress,
     snapshot: &Snapshot,
 ) -> Result<(), Error> {
+    observe_identity(release, progress, snapshot)?;
+    directory.write("state.json", progress, true)
+}
+
+fn observe_identity(
+    release: &Release,
+    progress: &mut Progress,
+    snapshot: &Snapshot,
+) -> Result<(), Error> {
     if let Some(publication) = &snapshot.publication {
         if !publication.get("configuration_retention").is_some_and(|v| {
             matches!(
@@ -498,7 +588,7 @@ fn retain_identity(
             "Saved candidate is no longer readable; restore model authority before resuming.",
         ));
     }
-    directory.write("state.json", progress, true)
+    Ok(())
 }
 
 fn blockers(release: &Release, snapshot: &Snapshot) -> Vec<String> {
@@ -587,6 +677,30 @@ fn review(snapshot: &Snapshot) -> Review {
         candidate: identity(snapshot.publication.as_ref().expect("ready candidate")),
         current: snapshot.model["current_publication"].clone(),
     }
+}
+
+fn review_candidate(
+    release: &Release,
+    progress: &Progress,
+    snapshot: &Snapshot,
+) -> Result<Review, Error> {
+    if progress.registered_identity.is_none() {
+        return Err(invalid(
+            "Resume the saved registration before reviewing this release.",
+        ));
+    }
+    require_ready(release, snapshot)?;
+    if progress.observed_current
+        || snapshot
+            .publication
+            .as_ref()
+            .is_some_and(|v| v["status"] == "published")
+    {
+        return Err(invalid(
+            "This candidate has already been activated; inspect status. Rollback requires a fresh candidate.",
+        ));
+    }
+    Ok(review(snapshot))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -748,10 +862,7 @@ fn summary(
     let reasons = blockers(release, snapshot);
     let current = current_id(&snapshot.model).expect("validated guard");
     let reviewed = progress.review.as_ref();
-    let guard_changed = reviewed.is_some_and(|r| {
-        r.expected_current != current
-            || r.authority != p.and_then(|p| p.get("release_authority")).cloned()
-    });
+    let guard_changed = reviewed.is_some_and(|r| p.is_none() || *r != review(snapshot));
     let activated = progress.observed_current
         || progress
             .activation_attempts

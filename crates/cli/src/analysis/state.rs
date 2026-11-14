@@ -331,6 +331,15 @@ impl Directory {
         Ok(lock)
     }
 
+    /// Observe an initialized native analysis without creating a lock file.
+    pub(super) fn read_snapshot(&self) -> Result<File, Error> {
+        let path = self.root.join("state.lock");
+        config::require_private(&path)?;
+        let lock = File::open(&path)?;
+        lock.lock_shared()?;
+        Ok(lock)
+    }
+
     pub fn read<T: DeserializeOwned>(&self, relative: &str) -> Result<T, Error> {
         let path = self.root.join(relative);
         config::require_private(&path)?;

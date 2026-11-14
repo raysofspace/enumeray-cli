@@ -878,6 +878,8 @@ pub enum Connector {
 
 #[derive(Subcommand)]
 pub enum Model {
+    /// Guide a model author from a local project to a reviewed candidate.
+    Setup(ModelSetup),
     /// Save, resume, review and explicitly activate one publication release.
     #[command(subcommand)]
     Release(Release),
@@ -1035,6 +1037,25 @@ pub enum Model {
         /// Observed model generation from model get/members; shared by access and governance changes.
         #[arg(long)]
         generation: i64,
+    },
+}
+
+#[derive(clap::Args)]
+pub struct ModelSetup {
+    /// Private workspace to create or resume.
+    #[arg(long)]
+    pub directory: Option<PathBuf>,
+    #[command(subcommand)]
+    pub command: Option<ModelSetupCommand>,
+}
+
+#[derive(Subcommand)]
+pub enum ModelSetupCommand {
+    /// Inspect saved progress and the next action without advancing setup.
+    Status {
+        /// Existing private model setup workspace.
+        #[arg(long)]
+        directory: PathBuf,
     },
 }
 
