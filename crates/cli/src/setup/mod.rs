@@ -1,14 +1,16 @@
-//! One durable owner workflow; host credentials and scientific executions retain
-//! their existing independent identities and authorization boundaries.
+//! Durable connector enrollment and execution context readiness.
 mod prompt;
-mod trial;
 use crate::{
     app::{Completion, Failure},
     args::{Args, Auth, Connector, Setup, SetupCommand, SetupMode},
     config,
 };
 use enumeray_client::{EnumerayClient, Error};
-use enumeray_contracts::{execution::ExecutionMode, management::*, setup::*};
+use enumeray_contracts::{
+    execution::{ConnectionConfig, DriverConfig, ExecutionMode},
+    management::{ConnectorCreate, ConnectorDiagnostics, ConnectorEnrollmentFile},
+    setup::*,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -21,6 +23,10 @@ use std::{
     time::Duration,
 };
 use uuid::Uuid;
+
+const INPUT_VERSION: u32 = 1;
+const CHECKPOINT_VERSION: u32 = 2;
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
@@ -31,34 +37,6 @@ struct Input {
     host: HostSetupSpec,
     connector: ConnectorCreate,
     startup: String,
-    #[serde(default)]
-    first_model: Option<FirstModel>,
-}
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct FirstModel {
-    model_id: String,
-    #[serde(default)]
-    project: Option<PathBuf>,
-    #[serde(default)]
-    demo: bool,
-    /// Optional already installed release. Otherwise choose a new child of an approved root.
-    #[serde(default)]
-    installed_release: Option<PathBuf>,
-    #[serde(default)]
-    inputs: Option<PathBuf>,
-    #[serde(default)]
-    example: Option<String>,
-    #[serde(default)]
-    files: Vec<String>,
-    #[serde(default)]
-    collections: Vec<String>,
-    #[serde(default)]
-    collection_manifests: Vec<String>,
-    #[serde(default)]
-    media_types: Vec<String>,
-    #[serde(default)]
-    metadata: Vec<String>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -82,16 +60,10 @@ struct Progress {
     connector_registered: bool,
     context_started: bool,
     context_registered: bool,
-    grant: Option<GrantCreate>,
-    grant_registered: bool,
     #[serde(default)]
     enrollment_paths: Vec<PathBuf>,
     #[serde(default)]
     pending_replacement: Option<PathBuf>,
-    #[serde(default)]
-    trial_approved: bool,
-    #[serde(default)]
-    trial: trial::Progress,
 }
 fn digest_bytes(bytes: impl AsRef<[u8]>) -> String {
     Sha256::digest(bytes.as_ref())
@@ -118,6 +90,36 @@ fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {
     config::require_private(path)?;
     config::read_json(path)
 }
+fn read_input(path: &Path) -> Result<Input, Error> {
+    match config::read_json(path) {
+        Err(Error::Json(_))
+            if config::read_json::<Value>(path)
+                .is_ok_and(|value| value.get("first_model").is_some()) =>
+        {
+            Err(invalid(
+                "Remove first_model from the setup input. Once the context is ready, use model release and analysis commands to prepare and trial a model.",
+            ))
+        }
+        result => result,
+    }
+}
+
+fn check_checkpoint_version(path: &Path) -> Result<(), Error> {
+    #[derive(Deserialize)]
+    struct Version {
+        manifest_version: u32,
+    }
+    match read::<Version>(path)?.manifest_version {
+        CHECKPOINT_VERSION => Ok(()),
+        1 => Err(invalid(
+            "This version-1 setup directory belongs to an older CLI. Keep it and use a new directory with enumeray connector setup. Use model release commands with any saved first-release directory and analysis commands with any saved first-trial directory.",
+        )),
+        _ => Err(invalid(
+            "Unsupported setup checkpoint version. Use a matching CLI to inspect this directory.",
+        )),
+    }
+}
+
 fn check_directory(path: &Path) -> Result<(), Error> {
     let m = fs::symlink_metadata(path)?;
     if !m.is_dir() || m.file_type().is_symlink() || m.permissions().mode() & 0o077 != 0 {
@@ -183,6 +185,12 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
     }
     check_directory(&directory)?;
     let directory = directory.canonicalize()?;
+    let plan_path = directory.join("setup.json");
+    match fs::symlink_metadata(&plan_path) {
+        Ok(_) => check_checkpoint_version(&plan_path)?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     // Inspection reads atomic state without waiting for the writer's network operations.
     let _writer = if inspecting {
         None
@@ -192,12 +200,11 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             "This setup is already being resumed; inspect status or wait for its writer.",
         )?)
     };
-    let plan_path = directory.join("setup.json");
     let (plan, mut progress) = if plan_path.exists() {
         let plan: Plan = read(&plan_path)?;
         let p: Progress = read(&directory.join("state.json"))?;
-        if plan.manifest_version != 1
-            || p.manifest_version != 1
+        if plan.manifest_version != CHECKPOINT_VERSION
+            || p.manifest_version != CHECKPOINT_VERSION
             || plan.operation_id.is_nil()
             || p.plan_sha256 != hash(&plan)?
         {
@@ -207,7 +214,7 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             .into());
         }
         if plan.directory != directory {
-            return Err(invalid("This setup checkpoint belongs to its original directory; restore it at that path rather than forking its candidate and trial identities.").into());
+            return Err(invalid("This setup checkpoint belongs to its original directory; restore it at that path to retain its registration and enrollment progress.").into());
         }
         if plan.profile != args.profile || plan.profile_file != profile_path(args)? {
             return Err(
@@ -215,19 +222,13 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             );
         }
         if let Some(file) = &options.file {
-            let supplied: Input = config::read_json(file)?;
+            let supplied = read_input(file)?;
             if hash(&supplied)? != hash(&plan.input)? {
                 return Err(invalid(
                     "Input differs from the frozen setup plan; use a new setup directory.",
                 )
                 .into());
             }
-        }
-        if options.mode.is_some_and(|m| {
-            (m == SetupMode::Development)
-                != (plan.input.host.context.definition.execution_mode == ExecutionMode::Development)
-        }) {
-            return Err(invalid("Selected mode differs from the saved setup.").into());
         }
         (plan, p)
     } else {
@@ -236,15 +237,17 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             return Err(invalid("Existing directory has no complete setup checkpoint; preserve it and select a new directory.").into());
         }
         let input = if let Some(file) = &options.file {
-            config::read_json(file)?
+            read_input(file)?
         } else if interactive(options) {
             prompt::input(args, options)?
         } else {
             return Err(invalid("Supply --file with a complete setup input, or run setup in a terminal for guidance.").into());
         };
         validate(&input)?;
+        let host =
+            enumeray_connector::host_configuration_plan(input.host.clone()).map_err(invalid)?;
         let plan = Plan {
-            manifest_version: 1,
+            manifest_version: CHECKPOINT_VERSION,
             operation_id: Uuid::new_v4(),
             directory: directory.clone(),
             profile: args.profile.clone(),
@@ -252,7 +255,7 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             input,
         };
         let progress = Progress {
-            manifest_version: 1,
+            manifest_version: CHECKPOINT_VERSION,
             plan_sha256: hash(&plan)?,
             user_id: None,
             approved: false,
@@ -261,29 +264,16 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             connector_registered: false,
             context_started: false,
             context_registered: false,
-            grant: None,
-            grant_registered: false,
             enrollment_paths: vec![],
             pending_replacement: None,
-            trial_approved: false,
-            trial: Default::default(),
         };
         // Publish progress first; a missing plan can never conceal an API mutation.
         config::write_private(&directory.join("state.json"), &progress, false)?;
         config::write_private(&plan_path, &plan, false)?;
-        let host = enumeray_connector::host_configuration_plan(plan.input.host.clone())
-            .map_err(invalid)?;
         config::write_private(&directory.join("host-plan.json"), &host, false)?;
         (plan, progress)
     };
     validate(&plan.input)?;
-    if options
-        .approve
-        .as_ref()
-        .is_some_and(|digest| digest != &progress.plan_sha256)
-    {
-        return Err(invalid("Approval does not match the saved setup plan digest.").into());
-    }
     if options.mode.is_some_and(|mode| {
         (mode == SetupMode::Development)
             != (plan.input.host.context.definition.execution_mode == ExecutionMode::Development)
@@ -310,27 +300,24 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
     if inspecting {
         return inspect(args, &directory, &plan, &progress);
     }
+    if options
+        .approve
+        .as_ref()
+        .is_some_and(|digest| digest != &progress.plan_sha256)
+    {
+        return Err(invalid("Approval does not match the owner setup plan SHA-256.").into());
+    }
     if !progress.approved {
         let overview = summary(&directory, &plan, &progress, "review_required");
-        eprintln!(
-            "Review connector {} and context {} for profile {:?} at {}.\nMode: {}. Startup: {}. Connector account: {}. Execution account: {}.\nReview {} and {} before approving.\nPlan SHA-256: {}",
-            plan.input.connector.id,
-            plan.input.host.context.id,
-            plan.profile,
-            plan.input.host.api_base_url,
-            enumeray_contracts::setup::mode_name(&plan.input.host.context.definition),
-            plan.input.startup,
-            plan.input.host.connector_account.name,
-            plan.input.host.execution_account.name,
-            plan_path.display(),
-            host_path.display(),
-            progress.plan_sha256
-        );
+        render_review(&plan, &progress, &host, &plan_path, &host_path)?;
         let approve = options.approve.as_deref() == Some(progress.plan_sha256.as_str())
-            || (interactive(options) && prompt::yes("Approve this exact setup plan", false)?);
-        if options.approve.is_some() && !approve {
-            return Err(invalid("Approval does not match the saved setup plan digest.").into());
-        }
+            || (interactive(options)
+                && prompt::yes(
+                    "Approve the saved connector setup plan?",
+                    "Use these settings to start or continue connector registration.",
+                    "Keep the plan for review and pause setup.",
+                    false,
+                )?);
         if !approve {
             return complete(overview, 1);
         }
@@ -345,7 +332,12 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
         );
         if !(options.allow_development_execution
             || (interactive(options)
-                && prompt::yes("Allow trusted same-user development execution", false)?))
+                && prompt::yes(
+                    "Allow the connector to run trusted model code under your OS account?",
+                    "Allow execution with the same file and credential access as your account.",
+                    "Pause setup before preparing or running this development connector.",
+                    false,
+                )?))
         {
             return complete(
                 summary(&directory, &plan, &progress, "development_consent_required"),
@@ -371,7 +363,7 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
             .map_err(invalid)?;
         let token = Path::new(&plan.input.host.token_file);
         if !token.exists() {
-            let Some(enrollment) = progress.enrollment_paths.last() else {
+            let Some(enrollment) = enrollment_path(&progress) else {
                 return complete(
                     summary(&directory, &plan, &progress, "enrollment_required"),
                     1,
@@ -414,14 +406,30 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
     let diag = client
         .management()
         .connector_context_diagnostics(&plan.input.connector.id, &plan.input.host.context.id)?;
-    let ready = diag.setup.as_ref().is_some_and(|s| s.ready);
-    let connected = diag.setup.as_ref().is_some_and(|s| s.connected);
-    if !connected {
-        let mut v = summary(&directory, &plan, &progress, "start_required");
-        v["diagnostics"] = serde_json::to_value(diag)?;
-        return complete(v, 1);
+    let Some(readiness) = &diag.setup else {
+        return complete(
+            with_diagnostics(summary(&directory, &plan, &progress, "host_blocked"), diag)?,
+            1,
+        );
+    };
+    if !readiness.connected {
+        let needs_enrollment = readiness.issues.iter().any(|issue| {
+            matches!(
+                issue.code.as_str(),
+                "enrollment_incomplete" | "connector_credential_revoked"
+            )
+        });
+        let status = if needs_enrollment && enrollment_path(&progress).is_none() {
+            "enrollment_required"
+        } else {
+            "start_required"
+        };
+        return complete(
+            with_diagnostics(summary(&directory, &plan, &progress, status), diag)?,
+            1,
+        );
     }
-    if !ready {
+    if !readiness.ready {
         let mut attempts = fs::read_dir(&directory)?
             .filter_map(Result::ok)
             .filter(|e| e.file_name().to_string_lossy().starts_with("preflight-"))
@@ -448,23 +456,51 @@ pub(crate) fn execute(args: &Args, options: &Setup) -> Result<Completion, Failur
         )?;
         if result.exit != 0 {
             return Ok(preflight_completion(
-                summary(&directory, &plan, &progress, "host_blocked"),
+                with_diagnostics(summary(&directory, &plan, &progress, "host_blocked"), diag)?,
                 result,
             ));
         }
+        let diag = client
+            .management()
+            .connector_context_diagnostics(&plan.input.connector.id, &plan.input.host.context.id)?;
+        return readiness_completion(&directory, &plan, &progress, diag);
     }
-    let diag = client
-        .management()
-        .connector_context_diagnostics(&plan.input.connector.id, &plan.input.host.context.id)?;
-    if !diag.setup.as_ref().is_some_and(|s| s.ready) {
-        let mut v = summary(&directory, &plan, &progress, "host_blocked");
-        v["diagnostics"] = serde_json::to_value(diag)?;
-        return complete(v, 1);
+    readiness_completion(&directory, &plan, &progress, diag)
+}
+
+fn readiness_completion(
+    directory: &Path,
+    plan: &Plan,
+    progress: &Progress,
+    diagnostics: ConnectorDiagnostics,
+) -> Result<Completion, Failure> {
+    let (status, exit) = if diagnostics.setup.as_ref().is_some_and(|s| s.ready) {
+        ("ready", 0)
+    } else {
+        ("host_blocked", 1)
+    };
+    complete(
+        with_diagnostics(summary(directory, plan, progress, status), diagnostics)?,
+        exit,
+    )
+}
+
+fn with_diagnostics(mut result: Value, diagnostics: ConnectorDiagnostics) -> Result<Value, Error> {
+    if diagnostics.setup.is_none() {
+        result["readiness_unavailable"] = json!(
+            "This service returned no context readiness information. Check that the CLI and service are compatible."
+        );
     }
-    if plan.input.first_model.is_some() {
-        return trial::execute(args, options, &client, &directory, &plan, &mut progress);
-    }
-    complete(summary(&directory, &plan, &progress, "ready"), 0)
+    result["diagnostics"] = serde_json::to_value(diagnostics)?;
+    Ok(result)
+}
+
+fn enrollment_path(progress: &Progress) -> Option<&Path> {
+    progress
+        .enrollment_paths
+        .last()
+        .filter(|path| path.is_file())
+        .map(PathBuf::as_path)
 }
 fn preflight_completion(mut overview: Value, result: Completion) -> Completion {
     overview["preflight"] = result.value.unwrap_or(Value::Null);
@@ -481,68 +517,43 @@ fn needs_new_preflight(status: &ContextPreflightStatus) -> bool {
         && (!status.ready || status.validity != ReportValidity::Current)
 }
 fn validate(input: &Input) -> Result<(), Error> {
-    if input.manifest_version != 1
-        || input.connector.id != input.host.context.connector_id
-        || !matches!(input.startup.as_str(), "foreground" | "background")
-        || input.host.install_service != (input.startup == "background")
+    if input.manifest_version != INPUT_VERSION {
+        return Err(invalid(
+            "The scripted setup input requires manifest_version 1.",
+        ));
+    }
+    if input.connector.id != input.host.context.connector_id {
+        return Err(invalid(
+            "Use the same connector ID in connector.id and host.context.connector_id.",
+        ));
+    }
+    if !matches!(input.startup.as_str(), "foreground" | "background") {
+        return Err(invalid(
+            "Set startup to foreground for a terminal or background for a service.",
+        ));
+    }
+    if input.host.install_service != (input.startup == "background") {
+        return Err(invalid(
+            "Set host.install_service to true for background startup and false for foreground startup.",
+        ));
+    }
+    if !(1..=1024).contains(&input.connector.max_outstanding_assignments) {
+        return Err(invalid(
+            "Set connector.max_outstanding_assignments to a whole number from 1 to 1024.",
+        ));
+    }
+    let label = &input.connector.label;
+    if label.is_empty()
+        || label.len() > 200
+        || label.trim() != label
+        || label.chars().any(char::is_control)
     {
         return Err(invalid(
-            "Setup requires version 1, matching connector identities and explicit foreground/background startup.",
+            "Set connector.label to 1–200 bytes of display text without leading or trailing whitespace or control characters.",
         ));
     }
     enumeray_connector::configuration_digest(&input.host).map_err(invalid)?;
-    let api = EnumerayClient::new(&input.host.api_base_url, None, Duration::from_secs(60))?;
-    let _ = api;
-    if let Some(first) = &input.first_model {
-        if first.demo == first.project.is_some()
-            || !enumeray_contracts::models::validation::valid_model_id(&first.model_id)
-        {
-            return Err(invalid(
-                "Select exactly one demo or project and a valid first-model ID.",
-            ));
-        }
-        for path in [&first.project, &first.inputs, &first.installed_release]
-            .into_iter()
-            .flatten()
-        {
-            if !path.is_absolute()
-                || path
-                    .components()
-                    .any(|p| matches!(p, std::path::Component::ParentDir))
-            {
-                return Err(invalid(
-                    "Saved project, input and installation paths must be absolute.",
-                ));
-            }
-        }
-        for binding in first
-            .files
-            .iter()
-            .chain(&first.collections)
-            .chain(&first.collection_manifests)
-        {
-            let (slot, value) = binding
-                .split_once('=')
-                .filter(|(slot, value)| !slot.is_empty() && !value.is_empty())
-                .ok_or_else(|| invalid("Local input bindings must use SLOT=/absolute/path."))?;
-            let path = Path::new(value);
-            if !path.is_absolute()
-                || path
-                    .components()
-                    .any(|p| matches!(p, std::path::Component::ParentDir))
-                || slot.trim() != slot
-            {
-                return Err(invalid(
-                    "Saved local input bindings must use SLOT=/absolute/path without parent traversal.",
-                ));
-            }
-        }
-        if first.example.is_some() == first.inputs.is_some() {
-            return Err(invalid(
-                "Choose exactly one declared input example or scientific inputs file for the first trial.",
-            ));
-        }
-    }
+    EnumerayClient::new(&input.host.api_base_url, None, Duration::from_secs(60))?;
     Ok(())
 }
 fn login(args: &Args, plan: &Plan, options: &Setup) -> Result<EnumerayClient, Error> {
@@ -584,7 +595,9 @@ fn login(args: &Args, plan: &Plan, options: &Setup) -> Result<EnumerayClient, Er
         Err(e) if interactive(options) => {
             eprintln!("Authentication needs attention: {e}");
             if !prompt::yes(
-                &format!("Open browser login for profile {:?}", plan.profile),
+                &format!("Open browser sign-in for profile {:?}?", plan.profile),
+                "Sign in through your browser and continue with this profile.",
+                "Pause setup. Sign in separately and resume with this profile.",
                 false,
             )? {
                 return Err(e);
@@ -625,25 +638,34 @@ fn register(
         if !p.connector_started {
             match client.management().connector(id) {
                 Ok(existing) => {
+                    if existing.connector_id != *id || existing.archived_at.is_some() {
+                        return Err(invalid(
+                            "Choose an active connector that matches the reviewed connector ID.",
+                        ));
+                    }
+                    if existing.label != plan.input.connector.label {
+                        return Err(invalid(
+                            "The existing connector's display label differs from the reviewed plan.",
+                        ));
+                    }
+                    if existing.max_outstanding_assignments
+                        != plan.input.connector.max_outstanding_assignments
+                    {
+                        return Err(invalid(
+                            "The existing connector's dispatch limit differs from the reviewed plan.",
+                        ));
+                    }
                     if !options.adopt_existing
                         && !(interactive(options)
                             && prompt::yes(
-                                "Adopt this existing connector without changing its settings",
+                                "Reuse the existing connector with these settings?",
+                                "Use this connector and keep its existing registration.",
+                                "Pause setup so you can inspect the connector or choose another ID.",
                                 false,
                             )?)
                     {
                         return Err(invalid(
                             "Connector already exists; inspect it and explicitly use --adopt-existing.",
-                        ));
-                    }
-                    if existing.connector_id != *id
-                        || existing.label != plan.input.connector.label
-                        || existing.max_outstanding_assignments
-                            != plan.input.connector.max_outstanding_assignments
-                        || existing.archived_at.is_some()
-                    {
-                        return Err(invalid(
-                            "Existing connector differs from the reviewed plan.",
                         ));
                     }
                     p.connector_registered = true;
@@ -735,13 +757,15 @@ fn register(
                 save(directory, p)?;
             } else {
                 return Err(invalid(
-                    "Previous replacement enrollment outcome is unknown. Inspect connector enrollment history; explicitly issue a new document with connector enrollment and import it using setup --enrollment-file NEW. No replacement was issued automatically.",
+                    "Previous replacement enrollment outcome is unknown. Inspect connector enrollment history; explicitly issue a new document with connector enrollment and import it using connector setup --enrollment-file NEW. No replacement was issued automatically.",
                 ));
             }
         } else {
             if interactive(options)
                 && !prompt::yes(
-                    "Issue a replacement enrollment; this invalidates earlier unused documents",
+                    "Issue a replacement one-time enrollment document?",
+                    "Save a new document and invalidate any earlier unused ones.",
+                    "Pause setup and keep the existing enrollment documents.",
                     false,
                 )?
             {
@@ -770,7 +794,9 @@ fn register(
                     if !options.adopt_existing
                         && !(interactive(options)
                             && prompt::yes(
-                                "Adopt this existing context after checking its immutable definition",
+                                "Reuse the existing context if the service confirms the settings match?",
+                                "Check the saved definition and disclosure against this plan and keep the existing context if they match.",
+                                "Pause setup so you can inspect the context or choose another ID.",
                                 false,
                             )?)
                     {
@@ -791,94 +817,191 @@ fn register(
         if registered.id != plan.input.host.context.id
             || registered.connector_id != *id
             || registered.definition != serde_json::to_value(&plan.input.host.context.definition)?
+            || registered.metadata.location != plan.input.host.context.metadata.location
+            || registered.metadata.disclosure != plan.input.host.context.metadata.disclosure
         {
             return Err(invalid("Context response differs from the saved request."));
         }
         p.context_registered = true;
         save(directory, p)?;
     }
-    if p.grant.is_none() {
-        let mut cursor = None::<String>;
-        let mut existing = None;
-        loop {
-            let query = cursor
-                .as_deref()
-                .map(|c| vec![("cursor", c)])
-                .unwrap_or_default();
-            let page = client.management().compute_grants(id, &query)?;
-            for grant in page.items {
-                if grant.context_id == plan.input.host.context.id
-                    && Some(grant.user_id) == p.user_id
-                    && grant.revoked_at.is_none()
-                {
-                    existing = Some(grant);
-                }
-            }
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                break;
-            }
-        }
-        let grant = if let Some(grant) = existing {
-            if !options.adopt_existing
-                && !(interactive(options)
-                    && prompt::yes(
-                        "Adopt the existing active compute grant with its current limits",
-                        false,
-                    )?)
-            {
-                return Err(invalid(
-                    "An active compute grant exists; explicitly adopt it rather than changing authority.",
-                ));
-            }
-            GrantCreate {
-                id: Some(grant.id),
-                context_id: grant.context_id,
-                user_id: grant.user_id,
-                max_queued_runs: grant.max_queued_runs,
-                max_outstanding_assignments: grant.max_outstanding_assignments,
-            }
-        } else {
-            GrantCreate {
-                id: Some(Uuid::new_v4()),
-                context_id: plan.input.host.context.id.clone(),
-                user_id: p.user_id.unwrap(),
-                max_queued_runs: 10,
-                max_outstanding_assignments: plan
-                    .input
-                    .host
-                    .context
-                    .definition
-                    .max_outstanding_assignments,
-            }
-        };
-        p.grant = Some(grant);
-        save(directory, p)?;
-    }
-    let request = p.grant.as_ref().unwrap();
-    let grant = client.management().grant_compute(id, request)?;
-    if Some(grant.id) != request.id
-        || grant.context_id != request.context_id
-        || grant.user_id != request.user_id
-        || grant.revoked_at.is_some()
-    {
-        return Err(invalid(
-            "Grant response conflicts with the saved creation identity.",
-        ));
-    }
-    p.grant_registered = true;
-    save(directory, p)?;
     Ok(())
 }
+
+fn render_review(
+    plan: &Plan,
+    progress: &Progress,
+    host_plan: &HostConfigurationPlan,
+    plan_path: &Path,
+    host_path: &Path,
+) -> Result<(), Error> {
+    let host = &host_plan.spec;
+    let context = &host.context;
+    let definition = &context.definition;
+    eprintln!(
+        "Review connector setup\n  API: {} (profile {:?})\n  Connector: {} ({})\n  Context: {} at {}\n  Data access disclosure: {}\n  Execution mode: {}",
+        host.api_base_url,
+        plan.profile,
+        context.connector_id,
+        plan.input.connector.label,
+        context.id,
+        context.metadata.location,
+        context.metadata.disclosure,
+        mode_name(definition),
+    );
+    for (label, account) in [
+        ("Connector OS account", &host.connector_account),
+        ("Execution OS account", &host.execution_account),
+    ] {
+        let handling = if account.create {
+            "create if absent"
+        } else {
+            "use existing"
+        };
+        eprintln!(
+            "  {label}: {} (group {}, home {}, {handling})",
+            account.name, account.group, account.home,
+        );
+        if let (Some(uid), Some(gid)) = (account.uid, account.gid) {
+            eprintln!("    User ID: {uid}, group ID: {gid}");
+        }
+    }
+    match &definition.driver {
+        DriverConfig::Process { scratch } => {
+            eprintln!("  Job driver: Process");
+            if let Some(scratch) = scratch {
+                eprintln!(
+                    "  Process scratch limits: {} bytes, {} entries, {} directory levels",
+                    scratch.max_bytes, scratch.max_entries, scratch.max_depth,
+                );
+            }
+        }
+        DriverConfig::Slurm(slurm) => {
+            eprintln!(
+                "  Job driver: Slurm (compute node executable {})",
+                slurm.worker_path
+            );
+        }
+    }
+    match &definition.connection {
+        ConnectionConfig::Direct { launcher } => {
+            eprintln!("  Connection: Direct on the connector host");
+            eprintln!(
+                "  Runner launcher: {}",
+                launcher
+                    .iter()
+                    .map(|arg| crate::output::shell_word(arg))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+        ConnectionConfig::Ssh(ssh) => {
+            eprintln!(
+                "  Connection: SSH to {} at {} on port {}",
+                ssh.user, ssh.host, ssh.port
+            );
+            eprintln!("  Remote runner: {}", ssh.runner_path);
+            eprintln!("  SSH credential reference: {}", ssh.credential_reference);
+        }
+    }
+    for root in &definition.installation_roots {
+        eprintln!("  Approved release directory: {root}");
+    }
+    eprintln!(
+        "  Execution work directory: {}\n  Connector executable: {}\n  Connector journal: {}\n  Runtime credential path: {}",
+        definition.work_root, host.connector_executable, host.journal, host.token_file,
+    );
+    if let Some(path) = &host.credentials_file {
+        eprintln!("  Private SSH credential map: {path}");
+    }
+    if let (Some(source), Some(digest)) = (&host.executable_source, &host.executable_sha256) {
+        eprintln!("  Approved connector executable: {source} (SHA-256 {digest})");
+    }
+    if let Some(digest) = &host.execution_executable_sha256 {
+        eprintln!("  Approved SSH runner SHA-256: {digest}");
+    }
+    eprintln!(
+        "  Local workers: {}\n  Connector dispatch limit: {}\n  Context admission limit: {}\n  Transfer workers: {}\n  Pending assignment limit: {}\n  Shutdown timeout: {} seconds\n  Startup: {}",
+        host.max_workers,
+        plan.input.connector.max_outstanding_assignments,
+        definition.max_outstanding_assignments,
+        host.max_transfer_workers,
+        host.max_pending_assignments,
+        host.shutdown_timeout_seconds,
+        plan.input.startup,
+    );
+    let development = definition.execution_mode == ExecutionMode::Development;
+    if development {
+        eprintln!(
+            "  Your current OS account prepares the local directories, enrolls and starts the connector."
+        );
+    } else {
+        if matches!(definition.connection, ConnectionConfig::Ssh(_)) {
+            eprintln!(
+                "  The execution host administrator prepares the remote runner, account and directories first."
+            );
+        }
+        eprintln!(
+            "  The connector host administrator applies the host plan and starts the connector."
+        );
+    }
+    if plan.input.startup == "foreground" {
+        eprintln!("  Keep the connector terminal open and resume setup in a separate terminal.");
+    } else {
+        eprintln!("  Start the connector explicitly using the selected OS service manager.");
+    }
+    eprintln!("Planned host actions");
+    for action in &host_plan.actions {
+        if matches!(action.kind, HostActionKind::Service) && plan.input.startup == "foreground" {
+            continue;
+        }
+        let side = match action.host {
+            HostSide::Connector => "connector host",
+            HostSide::Execution
+                if matches!(definition.connection, ConnectionConfig::Direct { .. }) =>
+            {
+                "connector host, execution account"
+            }
+            HostSide::Execution => "SSH execution host",
+        };
+        let role = if development {
+            "your current OS account"
+        } else {
+            match action.responsible_role {
+                ResponsibleRole::ConnectorOwner => "connector owner",
+                ResponsibleRole::HostAdministrator => "host administrator",
+                ResponsibleRole::SiteOperator => "site operator",
+            }
+        };
+        eprintln!("  {} ({role} on the {side})", action.target);
+        for instruction in &action.instructions {
+            eprintln!("    {instruction}");
+        }
+    }
+    eprintln!(
+        "Saved setup plan: {}\nSaved host plan: {}\nOwner setup plan SHA-256: {}",
+        plan_path.display(),
+        host_path.display(),
+        progress.plan_sha256,
+    );
+    if !development {
+        eprintln!(
+            "Administrator host plan SHA-256: {}",
+            enumeray_connector::configuration_digest(host).map_err(invalid)?,
+        );
+    }
+    Ok(())
+}
+
 fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
     let host = &plan.input.host;
     let managed = host.context.definition.execution_mode == ExecutionMode::Managed;
     let next_action = match status {
         "review_required" => {
-            "Review the saved setup and host plan. Approve the setup plan SHA-256 to continue."
+            "Review the settings and host actions. Use the owner setup plan SHA-256 to approve a noninteractive resume."
         }
         "start_required" if !managed => {
-            "Your connector is enrolled and local preflight passed. Run the start command as your current user, then resume setup. For foreground startup, resume in another terminal."
+            "Local preflight passed. If the connector is stopped, run the start command as your current OS user. Resume as the connector owner. For foreground startup, resume in a separate terminal."
         }
         "start_required"
             if matches!(
@@ -886,10 +1009,10 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
                 enumeray_contracts::execution::ConnectionConfig::Ssh(_)
             ) =>
         {
-            "Have the execution host administrator apply the reviewed plan there with --side execution. On the connector host, have its administrator run the displayed host apply command and review local preflight. Start the connector, then resume setup."
+            "For initial preparation, give the SSH execution host administrator the copied host plan and its SHA-256. Use the execution host command there with the local paths to the copied plan and reviewed native CLI. Apply the plan on the connector host next and check local preflight. Keep enrollment on the connector host. If the connector is stopped, start it, then resume as the connector owner."
         }
         "start_required" => {
-            "Have the connector host administrator run the displayed host apply command and review local preflight. Start the connector, then resume setup. For foreground startup, resume in another terminal."
+            "For initial preparation, have the connector host administrator apply the plan and review local preflight. If the connector is stopped, start it. Resume as the connector owner. For foreground startup, resume in a separate terminal."
         }
         "enrollment_required" => {
             "Inspect existing enrollment and credentials. If no usable document exists, explicitly request --replace-enrollment, then resume with the same durable identity directory."
@@ -898,7 +1021,7 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
             "Acknowledge trusted same-user execution with --allow-development-execution."
         }
         "ready" => {
-            "Host readiness is established. Scientific installation and qualification remain author/site responsibilities."
+            "Share the ready context ID with the intended author. Use connector grant create when you are ready to give them access."
         }
         _ => {
             "Inspect current diagnostics and follow each responsible role's correction. Retain this setup directory."
@@ -908,24 +1031,25 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
         .parent()
         .unwrap()
         .join("runtime.json");
+    let host_plan_path = directory.join("host-plan.json");
+    let host_digest = enumeray_connector::configuration_digest(host).unwrap_or_default();
     let mut value = json!({
         "directory": directory,
         "status": status,
         "plan_sha256": p.plan_sha256,
-        "host_plan_sha256": enumeray_connector::configuration_digest(host).ok(),
+        "host_plan_sha256": host_digest,
         "connector_id": plan.input.connector.id,
         "context_id": host.context.id,
         "startup": plan.input.startup,
         "configuration": runtime,
-        "host_plan": directory.join("host-plan.json"),
-        "enrollment_file": p.enrollment_paths.last(),
+        "host_plan": host_plan_path,
+        "enrollment_file": enrollment_path(p),
         "execution_account": host.execution_account.name,
         "connector_account": host.connector_account.name,
         "mode": mode_name(&host.context.definition),
         "profile": plan.profile,
         "api_url": host.api_base_url,
-        "next_action": next_action,
-        "trial": p.trial
+        "next_action": next_action
     });
     let foreground = plan.input.startup == "foreground";
     let mut start = vec![
@@ -950,34 +1074,51 @@ fn summary(directory: &Path, plan: &Plan, p: &Progress, status: &str) -> Value {
         prefix.extend(start);
         start = prefix;
     }
-    let mut apply = vec![
-        "sudo".to_owned(),
-        "--".into(),
-        std::env::current_exe()
-            .unwrap_or_else(|_| PathBuf::from(&host.connector_executable))
-            .to_string_lossy()
-            .into_owned(),
-        "setup".into(),
-        "apply-host".into(),
-        "--plan".into(),
-        directory
-            .join("host-plan.json")
-            .to_string_lossy()
-            .into_owned(),
-        "--side".into(),
-        "connector".into(),
-        "--approve".into(),
-        enumeray_connector::configuration_digest(host).unwrap_or_default(),
-    ];
-    if let Some(enrollment) = p.enrollment_paths.last() {
-        apply.extend([
-            "--enrollment-file".into(),
-            enrollment.to_string_lossy().into_owned(),
-        ]);
-    }
-    value["commands"] = json!({"start":start,"resume":["enumeray","--config",plan.profile_file.to_string_lossy(),"--profile",plan.profile,"setup","--directory",directory.to_string_lossy()]});
+    value["commands"] = json!({
+        "start": start,
+        "resume": ["enumeray", "--config", plan.profile_file.to_string_lossy(), "--profile",
+            plan.profile, "connector", "setup", "--directory", directory.to_string_lossy(),
+            "--api", host.api_base_url]
+    });
     if managed {
+        let apply_command = |executable: &Path, host_plan: &Path, side: &str| {
+            vec![
+                "sudo".to_owned(),
+                "--".into(),
+                executable.to_string_lossy().into_owned(),
+                "connector".into(),
+                "setup".into(),
+                "apply-host".into(),
+                "--plan".into(),
+                host_plan.to_string_lossy().into_owned(),
+                "--side".into(),
+                side.into(),
+                "--approve".into(),
+                host_digest.clone(),
+            ]
+        };
+        let local_cli =
+            std::env::current_exe().unwrap_or_else(|_| PathBuf::from(&host.connector_executable));
+        let mut apply = apply_command(&local_cli, &host_plan_path, "connector");
+        if let Some(enrollment) = enrollment_path(p) {
+            apply.extend([
+                "--enrollment-file".into(),
+                enrollment.to_string_lossy().into_owned(),
+            ]);
+        }
         value["commands"]["apply_host"] = json!(apply);
+        if matches!(host.context.definition.connection, ConnectionConfig::Ssh(_)) {
+            let mut remote = apply_command(
+                Path::new("/absolute/path/to/reviewed-enumeray"),
+                Path::new("/absolute/path/to/copied-host-plan.json"),
+                "execution",
+            );
+            remote.extend([
+                "--executable-source".into(),
+                "/absolute/path/to/reviewed-enumeray".into(),
+            ]);
+            value["commands"]["apply_execution_host"] = json!(remote);
+        }
     }
     value
 }
@@ -988,7 +1129,7 @@ fn inspect(
     p: &Progress,
 ) -> Result<Completion, Failure> {
     let mut v = summary(directory, plan, p, "saved");
-    let observed = (|| -> Result<Value, Error> {
+    let observed = (|| -> Result<ConnectorDiagnostics, Error> {
         let client = config::client(args, &config::load(&plan.profile_file)?)?;
         let user = client.me()?.user_id;
         if client.base_url().trim_end_matches('/')
@@ -997,17 +1138,15 @@ fn inspect(
         {
             return Err(invalid("Status requires the saved API/account."));
         }
-        Ok(serde_json::to_value(
-            client.management().connector_context_diagnostics(
-                &plan.input.connector.id,
-                &plan.input.host.context.id,
-            )?,
-        )?)
+        client
+            .management()
+            .connector_context_diagnostics(&plan.input.connector.id, &plan.input.host.context.id)
     })();
     match observed {
-        Ok(d) => v["diagnostics"] = d,
+        Ok(d) => v = with_diagnostics(v, d)?,
         Err(e) => {
             v["diagnostics"] = json!({"state":"unknown","message":e.to_string()});
+            v["readiness_unavailable"] = json!(e.to_string());
         }
     }
     complete(v, 0)
@@ -1020,10 +1159,10 @@ mod tests {
     #[test]
     fn blocked_preflight_preserves_parent_resume_and_displays_the_responsible_role() {
         use clap::Parser;
-        let args = Args::parse_from(["enumeray", "setup", "--directory", "/setup"]);
+        let args = Args::parse_from(["enumeray", "connector", "setup", "--directory", "/setup"]);
         for exit in [1, 5, 130] {
             let completion = preflight_completion(
-                json!({"directory":"/setup","status":"host_blocked","commands":{"resume":["enumeray","setup","--directory","/setup"]}}),
+                json!({"directory":"/setup","status":"host_blocked","commands":{"resume":["enumeray","connector","setup","--directory","/setup"]}}),
                 Completion {
                     value: Some(
                         json!({"directory":"/setup/preflight-0000","report":{"checks":[{"check":"work_root","required":true,"outcome":"failed","responsible_role":"host_administrator","correction":"Prepare the private execution work directory."}]}}),
@@ -1034,7 +1173,7 @@ mod tests {
             assert_eq!(completion.exit, exit);
             let value = completion.value.unwrap();
             assert_eq!(value["directory"], "/setup");
-            assert_eq!(value["commands"]["resume"][3], "/setup");
+            assert_eq!(value["commands"]["resume"][4], "/setup");
             let rendered = crate::output::render(&args, &value);
             assert!(rendered.contains("host_administrator"));
             assert!(rendered.contains("Prepare the private execution work directory."));

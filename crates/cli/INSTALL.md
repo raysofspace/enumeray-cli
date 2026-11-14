@@ -441,7 +441,7 @@ troubleshooting.
 | Script with structured output | [Complete JSON recipe](CLI_AUTOMATION.md#script-with-structured-output) |
 | Create, install, trial and publish a model | [Author guide](AUTHOR_GUIDE.md) |
 | Work through supplied publications and inputs | [Example walkthrough](examples/README.md) |
-| Connect compute and trial a model | [Guided connector setup](SETUP_GUIDE.md) |
+| Connect compute and verify readiness | [Guided connector setup](SETUP_GUIDE.md) |
 | Operate an existing connector | [Complete connector guide](../connector/README.md) |
 
 The archive includes complete examples under `starter-kit/`. Use the analysis

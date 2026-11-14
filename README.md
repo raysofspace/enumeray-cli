@@ -22,7 +22,7 @@ or running API.
 | Submit and collect a reviewed analysis | [Analysis guide](crates/cli/ANALYSIS_GUIDE.md) |
 | Integrate with structured CLI output | [CLI JSON contracts and transcripts](crates/cli/CLI_AUTOMATION.md) |
 | Prepare, test and publish a model | [Author guide](crates/cli/AUTHOR_GUIDE.md) and [examples](crates/cli/examples/README.md) |
-| Connect approved compute and trial a first model | [Guided setup](crates/cli/SETUP_GUIDE.md) and [connector guide](crates/connector/README.md) |
+| Connect approved compute and verify readiness | [Guided setup](crates/cli/SETUP_GUIDE.md) and [connector guide](crates/connector/README.md) |
 | Extend a driver or connection | [Extension guide](crates/connector/EXTENDING.md) |
 | Develop and verify the public workspace | [Contributor guide](CONTRIBUTING.md) |
 | Follow role-based service guidance | [Web documentation](https://doc.enumeray.com/) |
