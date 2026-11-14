@@ -7,6 +7,7 @@ use enumeray_contracts::{
 };
 use std::{
     io::{BufRead, Write},
+    net::IpAddr,
     ops::RangeInclusive,
     path::Component,
 };
@@ -449,12 +450,12 @@ fn collect(
     } else {
         format!("/var/lib/{id}-model-work")
     };
-    context_spec.definition.installation_roots = vec![prompt.path(
+    let installation_root = prompt.path(
         "Which directory on the execution host may hold installed model releases?",
         &default_models,
         "The execution account must be able to read installed releases under this directory.",
         |_| true,
-    )?];
+    )?;
     context_spec.definition.work_root = prompt.path(
         "Which private directory on the execution host should hold job files?",
         &default_work,
@@ -463,8 +464,9 @@ fn collect(
         } else {
             "Use a different directory from the installation root. Each job runs in a private workspace under this directory."
         },
-        |_| true,
+        |value| Path::new(value) != Path::new(&installation_root),
     )?;
+    context_spec.definition.installation_roots = vec![installation_root];
     context_spec.definition.connection = if connection == "direct" {
         let launcher = if dev {
             vec![connector_executable.clone()]
@@ -484,12 +486,7 @@ fn collect(
             "Which hostname or IP address should the connector use for SSH?",
             None,
             "Use a hostname such as login.example.edu or a bare IP address. Enter the port separately.",
-            |value| {
-                !value.is_empty()
-                    && !value.starts_with('-')
-                    && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b".-_:".contains(&byte))
-                    && (!value.contains(':') || value.parse::<std::net::Ipv6Addr>().is_ok())
-            },
+            valid_ssh_host,
         )?;
         let port = prompt.number("Which TCP port does SSH listen on?", Some(22), 1..=65535)?;
         let credential_reference = prompt.text(
@@ -707,6 +704,23 @@ fn account_home(platform: HostPlatform, name: &str) -> String {
     }
 }
 
+fn valid_ssh_host(value: &str) -> bool {
+    if value.parse::<IpAddr>().is_ok() {
+        return true;
+    }
+    let hostname = value.strip_suffix('.').unwrap_or(value);
+    hostname.len() <= 253
+        && hostname.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+}
+
 fn valid_text(value: &str, max_bytes: usize) -> bool {
     !value.is_empty() && value.len() <= max_bytes && !value.chars().any(char::is_control)
 }
@@ -765,7 +779,8 @@ mod tests {
             "relative/path",
             "", // Development base retry
             "",
-            "", // Installation and work roots
+            "/home/researcher/enumeray-development/models/",
+            "", // Work root must differ from installation root
             "",
             "", // Location and disclosure
             "65",
@@ -814,7 +829,7 @@ mod tests {
         assert!(
             transcript.contains("background — Start explicitly through a user systemd service")
         );
-        assert_eq!(transcript.matches("That answer is invalid.").count(), 3);
+        assert_eq!(transcript.matches("That answer is invalid.").count(), 4);
     }
 
     #[test]
@@ -836,6 +851,7 @@ mod tests {
             "",
             "",
             "", // Connector binary, installation root, work root
+            ".",
             "login.example.edu:22",
             "login.example.edu", // SSH address retry
             "0",
@@ -908,6 +924,6 @@ mod tests {
                 "missing explanation of {choice}"
             );
         }
-        assert_eq!(transcript.matches("That answer is invalid.").count(), 3);
+        assert_eq!(transcript.matches("That answer is invalid.").count(), 4);
     }
 }
