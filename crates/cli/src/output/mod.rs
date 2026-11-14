@@ -300,7 +300,7 @@ fn table(output: &mut String, items: &[Value], columns: &[(&str, &str)]) {
 
 /// POSIX single-quoting for ordinary words; Bash/Zsh dollar-quotes preserve
 /// control characters without sending them to the user's terminal.
-fn shell_word(value: &str) -> String {
+pub(crate) fn shell_word(value: &str) -> String {
     if !value.is_empty()
         && value
             .bytes()

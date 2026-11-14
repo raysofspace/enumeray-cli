@@ -42,7 +42,7 @@ fn both_modes_save_one_private_review_plan_without_profiles_or_requests() {
         let directory = root.path().join(format!("setup-{kind}"));
         let call = || {
             command(root.path())
-                .args(["setup", "--non-interactive", "--directory"])
+                .args(["connector", "setup", "--non-interactive", "--directory"])
                 .arg(&directory)
                 .arg("--file")
                 .arg(&file)
@@ -55,6 +55,9 @@ fn both_modes_save_one_private_review_plan_without_profiles_or_requests() {
         assert_eq!(first["status"], "review_required");
         assert_eq!(first["api_url"], "https://api.enumeray.com");
         assert_eq!(first["profile"], "default");
+        assert!(first.get("trial").is_none());
+        let resume = first["commands"]["resume"].as_array().unwrap();
+        assert!(resume.windows(2).any(|pair| pair == ["connector", "setup"]));
         let start = first["commands"]["start"].as_array().unwrap();
         assert_eq!(start.last().unwrap(), "--foreground");
         if kind == "development" {
@@ -63,12 +66,25 @@ fn both_modes_save_one_private_review_plan_without_profiles_or_requests() {
             assert_eq!(start[1], "connector");
         } else {
             assert_eq!(first["mode"], "managed");
-            assert!(first["commands"]["apply_host"].is_array());
+            let apply = first["commands"]["apply_host"].as_array().unwrap();
+            assert!(
+                apply
+                    .windows(3)
+                    .any(|part| part == ["connector", "setup", "apply-host"])
+            );
             assert_eq!(start[0], "sudo");
             assert_eq!(start[1], "-u");
             assert_eq!(start[2], first["connector_account"]);
         }
         let saved = fs::read(directory.join("setup.json")).unwrap();
+        let plan: Value = serde_json::from_slice(&saved).unwrap();
+        assert_eq!(plan["manifest_version"], 2);
+        assert!(plan["input"].get("first_model").is_none());
+        let progress: Value =
+            serde_json::from_slice(&fs::read(directory.join("state.json")).unwrap()).unwrap();
+        assert_eq!(progress["manifest_version"], 2);
+        assert!(progress.get("trial").is_none());
+        assert!(progress.get("grant").is_none());
         assert_eq!(json(&call())["plan_sha256"], first["plan_sha256"]);
         assert_eq!(fs::read(directory.join("setup.json")).unwrap(), saved);
         for entry in fs::read_dir(&directory).unwrap() {
@@ -84,19 +100,18 @@ fn both_modes_save_one_private_review_plan_without_profiles_or_requests() {
     }
 }
 #[test]
-fn saved_local_inputs_cannot_change_with_the_resume_working_directory() {
+fn model_options_in_scripted_input_fail_before_creating_a_plan() {
     let root = tempfile::tempdir().unwrap();
     let file = input(root.path(), "development");
     let mut document: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
     document["first_model"] = json!({
-        "model_id":"first-model", "demo":true, "example":"starter-example",
-        "files":["data=relative/input.csv"]
+        "model_id": "first-model", "demo": true, "example": "starter-example"
     });
     fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
     let directory = root.path().join("journey");
     let call = || {
         command(root.path())
-            .args(["setup", "--non-interactive", "--directory"])
+            .args(["connector", "setup", "--non-interactive", "--directory"])
             .arg(&directory)
             .arg("--file")
             .arg(&file)
@@ -105,11 +120,121 @@ fn saved_local_inputs_cannot_change_with_the_resume_working_directory() {
     };
     let rejected = call();
     assert!(!rejected.status.success());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("absolute/path"));
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("first_model"));
     assert!(!directory.join("setup.json").exists());
-    document["first_model"]["files"] = json!(["data=/absolute/input.csv"]);
+    assert!(!directory.join("state.json").exists());
+    document["first_model"] = Value::Null;
+    fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
+    let rejected = call();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("first_model"));
+    assert!(!directory.join("setup.json").exists());
+    document.as_object_mut().unwrap().remove("first_model");
     fs::write(&file, serde_json::to_vec(&document).unwrap()).unwrap();
     assert_eq!(json(&call())["status"], "review_required");
+}
+#[test]
+fn previous_version_checkpoints_are_preserved_and_have_recovery_guidance() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("old-setup");
+    fs::create_dir(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+    let old_plan = directory.join("setup.json");
+    let old_state = directory.join("state.json");
+    let source = input(root.path(), "development");
+    let mut input: Value = serde_json::from_slice(&fs::read(source).unwrap()).unwrap();
+    input["first_model"] = json!({"demo": true, "model_id": "first-model"});
+    let old_plan_bytes = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "operation_id": "232681b2-f8a9-4a86-b450-40eff13e95f7",
+        "directory": directory,
+        "profile": "default",
+        "profile_file": root.path(),
+        "input": input,
+    }))
+    .unwrap();
+    let old_state_bytes = br#"{"manifest_version":1,"trial":{"complete":true}}"#;
+    let release = directory.join("first-release");
+    let analysis = directory.join("first-trial");
+    fs::create_dir(&release).unwrap();
+    fs::create_dir(&analysis).unwrap();
+    fs::write(release.join("release.json"), b"retained release").unwrap();
+    fs::write(analysis.join("analysis.json"), b"retained analysis").unwrap();
+    fs::write(&old_plan, &old_plan_bytes).unwrap();
+    fs::write(&old_state, old_state_bytes).unwrap();
+    for path in [&old_plan, &old_state] {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    for args in [
+        &["connector", "setup"][..],
+        &["connector", "setup", "status"][..],
+    ] {
+        let result = command(root.path())
+            .args(args)
+            .arg("--directory")
+            .arg(&directory)
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            stderr.contains("version 1") || stderr.contains("version-1"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("first-release"), "{stderr}");
+        assert!(stderr.contains("first-trial"), "{stderr}");
+        assert_eq!(fs::read(&old_plan).unwrap(), old_plan_bytes);
+        assert_eq!(fs::read(&old_state).unwrap(), old_state_bytes);
+        assert!(!directory.join("setup.lock").exists());
+        assert_eq!(
+            fs::read(release.join("release.json")).unwrap(),
+            b"retained release"
+        );
+        assert_eq!(
+            fs::read(analysis.join("analysis.json")).unwrap(),
+            b"retained analysis"
+        );
+    }
+}
+#[test]
+fn setup_is_only_available_under_connector_and_its_trial_flags_are_retired() {
+    let root = tempfile::tempdir().unwrap();
+    let obsolete = command(root.path())
+        .args(["setup", "--help"])
+        .output()
+        .unwrap();
+    assert_eq!(obsolete.status.code(), Some(2));
+    let help = command(root.path())
+        .args(["connector", "setup", "--help"])
+        .output()
+        .unwrap();
+    assert!(help.status.success());
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("enumeray connector setup"), "{help}");
+    for flag in ["--submit-trial", "--confirm-model-preparation"] {
+        assert!(!help.contains(flag), "{help}");
+        let removed = command(root.path())
+            .args(["connector", "setup", flag])
+            .output()
+            .unwrap();
+        assert_eq!(removed.status.code(), Some(2), "{flag}");
+    }
+}
+#[test]
+fn malformed_nested_host_apply_never_reflects_secret_arguments() {
+    let root = tempfile::tempdir().unwrap();
+    let result = command(root.path())
+        .args(["connector", "setup", "apply-host", "--side", SECRET])
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("invalid connector or runner command"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(SECRET));
+    assert!(result.stdout.is_empty());
 }
 #[test]
 fn cross_platform_ssh_requires_and_freezes_its_native_artifact_approval() {
@@ -124,7 +249,7 @@ fn cross_platform_ssh_requires_and_freezes_its_native_artifact_approval() {
     let directory = root.path().join("journey");
     let call = || {
         command(root.path())
-            .args(["setup", "--non-interactive", "--directory"])
+            .args(["connector", "setup", "--non-interactive", "--directory"])
             .arg(&directory)
             .arg("--file")
             .arg(&file)
@@ -150,7 +275,7 @@ fn wrong_approval_changed_input_and_tampered_evidence_are_refused() {
     let file = input(root.path(), "development");
     let directory = root.path().join("setup");
     let initial = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--file")
         .arg(&file)
@@ -159,7 +284,7 @@ fn wrong_approval_changed_input_and_tampered_evidence_are_refused() {
     json(&initial);
     let before = fs::read(directory.join("state.json")).unwrap();
     let wrong = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .args(["--approve", "incorrect"])
         .output()
@@ -170,7 +295,7 @@ fn wrong_approval_changed_input_and_tampered_evidence_are_refused() {
     changed["startup"] = json!("background");
     fs::write(&file, serde_json::to_vec(&changed).unwrap()).unwrap();
     let changed = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--file")
         .arg(&file)
@@ -187,7 +312,7 @@ fn wrong_approval_changed_input_and_tampered_evidence_are_refused() {
     )
     .unwrap();
     let tampered = command(root.path())
-        .args(["setup", "--directory"])
+        .args(["connector", "setup", "--directory"])
         .arg(directory)
         .output()
         .unwrap();
@@ -200,7 +325,7 @@ fn development_approval_never_implies_execution_consent() {
     let file = input(root.path(), "development");
     let directory = root.path().join("setup");
     let first = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--file")
         .arg(file)
@@ -208,7 +333,7 @@ fn development_approval_never_implies_execution_consent() {
         .unwrap();
     let first = json(&first);
     let approved = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--approve")
         .arg(first["plan_sha256"].as_str().unwrap())
@@ -264,7 +389,7 @@ fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
     };
     let directory = root.path().join("setup");
     let first = user_command()
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&directory)
         .arg("--file")
         .arg(file)
@@ -274,7 +399,7 @@ fn host_apply_ignores_profiles_and_rejects_unapproved_or_modified_actions() {
     let plan = directory.join("host-plan.json");
     let apply = |approval: &str| {
         user_command()
-            .args(["setup", "apply-host", "--plan"])
+            .args(["connector", "setup", "apply-host", "--plan"])
             .arg(&plan)
             .args(["--side", "connector", "--approve"])
             .arg(approval)
@@ -305,7 +430,7 @@ fn symlinked_checkpoints_and_mode_switches_preserve_existing_files() {
     let file = input(root.path(), "development");
     let directory = root.path().join("setup");
     command(root.path())
-        .args(["setup", "--directory"])
+        .args(["connector", "setup", "--directory"])
         .arg(&directory)
         .arg("--file")
         .arg(file)
@@ -313,7 +438,7 @@ fn symlinked_checkpoints_and_mode_switches_preserve_existing_files() {
         .unwrap();
     let before = fs::read(directory.join("setup.json")).unwrap();
     let output = command(root.path())
-        .args(["setup", "--mode", "managed", "--directory"])
+        .args(["connector", "setup", "--mode", "managed", "--directory"])
         .arg(&directory)
         .output()
         .unwrap();
@@ -322,7 +447,7 @@ fn symlinked_checkpoints_and_mode_switches_preserve_existing_files() {
     let alias = root.path().join("alias");
     std::os::unix::fs::symlink(&directory, &alias).unwrap();
     let output = command(root.path())
-        .args(["setup", "--directory"])
+        .args(["connector", "setup", "--directory"])
         .arg(alias)
         .output()
         .unwrap();
@@ -350,30 +475,6 @@ fn saved_runtime_requires_development_consent_before_touching_profiles_or_launch
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("development consent"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains(SECRET));
-}
-
-#[test]
-fn project_staging_reuses_exact_bytes_and_never_follows_a_replaced_parent() {
-    let temporary = tempfile::tempdir().unwrap();
-    let root = temporary.path().canonicalize().unwrap();
-    let target = root.join("release/sub/model.py");
-    enumeray_connector::stage_setup_file(&target, b"print(4)\n", true).unwrap();
-    enumeray_connector::stage_setup_file(&target, b"print(4)\n", true).unwrap();
-    assert_eq!(
-        fs::metadata(&target).unwrap().permissions().mode() & 0o777,
-        0o500
-    );
-    assert!(enumeray_connector::stage_setup_file(&target, b"print(5)\n", true).is_err());
-    assert_eq!(fs::read(&target).unwrap(), b"print(4)\n");
-    let outside = root.join("unrelated");
-    fs::create_dir(&outside).unwrap();
-    let alias = root.join("release/alias");
-    std::os::unix::fs::symlink(&outside, &alias).unwrap();
-    assert!(
-        enumeray_connector::stage_setup_file(&alias.join("nested/file"), b"unapproved", false)
-            .is_err()
-    );
-    assert!(!outside.join("nested").exists());
 }
 
 #[test]
@@ -420,23 +521,38 @@ fn every_managed_backend_produces_a_reviewable_setup_without_requests() {
         let path = root.path().join(format!("{driver}-{connection}.json"));
         fs::write(&path,serde_json::to_vec(&json!({"manifest_version":1,"host":host,"connector":{"id":"lab-connector","label":"Matrix","max_outstanding_assignments":1},"startup":"foreground"})).unwrap()).unwrap();
         let output = command(root.path())
-            .args(["setup", "--non-interactive", "--file"])
+            .args(["connector", "setup", "--non-interactive", "--file"])
             .arg(path)
             .arg("--directory")
             .arg(root.path().join(format!("op-{driver}-{connection}")))
             .output()
             .unwrap();
-        assert_eq!(json(&output)["status"], "review_required");
+        let review = json(&output);
+        assert_eq!(review["status"], "review_required");
+        if connection == "ssh" {
+            let apply = review["commands"]["apply_execution_host"]
+                .as_array()
+                .unwrap();
+            assert!(
+                apply
+                    .windows(3)
+                    .any(|part| part == ["connector", "setup", "apply-host"])
+            );
+            assert!(apply.windows(2).any(|pair| pair == ["--side", "execution"]));
+            assert!(!apply.iter().any(|argument| argument == "--enrollment-file"));
+        } else {
+            assert!(review["commands"].get("apply_execution_host").is_none());
+        }
     }
 }
 
 #[test]
-fn copied_parent_checkpoint_cannot_fork_fresh_child_operations() {
+fn copied_setup_checkpoint_cannot_fork_connector_registration() {
     let root = tempfile::tempdir().unwrap();
     let source = input(root.path(), "development");
     let original = root.path().join("original");
     let output = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&original)
         .arg("--file")
         .arg(source)
@@ -451,7 +567,7 @@ fn copied_parent_checkpoint_cannot_fork_fresh_child_operations() {
     }
     let before = fs::read(copied.join("state.json")).unwrap();
     let output = command(root.path())
-        .args(["setup", "--non-interactive", "--directory"])
+        .args(["connector", "setup", "--non-interactive", "--directory"])
         .arg(&copied)
         .output()
         .unwrap();

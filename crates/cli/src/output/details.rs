@@ -7,13 +7,24 @@ use serde_json::Value;
 
 pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
     match &args.command {
-        Command::Setup(_) => {
+        Command::Connector(Connector::Setup(_)) => {
             output.push_str("Connector setup\n");
+            let status = match value["status"].as_str() {
+                Some("review_required") => "Waiting for plan approval",
+                Some("development_consent_required") => "Waiting for development consent",
+                Some("enrollment_required") => "Waiting for an enrollment document",
+                Some("start_required") => "Waiting for the connector to connect",
+                Some("host_blocked") => "Host checks need attention",
+                Some("ready") => "Ready",
+                Some("saved") => "Saved setup",
+                Some("prepared") => "Host prepared",
+                _ => "Unknown",
+            };
+            field(output, "Status", Some(&Value::String(status.into())));
             present_fields(
                 output,
                 value,
                 &[
-                    ("Status", "/status"),
                     ("Setup directory", "/directory"),
                     ("Profile", "/profile"),
                     ("API", "/api_url"),
@@ -24,12 +35,13 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                     ("Execution account", "/execution_account"),
                     ("Startup", "/startup"),
                     ("Configuration", "/configuration"),
-                    ("Setup approval", "/plan_sha256"),
-                    ("Host approval", "/host_plan_sha256"),
+                    ("Owner setup plan SHA-256", "/plan_sha256"),
+                    ("Administrator host plan SHA-256", "/host_plan_sha256"),
                     ("Host plan", "/host_plan"),
                     ("Configured", "/diagnostics/setup/configured"),
                     ("Connected", "/diagnostics/setup/connected"),
                     ("Ready", "/diagnostics/setup/ready"),
+                    ("Readiness could not be checked", "/readiness_unavailable"),
                     ("Next action", "/next_action"),
                     ("Correction", "/correction"),
                     ("Destination", "/destination"),
@@ -37,16 +49,15 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
             );
             if let Some(commands) = value["commands"].as_object() {
                 for (key, label) in [
-                    ("apply_host", "Apply host plan"),
+                    (
+                        "apply_execution_host",
+                        "Apply plan on the SSH execution host",
+                    ),
+                    ("apply_host", "Apply plan on the connector host"),
                     ("start", "Start connector"),
                     ("resume", "Resume setup"),
                 ] {
-                    if key != "resume"
-                        && matches!(
-                            value["status"].as_str(),
-                            Some("review_required" | "development_consent_required")
-                        )
-                    {
+                    if key != "resume" && value["status"] != "start_required" {
                         continue;
                     }
                     if let Some(parts) = commands.get(key).and_then(Value::as_array) {

@@ -311,37 +311,6 @@ fn runtime_path(spec: &HostSetupSpec) -> PathBuf {
         .join("runtime.json")
 }
 
-/// Atomically stage one reviewed setup-project file under the invoking identity.
-/// Existing bytes are verified and preserved; directory traversal never follows links.
-pub fn stage_setup_file(
-    path: &Path,
-    bytes: &[u8],
-    executable: bool,
-) -> std::result::Result<(), String> {
-    let result = (|| {
-        let group = os("/usr/bin/id", &["-g"])?
-            .parse()
-            .map_err(|_| failure("invalid host group"))?;
-        directory(
-            path.parent()
-                .ok_or_else(|| failure("staged file has no parent"))?,
-            uid(None)?,
-            group,
-            0o700,
-            true,
-            false,
-        )?;
-        owned_file(
-            path,
-            bytes,
-            uid(None)?,
-            group,
-            if executable { 0o500 } else { 0o400 },
-            false,
-        )
-    })();
-    result.map_err(|e| e.to_string())
-}
 fn write_runtime(spec: &HostSetupSpec, consent: bool, owner: u32, group: u32) -> Result<()> {
     let config = ConnectorRuntimeConfiguration {
         manifest_version: 1,
@@ -1036,7 +1005,7 @@ pub(crate) fn start(path: &Path, foreground: bool, recover: bool) -> Result<Valu
             }
         }
         return Ok(
-            json!({"status":"start_requested","configuration":path,"readiness":"inspect setup diagnostics"}),
+            json!({"status":"start_requested","configuration":path,"readiness":"inspect readiness with connector setup status"}),
         );
     }
     let mut argv = setup::render(spec.clone())?.foreground_argv;
@@ -1063,7 +1032,7 @@ pub(crate) fn status(path: &Path) -> Result<Value> {
     let snapshot = crate::journal::Journal::snapshot(Path::new(&config.spec.journal));
     let service = native_state(&config.spec);
     Ok(
-        json!({"configuration":path,"connector_id":config.spec.context.connector_id,"journal_available":snapshot.is_ok(),"journal":snapshot.ok().map(|(_,s)|s),"service":service,"process_state":"unknown","readiness":"use authenticated setup status; local journal/service observations do not prove session ownership or host readiness"}),
+        json!({"configuration":path,"connector_id":config.spec.context.connector_id,"journal_available":snapshot.is_ok(),"journal":snapshot.ok().map(|(_,s)|s),"service":service,"process_state":"unknown","readiness":"use authenticated connector setup status; local journal/service observations do not prove session ownership or host readiness"}),
     )
 }
 

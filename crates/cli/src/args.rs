@@ -32,8 +32,6 @@ pub enum Command {
     /// Inspect installed build identity and compare an explicitly selected component set.
     #[command(subcommand)]
     Compatibility(Compatibility),
-    /// Guide or resume connector setup and a first model candidate trial.
-    Setup(Setup),
     #[command(flatten)]
     Runtime(enumeray_connector::RuntimeCommand),
     /// Inspect service status and administer queue limits, suspensions and audit history.
@@ -87,7 +85,7 @@ pub struct Setup {
     /// Execution identity mode; must match the setup input or saved plan.
     #[arg(long, value_enum)]
     pub mode: Option<SetupMode>,
-    /// Version-1 setup input containing host, connector and first-model selections.
+    /// Version-1 setup input containing host, connector and startup settings.
     #[arg(long)]
     pub file: Option<PathBuf>,
     /// Require complete input and explicit approvals; never prompt.
@@ -99,19 +97,13 @@ pub struct Setup {
     /// Acknowledge that trusted model code can access this OS user's files and credentials.
     #[arg(long)]
     pub allow_development_execution: bool,
-    /// Explicitly submit/resume the saved first-model candidate trial.
-    #[arg(long)]
-    pub submit_trial: bool,
-    /// Confirm site-specific Slurm batch/runtime preparation before freezing a generated starter.
-    #[arg(long)]
-    pub confirm_model_preparation: bool,
     /// Deliberately issue a new enrollment document when no usable secret was retained.
     #[arg(long)]
     pub replace_enrollment: bool,
     /// Import an explicitly issued enrollment after recovering an uncertain secret response.
     #[arg(long)]
     pub enrollment_file: Option<PathBuf>,
-    /// Explicitly adopt matching existing registration, host and model records.
+    /// Explicitly reuse matching existing connector and context records.
     #[arg(long)]
     pub adopt_existing: bool,
     #[command(subcommand)]
@@ -726,6 +718,8 @@ impl From<ContextAcceptedWork> for enumeray_contracts::management::ContextAccept
 pub enum Connector {
     #[command(flatten)]
     Host(enumeray_connector::HostCommand),
+    /// Guide or resume connector enrollment and execution context readiness.
+    Setup(Setup),
     /// List connectors you may administer, one page at a time.
     List {
         #[command(flatten)]

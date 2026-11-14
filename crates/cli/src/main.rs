@@ -36,10 +36,13 @@ fn main() -> std::process::ExitCode {
                     .ignore_errors(true)
                     .try_get_matches()
                     .is_ok_and(|matches| match matches.subcommand() {
-                        Some(("setup", child)) => child.subcommand_name() == Some("apply-host"),
-                        Some(("connector", child)) => child
-                            .subcommand_name()
-                            .is_none_or(enumeray_connector::HostCommand::has_subcommand),
+                        Some(("connector", child)) => match child.subcommand() {
+                            Some(("setup", setup)) => setup.subcommand_name() == Some("apply-host"),
+                            Some((name, _)) => {
+                                enumeray_connector::HostCommand::has_subcommand(name)
+                            }
+                            None => true,
+                        },
                         Some((name, _)) => enumeray_connector::RuntimeCommand::has_subcommand(name),
                         None => false,
                     });

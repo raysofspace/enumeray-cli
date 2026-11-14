@@ -25,6 +25,7 @@ pub(crate) fn connector(
 ) -> Result<Value, Error> {
     match command {
         Connector::Host(_) => unreachable!("host dispatch precedes user profile access"),
+        Connector::Setup(_) => unreachable!("setup dispatch precedes user profile access"),
         Connector::List { page } => {
             typed_paged_get::<Collection<ConnectorSummary>>(client, &["connectors"], page)
         }

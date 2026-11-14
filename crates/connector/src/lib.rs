@@ -44,7 +44,6 @@ use clap::Subcommand;
 use serde_json::json;
 
 pub use control::EnrollOptions;
-pub use host_setup::stage_setup_file;
 pub use host_setup::{apply_host_configuration, configuration_digest, prepare_development};
 pub use service::Options as RunOptions;
 

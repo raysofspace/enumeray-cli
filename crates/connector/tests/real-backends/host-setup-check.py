@@ -52,9 +52,9 @@ for driver in ('process', 'slurm'):
         setup_input = BASE / (identifier + '-input.json')
         setup_input.write_text(json.dumps({'manifest_version':1,'host':spec,'connector':{'id':identifier,'label':'Host fixture','max_outstanding_assignments':1},'startup':'background'}))
         owner = BASE / (identifier + '-owner')
-        review = invoke([EXE,'--json','setup','--non-interactive','--file',str(setup_input),'--directory',str(owner)], success=False)
+        review = invoke([EXE,'--json','connector','setup','--non-interactive','--file',str(setup_input),'--directory',str(owner)], success=False)
         approval = json.loads(review.stdout)['host_plan_sha256']
-        apply = [EXE,'setup','apply-host','--plan',str(plan/'plan.json'),'--side','connector','--approve',approval]
+        apply = [EXE,'connector','setup','apply-host','--plan',str(plan/'plan.json'),'--side','connector','--approve',approval]
         invoke(apply)
         runtime = Path(spec['journal']).parent / 'runtime.json'
         retained = runtime.read_bytes()
@@ -70,7 +70,7 @@ for driver in ('process', 'slurm'):
         invoke([*apply,'--enrollment-file',str(invalid_enrollment)], success=False)
         assert not Path('/var/lib/enumeray-guided/enrollment-00000000-0000-0000-0000-000000000001.json').exists()
         if connection == 'ssh':
-            invoke([EXE,'setup','apply-host','--plan',str(plan/'plan.json'),'--side','execution','--approve',approval])
+            invoke([EXE,'connector','setup','apply-host','--plan',str(plan/'plan.json'),'--side','execution','--approve',approval])
         else:
             denied = ['sudo','-u','enumeray-guided','sudo','-n','-u','model','--',spec['connector_executable'],'connector','run','--help']
             invoke(denied, success=False)
@@ -98,12 +98,12 @@ private = BASE / 'mixed-artifact-plan'
 invoke([EXE,'connector','configuration','generate','--file',str(document),'--directory',str(private)])
 source_input = BASE / 'mixed-artifact-input.json'
 source_input.write_text(json.dumps({'manifest_version':1,'host':mixed,'connector':{'id':'guided-mixed-artifact','label':'Mixed native artifacts','max_outstanding_assignments':1},'startup':'foreground'}))
-review = invoke([EXE,'--json','setup','--file',str(source_input),'--directory',str(BASE/'mixed-artifact-owner'),'--non-interactive'],success=False)
+review = invoke([EXE,'--json','connector','setup','--file',str(source_input),'--directory',str(BASE/'mixed-artifact-owner'),'--non-interactive'],success=False)
 approval = json.loads(review.stdout)['host_plan_sha256']
-invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval,'--executable-source',EXE])
+invoke([EXE,'connector','setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval,'--executable-source',EXE])
 print(json.dumps({'execution_native_artifact':'passed','connector_platform':'macos','execution_platform':'linux'}),flush=True)
 
-# Source fixtures for matching-service guided candidate trials. The owner CLI and
+# Source fixtures for matching-service guided setup and separate candidate trials. The owner CLI and
 # connector use enumeray's OS account; model execution remains the distinct model user.
 plans = Path('/opt/enumeray/guided-host-plans')
 releases = Path('/opt/enumeray/guided-releases')
@@ -141,11 +141,11 @@ for driver in ('process', 'slurm'):
         invoke([EXE,'connector','configuration','generate','--file',str(document),'--directory',str(private)])
         setup_input = BASE / (identifier + '-input.json')
         setup_input.write_text(json.dumps({'manifest_version':1,'host':spec,'connector':{'id':identifier,'label':'Guided journey','max_outstanding_assignments':1},'startup':'foreground'}))
-        review=invoke([EXE,'--json','setup','--file',str(setup_input),'--directory',str(BASE/(identifier+'-owner')),'--non-interactive'],success=False)
+        review=invoke([EXE,'--json','connector','setup','--file',str(setup_input),'--directory',str(BASE/(identifier+'-owner')),'--non-interactive'],success=False)
         approval=json.loads(review.stdout)['host_plan_sha256']
-        invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','connector','--approve',approval])
+        invoke([EXE,'connector','setup','apply-host','--plan',str(private/'plan.json'),'--side','connector','--approve',approval])
         if connection == 'ssh':
-            invoke([EXE,'setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval])
+            invoke([EXE,'connector','setup','apply-host','--plan',str(private/'plan.json'),'--side','execution','--approve',approval])
         project=releases/identifier
         invoke([EXE,'model','init','guided-model-'+driver+'-'+connection,'--directory',str(project),'--driver',driver])
         if driver=='slurm':
