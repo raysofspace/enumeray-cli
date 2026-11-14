@@ -3,6 +3,9 @@ mod cancel;
 mod collect;
 pub(crate) mod recovery;
 pub(crate) mod state;
+mod wizard;
+
+pub(crate) use wizard::{wizard_preview, wizard_status, wizard_submit};
 
 use crate::{
     app::{Completion, Failure},
@@ -177,7 +180,7 @@ pub(crate) fn execute(
     };
     let value = match command {
         Analysis::Submit { .. } => match &mut saved {
-            AnalysisState::Local(local) => submit(client, &directory, local)?,
+            AnalysisState::Local(local) => submit(client, &directory, local, None)?,
             AnalysisState::Recovery(recovered) => recovery::submit(client, &directory, recovered)?,
         },
         Analysis::Status { .. } => {
@@ -547,6 +550,7 @@ fn submit(
     client: &EnumerayClient,
     directory: &Directory,
     saved: &mut Saved,
+    approved_inputs: Option<Value>,
 ) -> Result<Value, Error> {
     if saved.submission_started {
         // Do not require source files or mutable discovery to reconcile a possibly accepted POST.
@@ -555,7 +559,12 @@ fn submit(
         }
         return local_summary(directory, saved, None);
     }
-    let inputs = directory.inputs()?;
+    // A setup caller already reviewed this snapshot under the writer lock.
+    // Editing inputs.json while this command runs cannot change that request.
+    let inputs = match approved_inputs {
+        Some(inputs) => inputs,
+        None => directory.inputs()?,
+    };
     models::validate_input_value(&inputs).map_err(|error| invalid(error.to_string()))?;
     validate_template(saved, &inputs)?;
     if saved

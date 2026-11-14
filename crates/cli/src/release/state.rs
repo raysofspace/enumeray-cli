@@ -92,7 +92,7 @@ pub(super) struct DelegationAttempt {
 
 pub(super) struct Directory {
     pub root: PathBuf,
-    _lock: config::PrivateLock,
+    lock: Option<config::PrivateLock>,
 }
 
 impl Directory {
@@ -117,6 +117,16 @@ impl Directory {
     }
 
     pub fn open(root: &Path) -> Result<Self, Error> {
+        let mut directory = Self::inspect(root)?;
+        directory.lock = Some(config::lock_private(
+            &directory.root.join("release"),
+            "Release directory is already in use; resume after the other command exits.",
+        )?);
+        Ok(directory)
+    }
+
+    /// Read atomic release evidence without creating or locking a file.
+    pub fn inspect(root: &Path) -> Result<Self, Error> {
         let metadata = fs::symlink_metadata(root)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(invalid(
@@ -132,12 +142,10 @@ impl Directory {
                 ));
             }
         }
-        let root = root.canonicalize()?;
-        let lock = config::lock_private(
-            &root.join("release"),
-            "Release directory is already in use; resume after the other command exits.",
-        )?;
-        Ok(Self { root, _lock: lock })
+        Ok(Self {
+            root: root.canonicalize()?,
+            lock: None,
+        })
     }
 
     pub fn read<T: DeserializeOwned>(&self, name: &str) -> Result<T, Error> {
@@ -154,6 +162,9 @@ impl Directory {
     }
 
     pub fn write<T: Serialize>(&self, name: &str, value: &T, replace: bool) -> Result<(), Error> {
+        if self.lock.is_none() {
+            return Err(invalid("Release evidence requires an exclusive writer."));
+        }
         let bytes = serde_json::to_vec(value)?;
         if bytes.len() > MAX_BYTES {
             return Err(invalid("Release evidence exceeds 8 MiB."));
@@ -258,4 +269,29 @@ pub(super) fn digest<T: Serialize>(value: &T) -> Result<String, Error> {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inspection_does_not_create_a_lock_or_wait_for_a_writer() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("operation");
+        let writer = Directory::create(&path).unwrap();
+        writer
+            .write("sample.json", &json!({"saved":true}), false)
+            .unwrap();
+        let read_only = Directory::inspect(&path).unwrap();
+        assert_eq!(
+            read_only.read::<Value>("sample.json").unwrap(),
+            json!({"saved":true})
+        );
+        assert!(read_only.write("sample.json", &json!(null), true).is_err());
+        drop(writer);
+        fs::remove_file(path.join("release.lock")).unwrap();
+        Directory::inspect(&path).unwrap();
+        assert!(!path.join("release.lock").exists());
+    }
 }

@@ -145,6 +145,23 @@ pub(super) fn render(output: &mut String, args: &Args, value: &Value) {
                 value.pointer("/report/limitations"),
             );
         }
+        Command::Model(Model::Setup(_)) => {
+            field(output, "Model setup", value.get("stage_label"));
+            fields(
+                output,
+                value,
+                &[
+                    ("Model", "/model_id"),
+                    ("Context", "/context_id"),
+                    ("Candidate", "/publication_id"),
+                    ("Run", "/run_id"),
+                    ("Who acts", "/owner"),
+                    ("Next action", "/next_action"),
+                    ("Resume", "/resume_command"),
+                    ("Activate", "/activation_command"),
+                ],
+            );
+        }
         Command::Model(Model::Release(_)) => {
             output.push_str("Release\n");
             fields(

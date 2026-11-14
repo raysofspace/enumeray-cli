@@ -13,7 +13,10 @@ use enumeray_contracts::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, fs::File};
+use std::{
+    collections::BTreeMap,
+    fs::{self, File},
+};
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -101,33 +104,7 @@ pub(super) fn collect(
         directory.write("state/collection.json", &plan)?;
         plan
     };
-    if plan.schema_version != 1
-        || plan.run_id != accepted_id(saved)?
-        || plan.publication_id != saved.publication_id()
-    {
-        return Err(invalid(
-            "Collection belongs to another run or uses an unsupported format.",
-        ));
-    }
-    validate_run(saved, &plan.inspection)?;
-    let expected = outputs(saved, &plan)?;
-    if plan.outputs.len() != expected.len()
-        || plan.outputs.iter().any(|(name, output)| {
-            expected.get(name).is_none_or(|retained| {
-                output.artifact_id != retained.artifact_id
-                    || output.logical_name != retained.logical_name
-                    || output.filename != retained.filename
-                    || output.media_type != retained.media_type
-                    || output.version_id != retained.version_id
-                    || output.size_bytes != retained.size_bytes
-                    || output.checksum != retained.checksum
-            })
-        })
-    {
-        return Err(invalid(
-            "Collection plan conflicts with retained provenance.",
-        ));
-    }
+    validate_plan(saved, &plan)?;
     directory.evidence("results/inspection.json", &plan.inspection)?;
     directory.evidence("results/provenance.json", &plan.provenance)?;
     directory.evidence(
@@ -281,6 +258,51 @@ pub(super) fn collect(
         directory.write("state/collection.json", &plan)?;
         return collection_summary(directory, saved, &plan, collection_outputs, false);
     }
+    let mut bundle = bundle_evidence(saved, &plan);
+    if !input_collections.is_empty() {
+        bundle["input_collections"] = serde_json::to_value(&input_collections)?;
+    }
+    if !collection_outputs.is_empty() {
+        bundle["collections"] = serde_json::to_value(&collection_outputs)?;
+    }
+    directory.evidence("bundle.json", &bundle)?;
+    plan.complete = true;
+    directory.write("state/collection.json", &plan)?;
+    collection_summary(directory, saved, &plan, collection_outputs, true)
+}
+
+fn validate_plan(saved: &AnalysisState, plan: &Plan) -> Result<(), Error> {
+    if plan.schema_version != 1
+        || plan.run_id != accepted_id(saved)?
+        || plan.publication_id != saved.publication_id()
+    {
+        return Err(invalid(
+            "Collection belongs to another run or uses an unsupported format.",
+        ));
+    }
+    validate_run(saved, &plan.inspection)?;
+    let expected = outputs(saved, plan)?;
+    if plan.outputs.len() != expected.len()
+        || plan.outputs.iter().any(|(name, output)| {
+            expected.get(name).is_none_or(|retained| {
+                output.artifact_id != retained.artifact_id
+                    || output.logical_name != retained.logical_name
+                    || output.filename != retained.filename
+                    || output.media_type != retained.media_type
+                    || output.version_id != retained.version_id
+                    || output.size_bytes != retained.size_bytes
+                    || output.checksum != retained.checksum
+            })
+        })
+    {
+        return Err(invalid(
+            "Collection plan conflicts with retained provenance.",
+        ));
+    }
+    Ok(())
+}
+
+fn bundle_evidence(saved: &AnalysisState, plan: &Plan) -> Value {
     let bundle = json!({"schema_version":1,"complete":true,"run_id":plan.run_id,"publication_id":plan.publication_id,
         "scientific_state":plan.inspection["state"],"inspection":"results/inspection.json","provenance":"results/provenance.json",
         "effective_inputs":"results/effective-inputs.json","scientific_outputs":"results/outputs.json",
@@ -293,16 +315,68 @@ pub(super) fn collect(
     if !saved.purpose().is_standard() || saved.local().is_none() {
         add_identity(saved, &mut bundle);
     }
-    if !input_collections.is_empty() {
-        bundle["input_collections"] = serde_json::to_value(&input_collections)?;
+    bundle
+}
+
+pub(super) struct WizardEvidence {
+    pub inspection: Value,
+    pub bundle: Value,
+}
+
+/// Read the completed trial evidence without repairing its journal or redoing transfers.
+pub(super) fn wizard_evidence(
+    directory: &Directory,
+    saved: &AnalysisState,
+) -> Result<WizardEvidence, Error> {
+    let plan: Plan = directory.read("state/collection.json")?;
+    validate_plan(saved, &plan)?;
+    if !plan.complete || plan.outputs.values().any(|output| !output.verified) {
+        return Err(invalid(
+            "Trial collection is incomplete. Resume the same collection.",
+        ));
     }
-    if !collection_outputs.is_empty() {
-        bundle["collections"] = serde_json::to_value(&collection_outputs)?;
+    for (path, expected) in [
+        ("results/inspection.json", &plan.inspection),
+        ("results/provenance.json", &plan.provenance),
+        (
+            "results/effective-inputs.json",
+            &plan.inspection["effective_inputs"],
+        ),
+        (
+            "results/outputs.json",
+            &plan.inspection["result"]["outputs"],
+        ),
+    ] {
+        if &directory.read::<Value>(path)? != expected {
+            return Err(invalid(format!(
+                "Collected trial evidence conflicts at {path}. Preserve this directory and inspect its evidence.",
+            )));
+        }
     }
-    directory.evidence("bundle.json", &bundle)?;
-    plan.complete = true;
-    directory.write("state/collection.json", &plan)?;
-    collection_summary(directory, saved, &plan, collection_outputs, true)
+    let bundle: Value = directory.read("bundle.json")?;
+    if bundle != bundle_evidence(saved, &plan) {
+        return Err(invalid(
+            "Collected trial bundle conflicts with retained provenance. Preserve this directory and inspect its evidence.",
+        ));
+    }
+    // Collection has already verified each checksum. Check that the retained
+    // file is still present with its reported size without re-reading its bytes.
+    for output in plan.outputs.values() {
+        let path = directory.root.join(output_path(output, plan.named_files));
+        if plan.named_files {
+            super::state::private_dir(path.parent().expect("named artifact directory"))?;
+        }
+        config::require_private(&path)?;
+        if fs::symlink_metadata(&path)?.len() != output.size_bytes {
+            return Err(invalid(
+                "A collected trial file no longer has its verified size. Inspect the trial directory and run analysis collect to recheck it.",
+            ));
+        }
+    }
+    Ok(WizardEvidence {
+        inspection: plan.inspection,
+        bundle,
+    })
 }
 
 fn collection_summary(

@@ -218,8 +218,9 @@ Arrange host installation access as well as the compute grant.
 
 The author runs `enumeray connector grant available`. The handoff is
 complete when the command shows the intended context and the author knows
-where and how to install the release. They can then
-[install and test it](AUTHOR_GUIDE.md#install-an-immutable-release-and-select-compute).
+where and how to install the release. The author can then use
+[`enumeray model setup`](AUTHOR_GUIDE.md#use-guided-model-setup) to prepare
+the model, run a candidate trial and review it for activation.
 For day-to-day service tasks, see
 [service operation](../connector/README.md#enrollment-and-service-operation).
 

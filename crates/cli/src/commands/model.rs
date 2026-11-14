@@ -48,7 +48,9 @@ pub(crate) fn model(client: &EnumerayClient, command: &Model) -> Result<Value, E
                 &ModelCreate { model: metadata },
             )
         }
-        Model::Validate { .. } | Model::Init { .. } | Model::Release(_) => unreachable!(),
+        Model::Validate { .. } | Model::Init { .. } | Model::Release(_) | Model::Setup(_) => {
+            unreachable!()
+        }
         Model::Publications { id, page } => typed_paged_get::<Collection<PublicationSummary>>(
             client,
             &["models", id, "publications"],

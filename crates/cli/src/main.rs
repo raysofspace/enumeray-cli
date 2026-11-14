@@ -8,6 +8,7 @@ mod commands;
 mod compatibility;
 mod config;
 mod manifest;
+mod model_setup;
 mod observation;
 mod output;
 mod preflight;

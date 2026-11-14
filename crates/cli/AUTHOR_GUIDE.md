@@ -9,7 +9,7 @@ where the model will run and gives your account permission to publish there.
 | --- | --- |
 | Try a local example | [Download the projects and run the tests](#run-the-downloaded-model-examples-offline). You need Python 3.9 or newer to run them. |
 | Adapt a model | [Generate a starter and map your inputs and outputs](#scaffold-and-map-your-science). You can test it before signing in. |
-| Publish a tested model | [Arrange installation](#install-an-immutable-release-and-select-compute), then [trial the candidate and activate it](#save-a-release-resume-readiness-review-and-activate). |
+| Publish a tested model | [Use guided model setup](#use-guided-model-setup) or [arrange installation](#install-an-immutable-release-and-select-compute) and follow the individual release commands. |
 | Give other people access | [Choose who can find and run the model](#choose-visibility-and-access-explicitly) or [give a named reviewer access to a candidate](#hand-a-candidate-to-another-administrator). |
 | Change the version users run | [Publish an update or restore a prior version](#updates-and-rollback). |
 
@@ -25,6 +25,43 @@ as illustrative IDs. [Sign in to Enumeray](https://doc.enumeray.com/start/login/
 before publishing. Replace sample context IDs, paths and values such as
 `RUN_UUID`. Use a new folder for each release or run and keep it when
 resuming that work.
+
+## Use guided model setup
+
+From a terminal, choose a private directory for one setup operation.
+
+```sh
+enumeray model setup --directory model-setup-r1
+```
+
+Choose a new starter or supply your editable `publication.json`. You can
+start before signing in. If you generate a starter, adapt the wrapper and
+declaration and run your local tests before continuing. Give your publication
+a named example and decide how you will check its result. Exact JSON compares
+the trial inputs and collected values with the example. Use author review for
+a numerical tolerance or a result file, and record the check before submitting
+the trial. For publications with collections, follow the [individual release
+and analysis commands](#save-a-release-resume-readiness-review-and-activate).
+
+Sign in to the intended service with your author account before selecting
+compute. Ask the connector owner for a compute grant. Agree with the site on
+the installation directory and the account that must be able to run the
+wrapper. Install the release under the approved root through the site's usual
+procedure, including any runtime and data required by your example.
+
+Resume with the same command after each handoff. Use the status command to
+see the next action and who can take it.
+
+```sh
+enumeray model setup status --directory model-setup-r1
+```
+
+Review the exact candidate, its trial inputs, execution location and data
+access before approving submission. Check the collected evidence from the
+trial. When the wizard saves the release review, it prints the command you
+can run to make that candidate current. Keep the setup directory if a
+registration, run or collection is interrupted. It contains the release
+and trial directories used for recovery.
 
 ## Run the downloaded model examples offline
 
