@@ -166,10 +166,12 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
             failure("enrollment outcome unknown; repeat using the same identity directory")
         })?;
     if !response.status().is_success() {
-        return Err(failure(format!(
+        let mut error = failure(format!(
             "connector enrollment rejected ({})",
             response.status().as_u16()
-        )));
+        ));
+        error.http_status = Some(response.status());
+        return Err(error);
     }
     let mut receipt_bytes = Vec::new();
     response
@@ -191,12 +193,23 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
         ));
     }
     let token_path = options.directory.join("token");
-    if token_path.exists() {
-        if local_process::read_private(&token_path, 256)? != identity.token.as_bytes() {
-            return Err(failure("connector token conflicts with identity"));
-        }
-    } else {
-        private_write(&token_path, identity.token.as_bytes())?;
+    if !token_path.exists() {
+        let temporary = options
+            .directory
+            .join(format!(".token-{}.tmp", Uuid::new_v4()));
+        let result =
+            private_write(&temporary, identity.token.as_bytes()).and_then(
+                |()| match fs::hard_link(&temporary, &token_path) {
+                    Ok(()) => Ok(()),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+                    Err(_) => Err(failure("cannot publish private connector token")),
+                },
+            );
+        let _ = fs::remove_file(&temporary);
+        result?;
+    }
+    if local_process::read_private(&token_path, 256)? != identity.token.as_bytes() {
+        return Err(failure("connector token conflicts with identity"));
     }
     let receipt_path = options.directory.join("enrollment.json");
     if !receipt_path.exists() {
@@ -210,6 +223,45 @@ pub fn enroll(options: EnrollOptions) -> Result<Value> {
     Ok(
         json!({"status":"enrolled","connector_id":receipt.connector_id,"credential_id":receipt.credential_id,"token_file":token_path}),
     )
+}
+
+#[derive(Debug)]
+pub enum ShareEnrollmentError {
+    Missing,
+    Other(String),
+}
+
+impl std::fmt::Display for ShareEnrollmentError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Missing => "connector enrollment is missing or expired",
+            Self::Other(message) => message,
+        })
+    }
+}
+
+impl std::error::Error for ShareEnrollmentError {}
+
+pub fn enroll_share(
+    api: &str,
+    directory: &Path,
+    document_file: &Path,
+    allow_insecure_http: bool,
+) -> std::result::Result<Value, ShareEnrollmentError> {
+    enroll(EnrollOptions {
+        directory: directory.to_path_buf(),
+        api_base_url: Some(api.to_owned()),
+        enrollment_token_file: None,
+        enrollment_file: Some(document_file.to_path_buf()),
+        allow_insecure_http,
+    })
+    .map_err(|error| {
+        if error.http_status == Some(StatusCode::NOT_FOUND) {
+            ShareEnrollmentError::Missing
+        } else {
+            ShareEnrollmentError::Other(error.to_string())
+        }
+    })
 }
 
 #[derive(Default, Deserialize)]
@@ -442,10 +494,24 @@ pub(crate) fn prepare_configuration(
                     if bytes.len() != 32 {
                         return Err(failure("validated installation digest is not SHA256"));
                     }
+                    let path = if binding.descriptor.snapshot_sha256.is_some() {
+                        Path::new(&path)
+                            .strip_prefix(&binding.descriptor.release_path)
+                            .ok()
+                            .and_then(Path::to_str)
+                            .filter(|relative| !relative.is_empty())
+                            .ok_or_else(|| failure("share validation path is outside the release"))?
+                            .to_owned()
+                    } else {
+                        path
+                    };
                     verified_digests.insert(
                         path,
                         bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
                     );
+                }
+                if let Some(expected) = &binding.descriptor.snapshot_sha256 {
+                    verified_digests.insert(".".into(), expected.clone());
                 }
                 installations.push((binding.publication_id.clone(), value));
             }
@@ -1091,6 +1157,8 @@ mod tests {
                 dataset_identities: vec![],
             },
             release_path: "/opt/models/release-1".into(),
+            snapshot_sha256: None,
+            wrapper_model_id: None,
             entrypoint: vec!["wrapper".into(), "execute".into()],
             slurm_script: None,
             environment: BTreeMap::new(),

@@ -32,6 +32,7 @@ fn one_help_tree_and_version_work_without_profiles() {
         vec!["--version"],
         vec!["connector", "--help"],
         vec!["connector", "run", "--help"],
+        vec!["model", "share", "--help"],
         vec!["compute-runner", "--help"],
         vec!["local-worker", "--help"],
         vec!["transfer-worker", "--help"],
@@ -66,6 +67,31 @@ fn one_help_tree_and_version_work_without_profiles() {
     ] {
         assert!(help.contains(command), "missing {command}");
     }
+}
+
+#[test]
+fn local_sharing_requires_an_interactive_terminal_and_one_access_choice() {
+    let root = tempfile::tempdir().unwrap();
+    let output = isolated(root.path())
+        .args(["model", "share", "."])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("interactive terminal"));
+
+    let output = isolated(root.path())
+        .args([
+            "model",
+            "share",
+            ".",
+            "--open",
+            "--invite-email",
+            "colleague@example.org",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot be used with"));
 }
 
 #[test]

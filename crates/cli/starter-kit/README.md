@@ -24,6 +24,14 @@ deliberately new work in a fresh workspace. This local fence and atomic,
 no-replacement publication preserve evidence; connector journals own execution
 recovery. A complete result may remain after a directory-sync error: preserve it.
 
+## Share a process starter
+
+For a starter generated with the process driver, sign in and run
+`enumeray model share .` from this directory. Confirm activation and give the
+printed catalogue model ID to your colleague. The wrapper keeps using the ID in
+your `publication.json`. Keep the terminal open while the model is available.
+See [local sharing and invitations](AUTHOR_GUIDE.md#share-a-trusted-local-model).
+
 ## Install and register a candidate
 
 Local tests work while `execution.context_id` and `execution.release_path` are null.

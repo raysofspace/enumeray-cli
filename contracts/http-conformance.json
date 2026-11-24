@@ -20,6 +20,58 @@
   },
   "operations": [
     {
+      "method": "put",
+      "path": "/api/v1/model-shares/{share_id}",
+      "purpose": "Register a dedicated model, connector, execution context, and compute grant for a local project.",
+      "scopes": ["models:manage"],
+      "roles": "The signed-in author also needs connectors:manage. The share belongs to the account that registered it.",
+      "retry": "Persist the share UUID and request. Repeat both unchanged to recover the same registry identities.",
+      "guards": "Requires a direct-process development context. Bootstrap does not activate a publication or submit a run.",
+      "retained": "Share UUID, catalog model ID, wrapper model ID, connector ID, context ID, and compute grant ID.",
+      "errors": ["403 insufficient_scope", "404 not_found", "409 conflict"],
+      "next_action": "Enroll the dedicated connector and register the staged publication.",
+      "workflow": "/authors/author-guide/#share-a-trusted-local-model"
+    },
+    {
+      "method": "put",
+      "path": "/api/v1/model-shares/{share_id}/invitations/{invitation_id}",
+      "purpose": "Issue a recipient-bound invitation for an activated local share.",
+      "scopes": ["access:manage"],
+      "roles": "Share owner.",
+      "retry": "Persist the UUID and secret before sending. Repeat the same verifier and recipient to recover the original expiry.",
+      "guards": "Supply either the recipient account UUID or verified email. Send the token SHA-256 verifier and keep the token private.",
+      "retained": "Invitation UUID, model ID, private token, and expiry.",
+      "errors": ["403 insufficient_scope", "404 not_found", "409 conflict"],
+      "next_action": "Deliver the invitation file privately to the recipient.",
+      "workflow": "/authors/author-guide/#share-a-trusted-local-model"
+    },
+    {
+      "method": "put",
+      "path": "/connector/v1/sessions/{session_id}/share-lease",
+      "purpose": "Renew admission for a dedicated local model share.",
+      "scopes": [],
+      "roles": "Active credential and current process session for the dedicated connector.",
+      "retry": "Repeat with the same active session. The server measures each renewal from receipt using its own clock.",
+      "guards": "A renewal expires after 30 seconds. A closed session cannot renew admission.",
+      "retained": "Connector and session identities and the latest lease receipt.",
+      "errors": ["401 invalid_connector_credential", "404 not_found", "409 share_lease_closed"],
+      "next_action": "Send the next renewal after 10 seconds while serving the share.",
+      "workflow": "/authors/author-guide/#share-a-trusted-local-model"
+    },
+    {
+      "method": "delete",
+      "path": "/connector/v1/sessions/{session_id}/share-lease",
+      "purpose": "Close new run admission for the local share before draining the connector.",
+      "scopes": [],
+      "roles": "Active credential for the session's dedicated connector.",
+      "retry": "Repeat with the same session to reconcile an uncertain close.",
+      "guards": "Closure fences later renewals from that session. Accepted work keeps its original destination.",
+      "retained": "Connector and session identities and the durable connector journal.",
+      "errors": ["401 invalid_connector_credential", "404 not_found"],
+      "next_action": "Drain and retain unfinished work for the next start.",
+      "workflow": "/authors/author-guide/#share-a-trusted-local-model"
+    },
+    {
       "method": "get",
       "path": "/api/v1/runs/{run_id}",
       "purpose": "Inspect accepted inputs, immutable requirements and current run state.",
@@ -212,10 +264,10 @@
       ],
       "roles": "Authorized model user; candidate trials additionally require models:manage and current model-administrator/captured-grant or named-delegation authority.",
       "retry": "Persist the request and Idempotency-Key before sending; repeat both unchanged after a lost reply. The same account/key returns the original acceptance receipt, not current run status.",
-      "guards": "Explicit expected_publication_id, current access/admission and compatible declared inputs. Keys identify semantic requests and belong to the user, not one credential.",
+      "guards": "Explicit expected_publication_id, current access/admission and compatible declared inputs. Fresh local-share runs also require a live connector lease. Keys belong to the user and identify semantic requests.",
       "retained": "API/account, full original body, Idempotency-Key and returned run/receipt identities.",
       "errors": [
-        "409 idempotency_conflict",
+        "409 idempotency_conflict or connector_offline",
         "413 payload_too_large",
         "422 invalid_inputs or invalid_artifact_input",
         "429 queue capacity"

@@ -381,6 +381,9 @@ impl ExecutionContextDefinition {
 #[serde(deny_unknown_fields)]
 pub struct InstallationSpec {
     pub release_path: String,
+    /// Digest of the complete staged tree for a personal model share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_sha256: Option<String>,
     /// First argument is an executable path relative to release_path.
     pub entrypoint: Vec<String>,
     /// Model-supplied batch file relative to release_path; required for Slurm.
@@ -405,6 +408,14 @@ impl InstallationSpec {
             return Err(
                 "installation requires an absolute immutable release directory without parent traversal".into(),
             );
+        }
+        if self.snapshot_sha256.as_deref().is_some_and(|digest| {
+            digest.len() != 64
+                || !digest
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        }) {
+            return Err("snapshot_sha256 must be a lowercase SHA-256 digest".into());
         }
         if self.entrypoint.is_empty()
             || self.entrypoint.len() > 32
@@ -446,6 +457,8 @@ impl InstallationSpec {
             provider_binding_id,
             installation: InstallationIdentity::derive(definition),
             release_path: self.release_path,
+            snapshot_sha256: self.snapshot_sha256,
+            wrapper_model_id: None,
             entrypoint: self.entrypoint,
             slurm_script: self.slurm_script,
             environment: self.environment,
@@ -526,6 +539,11 @@ pub struct InstallationDescriptor {
     pub provider_binding_id: String,
     pub installation: InstallationIdentity,
     pub release_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_sha256: Option<String>,
+    /// Registered model ID expected by the installed wrapper for a personal share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrapper_model_id: Option<String>,
     /// First argument is an executable path relative to release_path.
     pub entrypoint: Vec<String>,
     /// Model-supplied batch file relative to release_path; required for Slurm.
@@ -539,6 +557,7 @@ impl InstallationDescriptor {
     pub fn spec(&self) -> InstallationSpec {
         InstallationSpec {
             release_path: self.release_path.clone(),
+            snapshot_sha256: self.snapshot_sha256.clone(),
             entrypoint: self.entrypoint.clone(),
             slurm_script: self.slurm_script.clone(),
             environment: self.environment.clone(),
@@ -678,9 +697,27 @@ mod installation_spec_tests {
     fn spec() -> InstallationSpec {
         InstallationSpec {
             release_path: "/opt/models/example/r1".into(),
+            snapshot_sha256: None,
             entrypoint: vec!["bin/wrapper".into(), "execute".into()],
             slurm_script: None,
             environment: BTreeMap::from([("DATASET_ROOT".into(), "/data/release-1".into())]),
+        }
+    }
+
+    #[test]
+    fn share_snapshot_digests_are_optional_and_canonical() {
+        let mut installation = spec();
+        assert!(
+            serde_json::to_value(&installation)
+                .unwrap()
+                .get("snapshot_sha256")
+                .is_none()
+        );
+        installation.snapshot_sha256 = Some("a0".repeat(32));
+        assert!(installation.validate().is_ok());
+        for digest in ["a".repeat(63), "A0".repeat(32), "g".repeat(64)] {
+            installation.snapshot_sha256 = Some(digest);
+            assert!(installation.validate().is_err());
         }
     }
 

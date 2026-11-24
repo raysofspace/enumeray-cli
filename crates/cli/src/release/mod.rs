@@ -815,6 +815,7 @@ fn activate(
                     .transpose()
                     .map_err(|_| invalid("Invalid reviewed delegation identity."))?,
                 expected_current_publication_id: saved.expected_current.clone(),
+                share_open_access: None,
             },
             review: saved,
             response: None,

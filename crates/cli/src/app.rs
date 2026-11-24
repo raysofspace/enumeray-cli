@@ -102,6 +102,9 @@ impl From<serde_json::Error> for Failure {
 }
 
 pub(crate) fn execute(args: &Args) -> Result<Completion, Failure> {
+    if let Command::Model(Model::Share(options)) = &args.command {
+        return crate::model_share::execute(args, options);
+    }
     if let Command::Model(Model::Setup(options)) = &args.command {
         return crate::model_setup::execute(args, options);
     }

@@ -477,6 +477,7 @@ dependencies = [
  "enumeray-connector",
  "enumeray-contracts",
  "futures-util",
+ "getrandom 0.4.3",
  "reqwest",
  "semver",
  "serde",

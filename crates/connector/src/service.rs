@@ -7,13 +7,132 @@ use std::{
     collections::BTreeMap,
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
     thread,
     time::{Duration, Instant},
 };
+use uuid::Uuid;
+
+const SHARE_DRAIN_SECONDS: u64 = 30;
+
+pub struct ShareServiceOptions {
+    pub journal: PathBuf,
+    pub api_base_url: String,
+    pub connector_id: String,
+    pub token_file: PathBuf,
+    pub allow_insecure_http: bool,
+}
+
+pub struct ShareServiceHandle {
+    control: Arc<ShareControl>,
+    worker: Option<thread::JoinHandle<Result<Value>>>,
+    _signals: tokio::runtime::Runtime,
+}
+
+impl ShareServiceHandle {
+    pub fn is_online(&self) -> bool {
+        !self.is_stopping()
+            && self
+                .control
+                .online_until
+                .lock()
+                .expect("share lease lock")
+                .is_some_and(|until| until > Instant::now())
+    }
+
+    pub fn is_stopping(&self) -> bool {
+        self.control.is_stopping()
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.worker
+            .as_ref()
+            .is_none_or(thread::JoinHandle::is_finished)
+    }
+
+    pub fn request_stop(&self) {
+        start_drain(&self.control.shutdown, SHARE_DRAIN_SECONDS);
+    }
+
+    pub fn wait(mut self) -> std::result::Result<Value, String> {
+        self.worker
+            .take()
+            .expect("share service worker")
+            .join()
+            .map_err(|_| "the share connector stopped unexpectedly".to_owned())?
+            .map_err(|error| error.to_string())
+    }
+}
+
+impl Drop for ShareServiceHandle {
+    fn drop(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            self.request_stop();
+            let _ = worker.join();
+        }
+    }
+}
+
+#[derive(Default)]
+struct ShareControl {
+    shutdown: Arc<Mutex<Option<Instant>>>,
+    online_until: Mutex<Option<Instant>>,
+}
+
+impl ShareControl {
+    fn is_stopping(&self) -> bool {
+        self.shutdown.lock().expect("shutdown lock").is_some()
+    }
+}
+
+pub fn start_share_service(
+    options: ShareServiceOptions,
+) -> std::result::Result<ShareServiceHandle, String> {
+    if super::compute::execution_uid().map_err(|error| error.to_string())? == "0" {
+        return Err("model share requires a regular, non-root OS user".into());
+    }
+    let control = Arc::new(ShareControl::default());
+    let signals =
+        signals(&control.shutdown, SHARE_DRAIN_SECONDS).map_err(|error| error.to_string())?;
+    let worker_control = control.clone();
+    let worker = thread::Builder::new()
+        .name("enumeray-share-connector".into())
+        .spawn(move || {
+            run_service(
+                Options {
+                    journal: options.journal,
+                    api_base_url: Some(options.api_base_url),
+                    connector_id: options.connector_id,
+                    token_file: options.token_file,
+                    allow_insecure_http: options.allow_insecure_http,
+                    log_policy_file: None,
+                    credentials_file: None,
+                    max_workers: 1,
+                    max_transfer_workers: 2,
+                    max_spool_bytes: 1099511627776,
+                    max_pending_assignments: 64,
+                    unpublished_retention_seconds: None,
+                    poll_interval_seconds: 2,
+                    shutdown_timeout_seconds: SHARE_DRAIN_SECONDS,
+                    cleanup_interval_seconds: 30,
+                    completed_retention_seconds: 0,
+                    recovery_mode: Recovery::ExclusiveLocal,
+                    confirm_prior_process_stopped: false,
+                    allow_development_execution: true,
+                },
+                Some(worker_control),
+            )
+        })
+        .map_err(|_| "cannot start the share connector".to_owned())?;
+    Ok(ShareServiceHandle {
+        control,
+        worker: Some(worker),
+        _signals: signals,
+    })
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Recovery {
@@ -100,6 +219,10 @@ fn log(status: &str, journal: &Journal, message: Option<&str>) {
 }
 
 pub fn run(options: Options) -> Result<Value> {
+    run_service(options, None)
+}
+
+fn run_service(options: Options, share: Option<Arc<ShareControl>>) -> Result<Value> {
     if options.max_pending_assignments < options.max_workers {
         return Err(failure(
             "max-pending-assignments must be at least max-workers",
@@ -171,6 +294,9 @@ pub fn run(options: Options) -> Result<Value> {
         Some(&options.token_file),
         options.allow_insecure_http,
     )?;
+    if let Some(control) = &share {
+        client.shutdown = control.shutdown.clone();
+    }
     client.allow_development_execution = options.allow_development_execution;
     journal.record_execution_policy(options.allow_development_execution)?;
     crate::execution_policy::warn(options.allow_development_execution);
@@ -183,7 +309,12 @@ pub fn run(options: Options) -> Result<Value> {
     )
     .with_spool_limit(options.max_spool_bytes)
     .with_budgets(enumeray_contracts::transfers::TransferBudgets::from_env().map_err(failure)?);
-    let _signals = signals(&client, options.shutdown_timeout_seconds)?;
+    let _signals = if share.is_none() {
+        Some(signals(&client.shutdown, options.shutdown_timeout_seconds)?)
+    } else {
+        None
+    };
+    let mut lease = share.map(|control| ShareLease::start(client.clone(), control));
     let (heartbeat, failures, ready) = Heartbeat::start(client.clone());
     let _heartbeat = heartbeat;
     log("starting", &journal, None);
@@ -236,6 +367,12 @@ pub fn run(options: Options) -> Result<Value> {
     loop {
         if let Ok(error) = failures.try_recv()
             && error.kind != ErrorKind::Stopping
+        {
+            return Err(error);
+        }
+        if let Some(error) = lease
+            .as_ref()
+            .and_then(|lease| lease.failures.try_recv().ok())
         {
             return Err(error);
         }
@@ -403,6 +540,13 @@ pub fn run(options: Options) -> Result<Value> {
                 .iter()
                 .filter(|entry| crate::state::occupies_compute(entry))
                 .count();
+            if deadline.is_none()
+                && configuration.ready()
+                && ready.load(Ordering::Acquire)
+                && let Some(lease) = &mut lease
+            {
+                lease.activate(session);
+            }
             // Resolving an existing request consumes no additional admission
             // authority. A retained candidate can already occupy the last slot.
             if (journal.data.pending_claim_key.is_some()
@@ -569,13 +713,23 @@ pub fn run(options: Options) -> Result<Value> {
     }
 }
 
-fn signals(client: &Client, seconds: u64) -> Result<tokio::runtime::Runtime> {
+fn start_drain(shutdown: &Mutex<Option<Instant>>, seconds: u64) {
+    shutdown
+        .lock()
+        .expect("shutdown lock")
+        .get_or_insert_with(|| Instant::now() + Duration::from_secs(seconds));
+}
+
+fn signals(
+    shutdown: &Arc<Mutex<Option<Instant>>>,
+    seconds: u64,
+) -> Result<tokio::runtime::Runtime> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(1)
         .enable_all()
         .build()
         .map_err(|_| failure("cannot initialize signal handling"))?;
-    let shutdown = client.shutdown.clone();
+    let shutdown = shutdown.clone();
     #[cfg(unix)]
     {
         let _entered = runtime.enter();
@@ -587,11 +741,113 @@ fn signals(client: &Client, seconds: u64) -> Result<tokio::runtime::Runtime> {
                 .map_err(|_| failure("cannot register SIGINT"))?;
         runtime.spawn(async move {
             tokio::select! { _ = terminate.recv() => (), _ = interrupt.recv() => () }
-            *shutdown.lock().expect("shutdown lock") =
-                Some(Instant::now() + Duration::from_secs(seconds));
+            start_drain(&shutdown, seconds);
         });
     }
     Ok(runtime)
+}
+
+struct ShareLease {
+    session: Option<Uuid>,
+    update: mpsc::Sender<Option<Uuid>>,
+    failures: mpsc::Receiver<super::ConnectorError>,
+    worker: Option<thread::JoinHandle<()>>,
+}
+
+impl ShareLease {
+    fn start(client: Client, control: Arc<ShareControl>) -> Self {
+        let (update, updates) = mpsc::channel();
+        let (errors, failures) = mpsc::channel();
+        let worker =
+            thread::spawn(move || share_lease_worker(&client, &control, &updates, &errors));
+        Self {
+            session: None,
+            update,
+            failures,
+            worker: Some(worker),
+        }
+    }
+
+    fn activate(&mut self, session: Uuid) {
+        if self.session != Some(session) {
+            self.session = Some(session);
+            let _ = self.update.send(Some(session));
+        }
+    }
+}
+
+impl Drop for ShareLease {
+    fn drop(&mut self) {
+        let _ = self.update.send(None);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+fn share_lease_worker(
+    client: &Client,
+    control: &ShareControl,
+    updates: &mpsc::Receiver<Option<Uuid>>,
+    errors: &mpsc::Sender<super::ConnectorError>,
+) {
+    let (receipts, responses) = mpsc::channel::<(Uuid, Instant, Result<(Duration, Duration)>)>();
+    let mut session = None;
+    let mut next = Instant::now();
+    let mut renewing = false;
+    while !control.is_stopping() {
+        match updates.recv_timeout(Duration::from_millis(50)) {
+            Ok(Some(current)) => {
+                session = Some(current);
+                next = Instant::now();
+            }
+            Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => (),
+        }
+        let started = Instant::now();
+        if let Ok((requested, sent_at, result)) = responses.try_recv() {
+            renewing = false;
+            if session == Some(requested) {
+                match result {
+                    Ok((lease_duration, renew_after)) => {
+                        *control.online_until.lock().expect("share lease lock") =
+                            Some(sent_at + lease_duration);
+                        next = sent_at + renew_after;
+                    }
+                    Err(error) if error.kind == ErrorKind::Retry => {
+                        next = started + Duration::from_secs(1)
+                    }
+                    Err(error) if error.kind == ErrorKind::Stopping => break,
+                    Err(error) => {
+                        if !control.is_stopping() {
+                            let _ = errors.send(error);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        if control.is_stopping() || renewing || started < next {
+            continue;
+        }
+        let Some(session) = session else { continue };
+        renewing = true;
+        let client = client.clone();
+        let receipts = receipts.clone();
+        // An uncertain renewal must not delay an explicit closure. The server
+        // fences further renewals of the closed session, including late requests.
+        thread::spawn(move || {
+            let result = client.renew_share_lease(session);
+            let _ = receipts.send((session, started, result));
+        });
+    }
+    *control.online_until.lock().expect("share lease lock") = None;
+    if let Some(session) = session
+        && let Err(error) = client.close_share_lease(session)
+        && error.kind == ErrorKind::Retry
+    {
+        let _ = client.close_share_lease(session);
+    }
 }
 
 struct Heartbeat {
@@ -879,6 +1135,80 @@ impl Drop for CleanupWorker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn share_closes_admission_while_a_renewal_reply_is_outstanding() {
+        use std::{
+            fs::{self, OpenOptions},
+            io::{BufRead, BufReader, Write},
+            net::{TcpListener, TcpStream},
+            os::unix::fs::OpenOptionsExt,
+        };
+
+        fn request_line(stream: &mut TcpStream) -> String {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut request = String::new();
+            reader.read_line(&mut request).unwrap();
+            let mut header = String::new();
+            loop {
+                header.clear();
+                if reader.read_line(&mut header).unwrap() == 0 || header == "\r\n" {
+                    return request;
+                }
+            }
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let token = std::env::temp_dir().join(format!("enumeray-share-token-{}", Uuid::new_v4()));
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&token)
+            .unwrap();
+        file.write_all(b"fixture-token").unwrap();
+        let mut client = Client::configured(&origin, Some(&token), false).unwrap();
+        fs::remove_file(token).unwrap();
+        client.service = true;
+        let control = Arc::new(ShareControl::default());
+        client.shutdown = control.shutdown.clone();
+        let session = Uuid::new_v4();
+        let (seen, requests) = mpsc::channel();
+        let server = thread::spawn(move || {
+            let (mut renewal, _) = listener.accept().unwrap();
+            seen.send(request_line(&mut renewal)).unwrap();
+            let (mut closure, _) = listener.accept().unwrap();
+            let close = request_line(&mut closure);
+            closure
+                .write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            seen.send(close).unwrap();
+            renewal
+                .write_all(
+                    b"HTTP/1.1 409 Conflict\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+        let mut lease = ShareLease::start(client, control.clone());
+        lease.activate(session);
+        let path = format!("/connector/v1/sessions/{session}/share-lease HTTP/1.1\r\n");
+        assert_eq!(
+            requests.recv_timeout(Duration::from_secs(2)).unwrap(),
+            format!("PUT {path}")
+        );
+        start_drain(&control.shutdown, SHARE_DRAIN_SECONDS);
+        assert_eq!(
+            requests.recv_timeout(Duration::from_secs(2)).unwrap(),
+            format!("DELETE {path}")
+        );
+        drop(lease);
+        server.join().unwrap();
+        assert!(control.online_until.lock().unwrap().is_none());
+    }
 
     #[test]
     fn configuration_claim_authority_requires_the_matching_committed_acknowledgement() {

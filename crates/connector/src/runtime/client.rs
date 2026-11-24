@@ -240,6 +240,40 @@ impl Client {
         Ok(Duration::from_secs(interval))
     }
 
+    pub fn renew_share_lease(&self, session: Uuid) -> Result<(Duration, Duration)> {
+        let path = format!("/connector/v1/sessions/{session}/share-lease");
+        let (status, bytes) = self.request(Method::PUT, &path, None, None, None)?;
+        if status != StatusCode::OK {
+            return Err(http_error("share lease renewal", status));
+        }
+        let receipt = parse_json(&bytes)?;
+        let duration = receipt["lease_duration_seconds"]
+            .as_u64()
+            .filter(|seconds| (2..=300).contains(seconds));
+        let renew_after = receipt["renew_after_seconds"]
+            .as_u64()
+            .filter(|seconds| *seconds > 0 && duration.is_some_and(|duration| *seconds < duration));
+        let expires_at = receipt["expires_at"].as_str().and_then(|value| {
+            time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()
+        });
+        match (duration, renew_after, expires_at) {
+            (Some(duration), Some(renew_after), Some(_)) => Ok((
+                Duration::from_secs(duration),
+                Duration::from_secs(renew_after),
+            )),
+            _ => Err(failure("invalid share lease receipt")),
+        }
+    }
+
+    pub fn close_share_lease(&self, session: Uuid) -> Result<()> {
+        let path = format!("/connector/v1/sessions/{session}/share-lease");
+        let (status, _) = self.request(Method::DELETE, &path, None, None, None)?;
+        if status != StatusCode::NO_CONTENT {
+            return Err(http_error("share lease closure", status));
+        }
+        Ok(())
+    }
+
     pub fn register_session(
         &self,
         journal: &Journal,

@@ -834,6 +834,14 @@ fn model(output: &mut String, args: &Args, value: &Value, id: &str) {
                 ("Data-access disclosure", "/disclosure"),
             ],
         );
+        present_fields(
+            output,
+            publication,
+            &[(
+                "Local share online",
+                "/submission_availability/share_online",
+            )],
+        );
         definition(output, &publication["definition"]);
         output.push_str(
             "Availability is advisory; submission rechecks access and the selected publication.\n",

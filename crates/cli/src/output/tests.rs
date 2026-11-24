@@ -101,11 +101,14 @@ fn model_details_distinguish_access_availability_and_disclosure() {
         assert!(output.contains(expected), "{expected}: {output}");
     }
     assert!(!output.contains("never-print-this"));
+    assert!(!output.contains("Local share online"));
     value["current_publication"]["available"] = json!(false);
     value["current_publication"]["submission_availability"]["unavailable_reason"] =
         json!("connector_maintenance");
+    value["current_publication"]["submission_availability"]["share_online"] = json!(false);
     let output = render(&args(&["model", "get", "example"]), &value);
     assert!(output.contains("connector_maintenance"));
+    assert!(output.contains("Local share online: no"));
     assert!(!output.contains("analysis init"));
     value["can_run"] = json!(false);
     value["access_mode"] = json!("request");

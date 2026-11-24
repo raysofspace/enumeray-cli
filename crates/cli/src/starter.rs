@@ -69,6 +69,7 @@ pub(crate) fn init(
         execution: PublicationExecution {
             context_id: None,
             release_path: None,
+            snapshot_sha256: None,
             entrypoint: vec!["wrapper.py".into(), "execute".into()],
             slurm_script: slurm.then(|| "model.sbatch".into()),
             environment: Default::default(),

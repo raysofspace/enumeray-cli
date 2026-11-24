@@ -1541,6 +1541,8 @@ print(json.dumps({'version': 1, 'payload': {'data': base64.b64encode(data).decod
                     provider_binding_id: format!("generated-{io}"),
                     installation: identities,
                     release_path: release.clone(),
+                    snapshot_sha256: None,
+                    wrapper_model_id: None,
                     entrypoint: vec!["wrapper.py".into(), "execute".into()],
                     environment: Default::default(),
                     slurm_script: (driver == "slurm").then(|| "model.sbatch".into()),

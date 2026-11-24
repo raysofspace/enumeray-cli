@@ -32,6 +32,7 @@ mod protocol;
 mod records;
 mod service;
 mod setup;
+mod share_snapshot;
 mod spool;
 #[path = "runtime/state.rs"]
 mod state;
@@ -43,9 +44,12 @@ use std::{fmt, path::PathBuf, process::ExitCode};
 use clap::Subcommand;
 use serde_json::json;
 
-pub use control::EnrollOptions;
+pub use control::{EnrollOptions, ShareEnrollmentError, enroll_share};
 pub use host_setup::{apply_host_configuration, configuration_digest, prepare_development};
-pub use service::Options as RunOptions;
+pub use service::{
+    Options as RunOptions, ShareServiceHandle, ShareServiceOptions, start_share_service,
+};
+pub use share_snapshot::{ShareSnapshot, stage_share_snapshot, verify_share_snapshot};
 
 /// Build the same reviewable plan used by the credential-free generation command.
 /// This pure entry point applies no accounts, files, services or enrollments.
@@ -238,6 +242,7 @@ struct ConnectorError {
     kind: ErrorKind,
     startup_stage: Option<launch::FailureStage>,
     command: Option<Box<connections::CommandDiagnostics>>,
+    http_status: Option<reqwest::StatusCode>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -290,6 +295,7 @@ fn failure(message: impl Into<String>) -> ConnectorError {
         kind: ErrorKind::Blocked,
         startup_stage: None,
         command: None,
+        http_status: None,
     }
 }
 

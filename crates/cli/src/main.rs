@@ -9,6 +9,7 @@ mod compatibility;
 mod config;
 mod manifest;
 mod model_setup;
+mod model_share;
 mod observation;
 mod output;
 mod preflight;
