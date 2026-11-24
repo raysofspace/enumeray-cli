@@ -19,6 +19,7 @@ enumeray-connector = { workspace = true }
 enumeray-contracts = { workspace = true }
 base64 = { workspace = true }
 clap = { workspace = true }
+getrandom = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "json", "rustls", "form"] }
 semver = { workspace = true }
 serde = { workspace = true }

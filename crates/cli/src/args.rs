@@ -878,6 +878,8 @@ pub enum Connector {
 
 #[derive(Subcommand)]
 pub enum Model {
+    /// Share a trusted local process model while this terminal stays open.
+    Share(ModelShare),
     /// Guide a model author from a local project to a reviewed candidate.
     Setup(ModelSetup),
     /// Save, resume, review and explicitly activate one publication release.
@@ -1038,6 +1040,21 @@ pub enum Model {
         #[arg(long)]
         generation: i64,
     },
+}
+
+#[derive(clap::Args)]
+pub struct ModelShare {
+    /// Project directory containing publication.json and the local wrapper.
+    pub project: PathBuf,
+    /// List the model and allow any signed-in Enumeray user to run it on first activation.
+    #[arg(long, conflicts_with_all = ["invite_email", "invite_user"])]
+    pub open: bool,
+    /// Save a private invitation for this verified email address.
+    #[arg(long, conflicts_with = "invite_user")]
+    pub invite_email: Option<String>,
+    /// Save a private invitation for this Enumeray account UUID.
+    #[arg(long)]
+    pub invite_user: Option<uuid::Uuid>,
 }
 
 #[derive(clap::Args)]

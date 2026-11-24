@@ -56,6 +56,47 @@ pub struct ContextCreate {
     pub metadata: ContextMetadata,
 }
 
+/// First registration of a personal share. The path UUID is generated and saved by the author CLI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ShareBootstrap {
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    pub model: ModelMetadata,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    pub definition: ExecutionContextDefinition,
+    pub metadata: ContextMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ShareRegistration {
+    pub share_id: Uuid,
+    pub model_id: String,
+    pub wrapper_model_id: String,
+    pub connector_id: String,
+    pub context_id: String,
+    pub grant_id: Uuid,
+}
+
+/// The client saves the invitation token before upload and sends only its SHA-256 verifier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ShareInvitation {
+    pub recipient_id: Option<Uuid>,
+    pub recipient_email: Option<String>,
+    pub token_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ShareInvitationReceipt {
+    pub id: Uuid,
+    pub model_id: String,
+    pub expires_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GrantCreate {
@@ -409,6 +450,9 @@ pub struct PublicationActivation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication_delegation_id: Option<Uuid>,
     pub expected_current_publication_id: Option<String>,
+    /// First-share access selection. Subsequent activations retain the saved policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_open_access: Option<bool>,
 }
 
 /// Release one publication's retained installation configuration without revocation.

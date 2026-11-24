@@ -203,6 +203,9 @@ fn validate(directory: &Path, validation: ValidationRequest) -> Result<Value> {
         .validate_driver(validation.driver.kind())
         .map_err(failure)?;
     crate::control::check_release(&validation.installation_roots, &descriptor)?;
+    if let Some(expected) = &descriptor.snapshot_sha256 {
+        crate::share_snapshot::verify(Path::new(&descriptor.release_path), expected)?;
+    }
     crate::drivers::resolve(&validation.driver).validate()?;
     let executable = Path::new(&descriptor.release_path).join(&descriptor.entrypoint[0]);
     let mut digests = std::collections::BTreeMap::from([(

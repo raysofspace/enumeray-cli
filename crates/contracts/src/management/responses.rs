@@ -505,6 +505,9 @@ pub struct CurrentPublication {
 pub struct SubmissionAvailability {
     pub admission_open: bool,
     pub has_approved_execution_path: bool,
+    /// Lease-backed connectivity for personal model shares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_online: Option<bool>,
     #[cfg_attr(feature = "openapi", schema(required = true))]
     pub unavailable_reason: Option<SubmissionUnavailableReason>,
     pub execution_destination: ExecutionDestination,

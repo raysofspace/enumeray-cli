@@ -266,6 +266,12 @@ pub(crate) fn validate_installation(installation: &Installation, assignment: &Va
             return Err(failure("installed file content changed after validation"));
         }
     }
+    if let Some(expected) = assignment["descriptor"]["snapshot_sha256"].as_str() {
+        let release = assignment["descriptor"]["release_path"]
+            .as_str()
+            .ok_or_else(|| failure("staged share release path is absent"))?;
+        crate::share_snapshot::verify(Path::new(release), expected)?;
+    }
     let request_bytes = serde_json::to_vec(&request_value(assignment, Uuid::nil()))
         .map_err(|_| failure("cannot encode local wrapper request"))?;
     models::parse_inputs(&request_bytes)
@@ -572,6 +578,9 @@ fn request_value(assignment: &Value, intent: Uuid) -> Value {
         "inputs",
     ] {
         request[field] = assignment[field].clone();
+    }
+    if let Some(model_id) = assignment["descriptor"]["wrapper_model_id"].as_str() {
+        request["model_id"] = json!(model_id);
     }
     request
 }
@@ -1324,6 +1333,22 @@ mod tests {
                 .unwrap()
                 .split_whitespace()
                 .all(|state| state.starts_with('Z'))
+        );
+    }
+
+    #[test]
+    fn share_wrapper_request_uses_the_project_model_id() {
+        let mut assignment =
+            json!({"model_id":"share-model", "descriptor":{"wrapper_model_id":"project-model"}});
+        assert_eq!(
+            request_value(&assignment, Uuid::nil())["model_id"],
+            "project-model"
+        );
+        assert_eq!(assignment["model_id"], "share-model");
+        assignment["descriptor"] = json!({});
+        assert_eq!(
+            request_value(&assignment, Uuid::nil())["model_id"],
+            "share-model"
         );
     }
 

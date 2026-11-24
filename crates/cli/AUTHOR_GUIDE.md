@@ -9,6 +9,7 @@ where the model will run and gives your account permission to publish there.
 | --- | --- |
 | Try a local example | [Download the projects and run the tests](#run-the-downloaded-model-examples-offline). You need Python 3.9 or newer to run them. |
 | Adapt a model | [Generate a starter and map your inputs and outputs](#scaffold-and-map-your-science). You can test it before signing in. |
+| Share from this computer | [Share a trusted local model](#share-a-trusted-local-model). |
 | Publish a tested model | [Use guided model setup](#use-guided-model-setup) or [arrange installation](#install-an-immutable-release-and-select-compute) and follow the individual release commands. |
 | Give other people access | [Choose who can find and run the model](#choose-visibility-and-access-explicitly) or [give a named reviewer access to a candidate](#hand-a-candidate-to-another-administrator). |
 | Change the version users run | [Publish an update or restore a prior version](#updates-and-rollback). |
@@ -17,14 +18,52 @@ The scalar starter turns `2` into `4`. When you replace its calculation, add
 tests with results you can verify for your model. If you are running a model
 that is already published, follow the [analysis guide](ANALYSIS_GUIDE.md).
 
-Choose an unused model ID in Enumeray's shared catalogue before generating
-your project. A lab or project prefix helps distinguish it. Keep the same ID
-from `model init` through publication and share it with your users. Treat
+For operator-managed compute, choose an unused model ID in Enumeray's shared
+catalogue before generating your project. A lab or project prefix helps
+distinguish it. Keep the same ID from `model init` through publication and
+share it with your users. Treat
 `example` and `csv-example` in sample declarations and reference commands
 as illustrative IDs. [Sign in to Enumeray](https://doc.enumeray.com/start/login/)
 before publishing. Replace sample context IDs, paths and values such as
 `RUN_UUID`. Use a new folder for each release or run and keep it when
 resuming that work.
+
+## Share a trusted local model
+
+Sign in to Enumeray and run this from a working process model project with
+`publication.json`, such as a starter created by `model init` on macOS or Linux.
+The command derives its own context and release path from the local project.
+
+```sh
+enumeray model share .
+```
+
+Confirm the release and access policy once. The command stages an immutable
+copy, prepares a dedicated connector and starts it in this terminal. It validates
+the installation without submitting a run. The wrapper runs under your regular
+OS account and can access your files and credentials. You can read the data
+staged on your computer. The submitter and model administrators can inspect the
+retained run inputs, outputs and logs through Enumeray. Share only code you trust.
+
+The command prints a stable catalogue model ID with a generated suffix. Give
+this ID to colleagues. Your wrapper still receives the ID from your project.
+Shares start invite-only and unlisted. To save a private invitation in the same
+command, use `--invite-email colleague@example.org` or `--invite-user USER_UUID`.
+Give the printed invitation file to the recipient privately. The recipient
+signs in and [accepts the invitation](#choose-visibility-and-access-explicitly)
+before running the model. Use `--open` at first activation to make the model
+listed and runnable by signed-in Enumeray users.
+
+Keep this terminal open to accept new runs. Press Ctrl+C to stop admission.
+Admission also closes when the connector loses contact and its lease expires.
+Accepted runs retain their execution destination and resume through the same
+connector. Rerun `enumeray model share .` from the same project and account to
+resume. Changes to the project create a new staged release and require a fresh
+activation confirmation. The catalogue model ID and access policy carry over.
+Keep the private state under `$XDG_STATE_HOME/enumeray/model-shares` or
+`~/.local/state/enumeray/model-shares` for recovery.
+
+For long-running managed infrastructure, use [guided model setup](#use-guided-model-setup).
 
 ## Use guided model setup
 

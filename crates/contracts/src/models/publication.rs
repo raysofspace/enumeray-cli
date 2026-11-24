@@ -17,6 +17,8 @@ pub struct PublicationExecution {
     pub context_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_sha256: Option<String>,
     pub entrypoint: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slurm_script: Option<String>,
@@ -182,6 +184,7 @@ impl ParsedPublication {
     fn installation(&self, release_path: &str) -> InstallationSpec {
         InstallationSpec {
             release_path: release_path.into(),
+            snapshot_sha256: self.execution.snapshot_sha256.clone(),
             entrypoint: self.execution.entrypoint.clone(),
             slurm_script: self.execution.slurm_script.clone(),
             environment: self.execution.environment.clone(),
