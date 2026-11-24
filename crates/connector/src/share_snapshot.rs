@@ -2,6 +2,7 @@
 
 use crate::{Result, failure};
 use rustix::fs::{self as rfs, Dir, FileType, Mode, OFlags, RenameFlags};
+use rustix::io::Errno;
 use sha2::{Digest, Sha256};
 use std::{
     ffi::{CString, OsStr},
@@ -14,6 +15,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
+
+const STAGED_PREFIX: &str = ".snapshot-";
 
 pub struct ShareSnapshot {
     pub path: PathBuf,
@@ -41,31 +44,105 @@ fn stage(project: &Path, releases: &Path) -> Result<ShareSnapshot> {
     }
 
     let root = open_directory(&releases)?;
-    let temporary_name = format!(".staging-{}", Uuid::new_v4());
-    let temporary = releases.join(&temporary_name);
+    let temporary = releases.join(format!("{STAGED_PREFIX}{}", Uuid::new_v4()));
     private_directory(&temporary)?;
+    let mut retain_temporary = false;
     let staged = (|| {
         let sha256 = tree_digest(&project, Some(&temporary))?;
-        let path = releases.join(&sha256);
-        match rfs::renameat_with(
+        let target = releases.join(&sha256);
+        let path = publish_staged(
             &root,
-            &temporary_name,
-            &root,
+            &temporary,
+            &target,
             &sha256,
-            RenameFlags::NOREPLACE,
-        ) {
-            Ok(()) => (),
-            Err(rustix::io::Errno::EXIST) => verify(&path, &sha256)?,
-            Err(_) => return Err(failure("cannot atomically install staged share release")),
-        }
+            rename_staged(&root, &temporary, &target),
+        )?;
+        retain_temporary = path == temporary;
         root.sync_all()
             .map_err(|_| failure("cannot persist staged share release"))?;
         Ok(ShareSnapshot { path, sha256 })
     })();
-    if temporary.exists() {
+    if !retain_temporary && temporary.exists() {
         discard_temporary(&temporary);
     }
     staged
+}
+
+fn rename_staged(_root: &File, temporary: &Path, target: &Path) -> rustix::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let result = rfs::renameat_with(
+        rfs::CWD,
+        temporary,
+        rfs::CWD,
+        target,
+        RenameFlags::NOREPLACE,
+    );
+    #[cfg(not(target_os = "macos"))]
+    let result = rfs::renameat_with(
+        _root,
+        temporary.file_name().expect("generated staging name"),
+        _root,
+        target.file_name().expect("generated digest name"),
+        RenameFlags::NOREPLACE,
+    );
+    result
+}
+
+fn publish_staged(
+    root: &File,
+    temporary: &Path,
+    target: &Path,
+    sha256: &str,
+    renamed: rustix::io::Result<()>,
+) -> Result<PathBuf> {
+    match renamed {
+        Ok(()) => Ok(target.to_owned()),
+        Err(Errno::EXIST) => retained_release(target, sha256),
+        Err(error)
+            if matches!(error, Errno::NOTSUP | Errno::NOSYS | Errno::INVAL)
+                || cfg!(target_os = "macos") && matches!(error, Errno::ACCESS | Errno::PERM) =>
+        {
+            // An exclusive link can publish the already sealed directory when the
+            // native exclusive rename is unavailable. The runner gets the real path.
+            match rfs::symlinkat(
+                temporary.file_name().expect("generated staging name"),
+                root,
+                sha256,
+            ) {
+                Ok(()) => Ok(temporary.to_owned()),
+                Err(Errno::EXIST) => retained_release(target, sha256),
+                Err(link_error) => Err(failure(format!(
+                    "cannot atomically install staged share release: rename failed ({error}), link failed ({link_error})"
+                ))),
+            }
+        }
+        Err(error) => Err(failure(format!(
+            "cannot atomically install staged share release: {error}"
+        ))),
+    }
+}
+
+fn retained_release(target: &Path, sha256: &str) -> Result<PathBuf> {
+    let metadata = fs::symlink_metadata(target)
+        .map_err(|_| failure("cannot inspect existing staged share release"))?;
+    let path = if metadata.is_symlink() {
+        let link = fs::read_link(target)
+            .map_err(|_| failure("cannot read existing staged share release reference"))?;
+        let valid_name = link
+            .to_str()
+            .and_then(|name| name.strip_prefix(STAGED_PREFIX))
+            .is_some_and(|name| Uuid::parse_str(name).is_ok_and(|id| id.to_string() == name));
+        if !valid_name {
+            return Err(failure(
+                "existing staged share release reference is invalid",
+            ));
+        }
+        target.with_file_name(link)
+    } else {
+        target.to_owned()
+    };
+    verify(&path, sha256)?;
+    Ok(path)
 }
 
 pub(crate) fn verify(path: &Path, expected: &str) -> Result<()> {
@@ -337,6 +414,40 @@ mod tests {
         fs::set_permissions(&staged_input, fs::Permissions::from_mode(0o400)).unwrap();
         assert!(verify(&second.path, &second.sha256).is_err());
         verify(&first.path, &first.sha256).unwrap();
+    }
+
+    #[test]
+    fn unsupported_rename_publishes_once_and_reuses_only_the_verified_tree() {
+        let workspace = Workspace::new();
+        let project = workspace.0.join("project");
+        let releases = workspace.0.join("releases");
+        private_directory(&project).unwrap();
+        private_directory(&releases).unwrap();
+        fs::write(project.join("input"), b"42").unwrap();
+        let releases = releases.canonicalize().unwrap();
+        let root = open_directory(&releases).unwrap();
+        let staged = releases.join(format!("{STAGED_PREFIX}{}", Uuid::new_v4()));
+        private_directory(&staged).unwrap();
+        let digest = tree_digest(&project, Some(&staged)).unwrap();
+        let target = releases.join(&digest);
+        let installed =
+            publish_staged(&root, &staged, &target, &digest, Err(Errno::NOTSUP)).unwrap();
+        assert_eq!(installed, staged);
+        assert_eq!(fs::read_link(&target).unwrap(), staged.file_name().unwrap());
+        assert_eq!(stage(&project, &releases).unwrap().path, installed);
+
+        let input = installed.join("input");
+        fs::set_permissions(&input, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::write(&input, b"84").unwrap();
+        fs::set_permissions(&input, fs::Permissions::from_mode(0o400)).unwrap();
+        assert!(stage(&project, &releases).is_err());
+        assert_eq!(fs::read(&input).unwrap(), b"84");
+
+        fs::remove_file(&target).unwrap();
+        let external_link = Path::new("../project");
+        std::os::unix::fs::symlink(external_link, &target).unwrap();
+        assert!(stage(&project, &releases).is_err());
+        assert_eq!(fs::read_link(&target).unwrap(), external_link);
     }
 
     #[test]
